@@ -42,8 +42,14 @@ enum BookingSource {
 model User {
   id           String        @id @default(cuid())
   name         String
+  firstName    String?
+  lastName     String?
   email        String?       @unique
   phone        String?       @unique
+  idNumber     String?       @unique
+  /// לעולם לא נשמרים מספר כרטיס מלא או CVV — רק 4 ספרות אחרונות ותוקף (MM/YY)
+  cardLast4    String?
+  cardExpiry   String?
   passwordHash String
   role         Role          @default(CLIENT)
   status       UserStatus    @default(PENDING)
