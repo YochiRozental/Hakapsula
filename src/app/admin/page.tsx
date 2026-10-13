@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { ROOM_LABELS } from "@/lib/rooms";
 import Link from "next/link";
+import { EmptyState, Icon, PageHeader, RoomTile, SectionTitle, StatCard } from "@/components/ui";
 
 export default async function AdminDashboardPage() {
   const now = new Date();
@@ -18,75 +19,81 @@ export default async function AdminDashboardPage() {
     prisma.room.findMany(),
   ]);
 
+  const activeRooms = rooms.filter((r) => r.active).length;
+
   return (
     <div className="space-y-8">
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-          <p className="text-sm text-slate-500">תורים היום</p>
-          <p className="text-2xl font-bold text-teal-700">{todayAppointments.length}</p>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-          <p className="text-sm text-slate-500">תורים עתידיים</p>
-          <p className="text-2xl font-bold text-teal-700">{totalUpcoming}</p>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-          <p className="text-sm text-slate-500">משתמשים רשומים</p>
-          <p className="text-2xl font-bold text-teal-700">{totalUsers}</p>
-        </div>
+      <PageHeader
+        eyebrow="סקירה כללית"
+        title="לוח בקרה"
+        subtitle={now.toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+        actions={
+          <Link href="/admin/appointments" className="btn btn-primary">
+            <Icon name="list" className="w-4 h-4" />
+            ניהול תורים
+          </Link>
+        }
+      />
+
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+        <StatCard label="תורים היום" value={todayAppointments.length} icon="calendar" tone="blue" />
+        <StatCard label="תורים עתידיים" value={totalUpcoming} icon="clock" tone="gold" />
+        <StatCard label="משתמשים רשומים" value={totalUsers} icon="users" tone="brand" />
+        <StatCard label="חדרים פעילים" value={`${activeRooms}/${rooms.length}`} icon="door" tone="stone" />
       </div>
 
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold text-slate-800">התורים של היום</h2>
-          <Link href="/admin/appointments" className="text-sm text-teal-700 hover:underline">
-            לכל התורים
-          </Link>
-        </div>
-        {todayAppointments.length === 0 ? (
-          <p className="text-slate-400 text-sm">אין תורים קבועים להיום</p>
-        ) : (
-          <ul className="space-y-2">
-            {todayAppointments.map((a) => (
-              <li
-                key={a.id}
-                className="bg-white border border-slate-200 rounded-lg p-3 flex items-center justify-between shadow-sm"
-              >
-                <span className="font-medium text-slate-700">
-                  {a.startTime.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
-                  {" – "}
-                  {a.endTime.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
-                  {" · "}
-                  {ROOM_LABELS[a.room.key]}
-                </span>
-                <span className="text-sm text-slate-500">
-                  {a.user.name}
-                  {a.user.phone ? ` · ${a.user.phone}` : ""}
+      <div className="grid xl:grid-cols-[1.6fr_1fr] gap-6 items-start">
+        <section>
+          <SectionTitle
+            aside={
+              <Link href="/admin/appointments" className="text-sm font-semibold text-brand-700 hover:underline">
+                לכל התורים
+              </Link>
+            }
+          >
+            התורים של היום
+          </SectionTitle>
+          {todayAppointments.length === 0 ? (
+            <EmptyState>אין תורים קבועים להיום</EmptyState>
+          ) : (
+            <ul className="card divide-y divide-cream-100 overflow-hidden">
+              {todayAppointments.map((a) => (
+                <li key={a.id} className="px-4 sm:px-5 py-4 flex flex-wrap items-center gap-3 transition-colors hover:bg-brand-50/40">
+                  <RoomTile roomKey={a.room.key} className="w-11 h-11 [&>svg]:w-5 [&>svg]:h-5" />
+                  <div className="flex-1 min-w-32">
+                    <p className="font-bold text-stone-800">{a.user.name}</p>
+                    <p className="text-xs text-stone-500">
+                      {ROOM_LABELS[a.room.key]}
+                      {a.user.phone ? ` · ${a.user.phone}` : ""}
+                    </p>
+                  </div>
+                  <span className="badge bg-bronze-50 text-bronze-700 ring-1 ring-bronze-200 tabular-nums">
+                    {a.startTime.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
+                    {" – "}
+                    {a.endTime.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section>
+          <SectionTitle>מצב חדרים</SectionTitle>
+          <ul className="card divide-y divide-cream-100 overflow-hidden">
+            {rooms.map((room) => (
+              <li key={room.id} className="px-4 sm:px-5 py-3.5 flex items-center gap-3">
+                <RoomTile roomKey={room.key} className="w-10 h-10 [&>svg]:w-5 [&>svg]:h-5" />
+                <span className="flex-1 font-semibold text-stone-700">{room.name}</span>
+                <span
+                  className={`badge ${room.active ? "bg-brand-50 text-brand-700" : "bg-red-50 text-red-600"}`}
+                >
+                  {room.active ? "פעיל" : "מושבת"}
                 </span>
               </li>
             ))}
           </ul>
-        )}
-      </div>
-
-      <div>
-        <h2 className="text-lg font-semibold text-slate-800 mb-3">מצב חדרים</h2>
-        <ul className="grid grid-cols-2 gap-3">
-          {rooms.map((room) => (
-            <li
-              key={room.id}
-              className="bg-white border border-slate-200 rounded-lg p-3 flex items-center justify-between shadow-sm"
-            >
-              <span className="font-medium text-slate-700">{room.name}</span>
-              <span
-                className={`text-xs px-2 py-1 rounded-full ${
-                  room.active ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"
-                }`}
-              >
-                {room.active ? "פעיל" : "מושבת"}
-              </span>
-            </li>
-          ))}
-        </ul>
+        </section>
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { signIn } from "next-auth/react";
+import { Alert, AuthShell } from "@/components/ui";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -50,66 +51,72 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="max-w-md mx-auto">
-      <h1 className="text-2xl font-bold mb-6">הרשמה למערכת</h1>
-      <form onSubmit={handleSubmit} className="space-y-4 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+    <AuthShell title="הרשמה למערכת" subtitle="פתחו חשבון כדי לקבוע תורים לחדרי הקליניקה.">
+      <form onSubmit={handleSubmit} className="space-y-5">
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">שם מלא</label>
+          <label htmlFor="reg-name" className="field-label">שם מלא</label>
           <input
+            id="reg-name"
             required
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
+            className="field"
           />
         </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">אימייל</label>
-          <input
-            required
-            type="email"
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
-          />
+        <div className="grid sm:grid-cols-2 gap-5">
+          <div>
+            <label htmlFor="reg-email" className="field-label">אימייל</label>
+            <input
+              id="reg-email"
+              required
+              type="email"
+              dir="ltr"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              className="field text-right"
+            />
+          </div>
+          <div>
+            <label htmlFor="reg-phone" className="field-label">
+              טלפון <span className="font-normal text-stone-400">(לא חובה)</span>
+            </label>
+            <input
+              id="reg-phone"
+              type="tel"
+              dir="ltr"
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              className="field text-right"
+            />
+          </div>
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">טלפון (לא חובה)</label>
+          <label htmlFor="reg-password" className="field-label">סיסמה</label>
           <input
-            value={form.phone}
-            onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">סיסמה</label>
-          <input
+            id="reg-password"
             required
             type="password"
             minLength={4}
             value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
+            className="field"
           />
-          <p className="text-xs text-slate-400 mt-1">לפחות 4 תווים</p>
+          <p className="text-xs text-stone-400 mt-1.5">לפחות 4 תווים</p>
         </div>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <Alert tone="error">{error}</Alert>}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full py-2.5 rounded-lg bg-teal-600 text-white font-medium hover:bg-teal-700 disabled:opacity-50 transition-colors"
-        >
+        <button type="submit" disabled={loading} className="btn btn-primary w-full py-3!">
           {loading ? "נרשם..." : "הרשמה"}
         </button>
 
-        <p className="text-sm text-slate-500 text-center">
+        <p className="text-sm text-stone-500 text-center">
           כבר יש לך חשבון?{" "}
-          <Link href="/login" className="text-teal-700 font-medium hover:underline">
+          <Link href="/login" className="text-brand-700 font-semibold hover:underline">
             התחברות
           </Link>
         </p>
       </form>
-    </div>
+    </AuthShell>
   );
 }

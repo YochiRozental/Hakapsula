@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { ROOM_LABELS } from "@/lib/rooms";
+import { Alert, EmptyState, Icon, Loading, PageHeader, RoomTile, RoomVisual, SectionTitle } from "@/components/ui";
 import type { RoomKey } from "@/generated/prisma/client";
 
 type Appointment = {
@@ -54,40 +56,56 @@ export default function MyAppointmentsPage() {
     (a) => a.status === "CANCELLED" || new Date(a.endTime).getTime() < (now ?? 0)
   );
 
-  return (
-    <div className="max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">התורים שלי</h1>
+  const timeRange = (a: Appointment) =>
+    `${new Date(a.startTime).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })} – ${new Date(
+      a.endTime
+    ).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}`;
 
-      {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
+  return (
+    <div className="max-w-3xl mx-auto">
+      <PageHeader
+        eyebrow="האזור האישי"
+        title="התורים שלי"
+        subtitle="רשימת התורים הקרובים והעבר שלך"
+        actions={
+          <Link href="/booking" className="btn btn-primary">
+            <Icon name="plus" className="w-4 h-4" />
+            קביעת תור
+          </Link>
+        }
+      />
+
+      {error && (
+        <div className="mb-4">
+          <Alert tone="error">{error}</Alert>
+        </div>
+      )}
 
       {appointments === null ? (
-        <p className="text-slate-500">טוען...</p>
+        <Loading />
       ) : (
         <>
-          <section className="mb-8">
-            <h2 className="text-lg font-semibold text-slate-800 mb-3">תורים קרובים</h2>
+          <section className="mb-10">
+            <SectionTitle>תורים קרובים</SectionTitle>
             {upcoming && upcoming.length > 0 ? (
               <ul className="space-y-3">
                 {upcoming.map((a) => (
-                  <li
-                    key={a.id}
-                    className="bg-white border border-slate-200 rounded-lg p-4 flex items-center justify-between shadow-sm"
-                  >
-                    <div>
-                      <p className="font-medium text-slate-800">{ROOM_LABELS[a.room.key]}</p>
-                      <p className="text-sm text-slate-500">
+                  <li key={a.id} className="card card-hover p-3 sm:p-4 flex flex-wrap items-center gap-4">
+                    <RoomVisual roomKey={a.room.key} className="w-24 h-20 sm:w-28 sm:h-20 rounded-2xl shrink-0 ring-1 ring-cream-200" />
+                    <div className="flex-1 min-w-40">
+                      <p className="font-display text-lg font-bold text-stone-900">{ROOM_LABELS[a.room.key]}</p>
+                      <p className="text-sm text-stone-500 tabular-nums mt-0.5">
                         {new Date(a.startTime).toLocaleDateString("he-IL")}
                         {" · "}
-                        {new Date(a.startTime).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
-                        {" – "}
-                        {new Date(a.endTime).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
+                        {timeRange(a)}
                       </p>
-                      {a.notes && <p className="text-sm text-slate-400 mt-1">{a.notes}</p>}
+                      {a.notes && <p className="text-sm text-stone-400 mt-1">{a.notes}</p>}
                     </div>
+                    <span className="badge bg-brand-50 text-brand-700 ring-1 ring-brand-100">קרוב</span>
                     <button
                       onClick={() => handleCancel(a.id)}
                       disabled={cancellingId === a.id}
-                      className="text-sm text-red-600 hover:text-red-800 disabled:opacity-50 cursor-pointer"
+                      className="btn btn-danger btn-sm"
                     >
                       {cancellingId === a.id ? "מבטל..." : "ביטול"}
                     </button>
@@ -95,25 +113,27 @@ export default function MyAppointmentsPage() {
                 ))}
               </ul>
             ) : (
-              <p className="text-slate-400 text-sm">אין תורים קרובים</p>
+              <EmptyState>אין תורים קרובים</EmptyState>
             )}
           </section>
 
           {past && past.length > 0 && (
             <section>
-              <h2 className="text-lg font-semibold text-slate-800 mb-3">היסטוריה</h2>
-              <ul className="space-y-2">
+              <SectionTitle>היסטוריה</SectionTitle>
+              <ul className="card divide-y divide-cream-100 overflow-hidden">
                 {past.map((a) => (
-                  <li
-                    key={a.id}
-                    className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm text-slate-500 flex items-center justify-between"
-                  >
-                    <span>
-                      {ROOM_LABELS[a.room.key]} ·{" "}
+                  <li key={a.id} className="px-4 sm:px-5 py-3 text-sm flex items-center gap-3">
+                    <RoomTile roomKey={a.room.key} className="w-9 h-9 opacity-70 [&>svg]:w-4 [&>svg]:h-4" />
+                    <span className="flex-1 text-stone-600 tabular-nums">
+                      <span className="font-semibold text-stone-700">{ROOM_LABELS[a.room.key]}</span> ·{" "}
                       {new Date(a.startTime).toLocaleDateString("he-IL")}{" "}
                       {new Date(a.startTime).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
                     </span>
-                    <span className={a.status === "CANCELLED" ? "text-red-400" : "text-slate-400"}>
+                    <span
+                      className={`badge ${
+                        a.status === "CANCELLED" ? "bg-red-50 text-red-600" : "bg-cream-100 text-stone-500"
+                      }`}
+                    >
                       {a.status === "CANCELLED" ? "בוטל" : "הסתיים"}
                     </span>
                   </li>

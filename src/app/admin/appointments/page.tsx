@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ROOM_LABELS } from "@/lib/rooms";
 import { buildTimeOptions, combineDateAndTime, todayIsoDate, DURATION_OPTIONS } from "@/lib/slots";
 import type { RoomKey } from "@/generated/prisma/client";
+import { Alert, EmptyState, Icon, Loading, PageHeader, ROOM_ACCENTS, SectionTitle } from "@/components/ui";
 
 type Appointment = {
   id: string;
@@ -110,22 +111,39 @@ export default function AdminAppointmentsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end gap-3">
-        <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">תאריך</label>
+      <PageHeader
+        eyebrow="תפעול"
+        title="ניהול תורים"
+        subtitle="צפייה, סינון, ביטול וקביעה ידנית של תורים"
+        actions={
+          <button
+            onClick={() => setShowForm((v) => !v)}
+            className={`btn ${showForm ? "btn-secondary" : "btn-primary"}`}
+          >
+            <Icon name={showForm ? "x" : "plus"} className="w-4 h-4" />
+            {showForm ? "ביטול" : "קביעת תור ידנית"}
+          </button>
+        }
+      />
+
+      <div className="card p-4 flex flex-wrap items-end gap-4">
+        <div className="w-full sm:w-auto">
+          <label htmlFor="filter-date" className="field-label">תאריך</label>
           <input
+            id="filter-date"
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="border border-slate-300 rounded-lg px-3 py-2 text-sm"
+            className="field"
           />
         </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">חדר</label>
+        <div className="w-full sm:w-auto sm:min-w-48">
+          <label htmlFor="filter-room" className="field-label">חדר</label>
           <select
+            id="filter-room"
             value={roomFilter}
             onChange={(e) => setRoomFilter(e.target.value as RoomKey | "")}
-            className="border border-slate-300 rounded-lg px-3 py-2 text-sm"
+            className="field"
           >
             <option value="">כל החדרים</option>
             {ROOM_KEYS.map((key) => (
@@ -135,29 +153,25 @@ export default function AdminAppointmentsPage() {
             ))}
           </select>
         </div>
-        <button
-          onClick={() => setShowForm((v) => !v)}
-          className="mr-auto px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700"
-        >
-          {showForm ? "ביטול" : "+ קביעת תור ידנית"}
-        </button>
       </div>
 
       {showForm && (
-        <form onSubmit={handleCreate} className="bg-white border border-slate-200 rounded-xl p-4 space-y-4 shadow-sm">
+        <form onSubmit={handleCreate} className="card p-5 sm:p-6 space-y-5">
+          <SectionTitle>קביעת תור ידנית</SectionTitle>
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">חיפוש לקוח (שם, אימייל או טלפון)</label>
+            <label htmlFor="new-user" className="field-label">חיפוש לקוח (שם, אימייל או טלפון)</label>
             <input
+              id="new-user"
               value={userSearch}
               onChange={(e) => {
                 setUserSearch(e.target.value);
                 setSelectedUserId("");
               }}
               placeholder="לדוגמה: israel@example.com או 0501234567"
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+              className="field"
             />
             {userOptions.length > 0 && !selectedUserId && (
-              <ul className="mt-1 border border-slate-200 rounded-lg divide-y max-h-40 overflow-auto">
+              <ul className="mt-1.5 card shadow-lift divide-y divide-cream-100 max-h-48 overflow-auto">
                 {userOptions.map((u) => (
                   <li
                     key={u.id}
@@ -166,23 +180,30 @@ export default function AdminAppointmentsPage() {
                       setUserSearch(`${u.name} (${u.email ?? u.phone ?? "טלפון"})`);
                       setUserOptions([]);
                     }}
-                    className="px-3 py-2 text-sm hover:bg-slate-50 cursor-pointer"
+                    className="px-4 py-2.5 text-sm hover:bg-brand-50 cursor-pointer"
                   >
-                    {u.name} · {u.email ?? u.phone ?? "—"}
+                    <span className="font-semibold text-stone-800">{u.name}</span>
+                    <span className="text-stone-500"> · {u.email ?? u.phone ?? "—"}</span>
                   </li>
                 ))}
               </ul>
             )}
-            {selectedUserId && <p className="text-xs text-emerald-600 mt-1">לקוח נבחר</p>}
+            {selectedUserId && (
+              <p className="text-xs text-brand-700 font-semibold mt-1.5 flex items-center gap-1">
+                <Icon name="check" className="w-3.5 h-3.5" />
+                לקוח נבחר
+              </p>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">חדר</label>
+              <label htmlFor="new-room" className="field-label">חדר</label>
               <select
+                id="new-room"
                 value={newRoomKey}
                 onChange={(e) => setNewRoomKey(e.target.value as RoomKey)}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                className="field"
               >
                 {ROOM_KEYS.map((key) => (
                   <option key={key} value={key}>
@@ -192,11 +213,12 @@ export default function AdminAppointmentsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">משך</label>
+              <label htmlFor="new-duration" className="field-label">משך</label>
               <select
+                id="new-duration"
                 value={newDuration}
                 onChange={(e) => setNewDuration(Number(e.target.value))}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                className="field"
               >
                 {DURATION_OPTIONS.map((opt) => (
                   <option key={opt.minutes} value={opt.minutes}>
@@ -206,20 +228,22 @@ export default function AdminAppointmentsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">תאריך</label>
+              <label htmlFor="new-date" className="field-label">תאריך</label>
               <input
+                id="new-date"
                 type="date"
                 value={newDate}
                 onChange={(e) => setNewDate(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                className="field"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">שעה</label>
+              <label htmlFor="new-time" className="field-label">שעה</label>
               <select
+                id="new-time"
                 value={newTime}
                 onChange={(e) => setNewTime(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                className="field"
               >
                 {TIME_OPTIONS.map((t) => (
                   <option key={t} value={t}>
@@ -231,21 +255,18 @@ export default function AdminAppointmentsPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">הערות</label>
+            <label htmlFor="new-notes" className="field-label">הערות</label>
             <input
+              id="new-notes"
               value={newNotes}
               onChange={(e) => setNewNotes(e.target.value)}
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+              className="field"
             />
           </div>
 
-          {formError && <p className="text-sm text-red-600">{formError}</p>}
+          {formError && <Alert tone="error">{formError}</Alert>}
 
-          <button
-            type="submit"
-            disabled={formSubmitting}
-            className="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 disabled:opacity-50"
-          >
+          <button type="submit" disabled={formSubmitting} className="btn btn-primary">
             {formSubmitting ? "קובע..." : "קביעת תור"}
           </button>
         </form>
@@ -253,53 +274,60 @@ export default function AdminAppointmentsPage() {
 
       <div>
         {appointments === null ? (
-          <p className="text-slate-500 text-sm">טוען...</p>
+          <Loading />
         ) : appointments.length === 0 ? (
-          <p className="text-slate-400 text-sm">אין תורים בטווח הנבחר</p>
+          <EmptyState>אין תורים בטווח הנבחר</EmptyState>
         ) : (
-          <div className="overflow-x-auto bg-white border border-slate-200 rounded-xl shadow-sm">
-            <table className="w-full text-sm text-right">
-              <thead className="bg-slate-50 text-slate-600">
+          <div className="card overflow-x-auto">
+            <table className="table-base">
+              <thead>
                 <tr>
-                  <th className="px-4 py-2 font-medium">שעה</th>
-                  <th className="px-4 py-2 font-medium">חדר</th>
-                  <th className="px-4 py-2 font-medium">לקוח</th>
-                  <th className="px-4 py-2 font-medium">טלפון</th>
-                  <th className="px-4 py-2 font-medium">מקור</th>
-                  <th className="px-4 py-2 font-medium">סטטוס</th>
-                  <th className="px-4 py-2"></th>
+                  <th>שעה</th>
+                  <th>חדר</th>
+                  <th>לקוח</th>
+                  <th>טלפון</th>
+                  <th>מקור</th>
+                  <th>סטטוס</th>
+                  <th></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {appointments.map((a) => (
-                  <tr key={a.id} className={a.status === "CANCELLED" ? "opacity-50" : ""}>
-                    <td className="px-4 py-2 whitespace-nowrap">
+                  <tr key={a.id} className={a.status === "CANCELLED" ? "opacity-55" : ""}>
+                    <td className="whitespace-nowrap font-semibold text-stone-800 tabular-nums">
                       {new Date(a.startTime).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
                       {" – "}
                       {new Date(a.endTime).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
                     </td>
-                    <td className="px-4 py-2">{ROOM_LABELS[a.room.key]}</td>
-                    <td className="px-4 py-2">
-                      {a.user.name}
-                      <div className="text-xs text-slate-400">{a.user.email ?? "—"}</div>
+                    <td className="whitespace-nowrap">
+                      <span className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${ROOM_ACCENTS[a.room.key].dot}`} />
+                        {ROOM_LABELS[a.room.key]}
+                      </span>
                     </td>
-                    <td className="px-4 py-2">{a.user.phone ?? "—"}</td>
-                    <td className="px-4 py-2 text-xs">
-                      {a.source === "WEB" ? "אתר" : a.source === "ADMIN" ? "ניהול" : "IVR"}
+                    <td>
+                      <span className="font-semibold text-stone-800">{a.user.name}</span>
+                      <div className="text-xs text-stone-400">{a.user.email ?? "—"}</div>
                     </td>
-                    <td className="px-4 py-2">
+                    <td className="tabular-nums whitespace-nowrap text-stone-600">{a.user.phone ?? "—"}</td>
+                    <td>
+                      <span className="badge bg-cream-100 text-stone-600">
+                        {a.source === "WEB" ? "אתר" : a.source === "ADMIN" ? "ניהול" : "IVR"}
+                      </span>
+                    </td>
+                    <td>
                       {a.status === "CONFIRMED" ? (
-                        <span className="text-emerald-700 text-xs">מאושר</span>
+                        <span className="badge bg-brand-50 text-brand-700">מאושר</span>
                       ) : (
-                        <span className="text-red-500 text-xs">מבוטל</span>
+                        <span className="badge bg-red-50 text-red-600">מבוטל</span>
                       )}
                     </td>
-                    <td className="px-4 py-2">
+                    <td>
                       {a.status === "CONFIRMED" && (
                         <button
                           onClick={() => handleCancel(a.id)}
                           disabled={cancellingId === a.id}
-                          className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50"
+                          className="btn btn-danger btn-sm"
                         >
                           {cancellingId === a.id ? "מבטל..." : "ביטול"}
                         </button>

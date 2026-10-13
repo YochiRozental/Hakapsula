@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
+import { Icon, Loading, PageHeader } from "@/components/ui";
 
 type UserRow = {
   id: string;
@@ -21,8 +22,8 @@ const STATUS_LABELS: Record<UserRow["status"], string> = {
 };
 
 const STATUS_CLASSES: Record<UserRow["status"], string> = {
-  PENDING: "bg-amber-50 text-amber-700",
-  APPROVED: "bg-emerald-50 text-emerald-700",
+  PENDING: "bg-gold-100 text-gold-600",
+  APPROVED: "bg-brand-50 text-brand-700",
   BLOCKED: "bg-red-50 text-red-700",
 };
 
@@ -75,66 +76,77 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <input
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="חיפוש לפי שם או אימייל..."
-        className="w-full max-w-sm border border-slate-300 rounded-lg px-3 py-2 text-sm"
-      />
+    <div>
+      <PageHeader eyebrow="לקוחות ומנהלים" title="ניהול משתמשים" subtitle="אישור, חסימה ומחיקה של משתמשי המערכת" />
+
+      <div className="relative max-w-sm mb-4">
+        <Icon name="search" className="w-4 h-4 text-stone-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="חיפוש לפי שם או אימייל..."
+          aria-label="חיפוש משתמשים"
+          className="field bg-white! pr-10!"
+        />
+      </div>
 
       {users === null ? (
-        <p className="text-slate-500 text-sm">טוען...</p>
+        <Loading />
       ) : (
-        <div className="overflow-x-auto bg-white border border-slate-200 rounded-xl shadow-sm">
-          <table className="w-full text-sm text-right">
-            <thead className="bg-slate-50 text-slate-600">
+        <div className="card overflow-x-auto">
+          <table className="table-base">
+            <thead>
               <tr>
-                <th className="px-4 py-2 font-medium">שם</th>
-                <th className="px-4 py-2 font-medium">אימייל</th>
-                <th className="px-4 py-2 font-medium">טלפון</th>
-                <th className="px-4 py-2 font-medium">תורים</th>
-                <th className="px-4 py-2 font-medium">תפקיד</th>
-                <th className="px-4 py-2 font-medium">סטטוס</th>
-                <th className="px-4 py-2"></th>
-                <th className="px-4 py-2"></th>
+                <th>שם</th>
+                <th>אימייל</th>
+                <th>טלפון</th>
+                <th>תורים</th>
+                <th>תפקיד</th>
+                <th>סטטוס</th>
+                <th>פעולות</th>
+                <th></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody>
               {users.map((u) => (
                 <tr key={u.id}>
-                  <td className="px-4 py-2">{u.name}</td>
-                  <td className="px-4 py-2 text-slate-500">{u.email ?? "נרשם/ה דרך הטלפון"}</td>
-                  <td className="px-4 py-2 text-slate-500">{u.phone ?? "—"}</td>
-                  <td className="px-4 py-2">{u._count.appointments}</td>
-                  <td className="px-4 py-2">
+                  <td>
+                    <span className="flex items-center gap-2.5 font-semibold text-stone-800 whitespace-nowrap">
+                      <span className="w-9 h-9 rounded-full bg-linear-to-b from-bronze-50 to-bronze-100 text-bronze-700 ring-1 ring-bronze-200 text-xs font-bold flex items-center justify-center shrink-0">
+                        {u.name.trim().charAt(0)}
+                      </span>
+                      {u.name}
+                    </span>
+                  </td>
+                  <td className="text-stone-500">{u.email ?? "נרשם/ה דרך הטלפון"}</td>
+                  <td className="text-stone-500 tabular-nums whitespace-nowrap">{u.phone ?? "—"}</td>
+                  <td className="tabular-nums">{u._count.appointments}</td>
+                  <td>
                     <span
-                      className={`text-xs px-2 py-1 rounded-full ${
-                        u.role === "ADMIN" ? "bg-teal-50 text-teal-700" : "bg-slate-100 text-slate-600"
+                      className={`badge ${
+                        u.role === "ADMIN" ? "bg-brand-50 text-brand-700" : "bg-cream-100 text-stone-600"
                       }`}
                     >
                       {u.role === "ADMIN" ? "מנהל" : "לקוח"}
                     </span>
                   </td>
-                  <td className="px-4 py-2">
-                    <span className={`text-xs px-2 py-1 rounded-full ${STATUS_CLASSES[u.status]}`}>
-                      {STATUS_LABELS[u.status]}
-                    </span>
+                  <td>
+                    <span className={`badge ${STATUS_CLASSES[u.status]}`}>{STATUS_LABELS[u.status]}</span>
                   </td>
-                  <td className="px-4 py-2 whitespace-nowrap">
+                  <td className="whitespace-nowrap">
                     {u.status === "PENDING" && (
-                      <div className="flex gap-3">
+                      <div className="flex gap-2">
                         <button
                           onClick={() => setStatus(u, "APPROVED")}
                           disabled={savingId === u.id}
-                          className="text-xs text-emerald-700 hover:underline disabled:opacity-40 disabled:no-underline"
+                          className="btn btn-primary btn-sm"
                         >
                           אישור
                         </button>
                         <button
                           onClick={() => setStatus(u, "BLOCKED")}
                           disabled={savingId === u.id || u.id === session?.user?.id}
-                          className="text-xs text-red-700 hover:underline disabled:opacity-40 disabled:no-underline"
+                          className="btn btn-danger btn-sm"
                         >
                           חסימה
                         </button>
@@ -144,7 +156,7 @@ export default function AdminUsersPage() {
                       <button
                         onClick={() => setStatus(u, "BLOCKED")}
                         disabled={savingId === u.id || u.id === session?.user?.id}
-                        className="text-xs text-red-700 hover:underline disabled:opacity-40 disabled:no-underline"
+                        className="btn btn-danger btn-sm"
                       >
                         חסימה
                       </button>
@@ -153,17 +165,17 @@ export default function AdminUsersPage() {
                       <button
                         onClick={() => setStatus(u, "APPROVED")}
                         disabled={savingId === u.id}
-                        className="text-xs text-emerald-700 hover:underline disabled:opacity-40 disabled:no-underline"
+                        className="btn btn-secondary btn-sm"
                       >
                         ביטול חסימה
                       </button>
                     )}
                   </td>
-                  <td className="px-4 py-2">
+                  <td>
                     <button
                       onClick={() => deleteUser(u)}
                       disabled={savingId === u.id || u.id === session?.user?.id}
-                      className="text-xs text-red-700 hover:underline disabled:opacity-40 disabled:no-underline"
+                      className="btn btn-ghost btn-sm text-red-700! hover:bg-red-50!"
                     >
                       מחיקה
                     </button>

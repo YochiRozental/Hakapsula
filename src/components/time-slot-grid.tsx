@@ -26,7 +26,7 @@ export function TimeSlotGrid({ date, timeOptions, selected, onSelect, busy }: Ti
   }
 
   return (
-    <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5 max-h-64 overflow-y-auto p-1">
+    <div className="grid grid-cols-3 min-[400px]:grid-cols-4 sm:grid-cols-5 md:grid-cols-4 lg:grid-cols-5 gap-2 max-h-80 overflow-y-auto p-3">
       {timeOptions.map((time) => {
         const start = combineDateAndTime(date, time);
         const isPast = start.getTime() < now;
@@ -41,12 +41,12 @@ export function TimeSlotGrid({ date, timeOptions, selected, onSelect, busy }: Ti
             disabled={isDisabled}
             onClick={() => onSelect(time)}
             title={isBusy ? "תפוס" : isPast ? "עבר" : undefined}
-            className={`h-9 rounded-lg text-sm font-medium transition-colors ${
+            className={`h-11 rounded-xl text-sm font-semibold tabular-nums transition-all duration-150 ${
               isSelected
-                ? "bg-teal-600 text-white"
+                ? "bg-linear-to-b from-brand-500 to-brand-700 text-white shadow-brand ring-2 ring-brand-600/15"
                 : isDisabled
-                  ? "bg-slate-50 text-slate-300 line-through cursor-not-allowed"
-                  : "bg-white border border-slate-200 text-slate-700 hover:border-teal-400 hover:bg-teal-50"
+                  ? "bg-transparent text-stone-300 line-through cursor-not-allowed"
+                  : "bg-white ring-1 ring-cream-300 text-stone-700 shadow-sm hover:ring-bronze-300 hover:text-brand-700 hover:-translate-y-px"
             }`}
           >
             {time}

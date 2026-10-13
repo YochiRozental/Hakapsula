@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Icon } from "@/components/ui";
 
 const WEEKDAY_LABELS = ["א", "ב", "ג", "ד", "ה", "ו", "ש"];
 const MONTH_LABELS = [
@@ -80,29 +81,29 @@ export function MonthCalendar({ value, onChange, minDate, markedDates, onMonthCh
 
   return (
     <div className="select-none">
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-3">
         <button
           type="button"
           onClick={() => changeMonth(-1)}
-          className="w-8 h-8 rounded-lg text-slate-500 hover:bg-slate-100 flex items-center justify-center"
+          className="w-9 h-9 rounded-full bg-white ring-1 ring-cream-300 shadow-sm text-stone-500 hover:ring-bronze-300 hover:text-brand-700 flex items-center justify-center transition-colors"
           aria-label="חודש קודם"
         >
-          ›
+          <Icon name="chevronRight" className="w-4 h-4" />
         </button>
-        <p className="font-medium text-slate-800 text-sm">
+        <p className="font-display font-bold text-stone-900 text-base">
           {MONTH_LABELS[viewMonth]} {viewYear}
         </p>
         <button
           type="button"
           onClick={() => changeMonth(1)}
-          className="w-8 h-8 rounded-lg text-slate-500 hover:bg-slate-100 flex items-center justify-center"
+          className="w-9 h-9 rounded-full bg-white ring-1 ring-cream-300 shadow-sm text-stone-500 hover:ring-bronze-300 hover:text-brand-700 flex items-center justify-center transition-colors"
           aria-label="חודש הבא"
         >
-          ‹
+          <Icon name="chevronLeft" className="w-4 h-4" />
         </button>
       </div>
 
-      <div className="grid grid-cols-7 gap-1 text-center text-xs text-slate-400 mb-1">
+      <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-bronze-500 mb-2 pb-2 border-b border-cream-200">
         {WEEKDAY_LABELS.map((d) => (
           <div key={d}>{d}</div>
         ))}
@@ -123,19 +124,19 @@ export function MonthCalendar({ value, onChange, minDate, markedDates, onMonthCh
               key={i}
               disabled={isDisabled}
               onClick={() => onChange(iso)}
-              className={`relative h-9 rounded-lg text-sm transition-colors ${
+              className={`relative mx-auto w-9 h-9 sm:w-10 sm:h-10 rounded-full text-sm tabular-nums transition-all duration-150 ${
                 isSelected
-                  ? "bg-teal-600 text-white font-medium"
+                  ? "bg-linear-to-b from-brand-500 to-brand-700 text-white font-bold shadow-brand ring-4 ring-brand-600/10"
                   : isDisabled
-                    ? "text-slate-300 cursor-not-allowed"
+                    ? "text-stone-300 cursor-not-allowed"
                     : isToday
-                      ? "bg-teal-50 text-teal-700 font-medium hover:bg-teal-100"
-                      : "text-slate-700 hover:bg-slate-100"
+                      ? "ring-1 ring-bronze-300 text-bronze-700 font-bold hover:bg-bronze-50"
+                      : "text-stone-700 hover:bg-white hover:shadow-sm hover:ring-1 hover:ring-cream-300"
               }`}
             >
               {day}
               {isMarked && !isSelected && (
-                <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-teal-500" />
+                <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-gold-500" />
               )}
             </button>
           );

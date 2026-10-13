@@ -6,6 +6,7 @@ import { ROOM_LABELS } from "@/lib/rooms";
 import { buildTimeOptions, combineDateAndTime, todayIsoDate, DURATION_OPTIONS } from "@/lib/slots";
 import { MonthCalendar } from "@/components/month-calendar";
 import { TimeSlotGrid } from "@/components/time-slot-grid";
+import { Alert, BrandHeader, Icon, ROOM_ACCENTS, RoomTile, RoomVisual, SectionTitle } from "@/components/ui";
 import type { RoomKey } from "@/generated/prisma/client";
 
 type BusyInterval = { startTime: string; endTime: string; room: { key: RoomKey; name: string } };
@@ -125,97 +126,183 @@ export default function BookingPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">קביעת תור</h1>
+    <div className="max-w-5xl mx-auto">
+      <BrandHeader
+        eyebrow="הזמנת חדר"
+        title="קביעת תור"
+        subtitle="בחרו חדר, תאריך ושעה — ואנחנו נדאג לשאר"
+      >
+        <ol className="hidden md:flex items-center gap-2 text-xs text-white/70">
+          {["חדר", "תאריך", "משך", "שעה"].map((step, i) => (
+            <li key={step} className="flex items-center gap-2">
+              <span className="w-6 h-6 rounded-full border border-bronze-300/50 text-bronze-200 flex items-center justify-center tabular-nums">
+                {i + 1}
+              </span>
+              {step}
+              {i < 3 && <span className="w-5 h-px bg-white/25" />}
+            </li>
+          ))}
+        </ol>
+      </BrandHeader>
 
-      <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">בחרו חדר</label>
-          <div className="grid grid-cols-2 gap-2">
-            {ROOM_KEYS.map((key) => (
-              <button
-                type="button"
-                key={key}
-                onClick={() => setRoomKey(key)}
-                className={`px-4 py-3 rounded-lg border text-sm font-medium transition-colors ${
-                  roomKey === key
-                    ? "border-teal-600 bg-teal-50 text-teal-800"
-                    : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                {ROOM_LABELS[key]}
-              </button>
-            ))}
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <section className="card p-5 sm:p-8">
+          <SectionTitle index="01" hint="בחרו את החלל המתאים לפגישה">
+            בחירת חדר
+          </SectionTitle>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {ROOM_KEYS.map((key) => {
+              const active = roomKey === key;
+              return (
+                <button
+                  type="button"
+                  key={key}
+                  onClick={() => setRoomKey(key)}
+                  aria-pressed={active}
+                  className={`group relative overflow-hidden rounded-[1.25rem] border bg-white text-right transition-all duration-200 cursor-pointer ${
+                    active
+                      ? "border-brand-600 ring-4 ring-brand-600/10 shadow-lift -translate-y-0.5"
+                      : "border-cream-200 shadow-soft hover:-translate-y-0.5 hover:border-bronze-300 hover:shadow-lift"
+                  }`}
+                >
+                  <RoomVisual roomKey={key} className="h-24 sm:h-28" />
+                  <span
+                    className={`absolute top-3 left-3 w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                      active
+                        ? "bg-brand-600 text-white shadow-brand scale-100"
+                        : "bg-white/80 ring-1 ring-cream-300 text-transparent scale-90"
+                    }`}
+                  >
+                    <Icon name="check" className="w-3.5 h-3.5" />
+                  </span>
+                  <span className="flex items-center justify-between gap-2 px-4 py-3.5">
+                    <span
+                      className={`font-display text-base font-bold ${active ? "text-brand-800" : "text-stone-800"}`}
+                    >
+                      {ROOM_LABELS[key]}
+                    </span>
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${ROOM_ACCENTS[key].dot}`} />
+                  </span>
+                  <span
+                    className={`absolute inset-x-0 bottom-0 h-0.5 transition-opacity ${
+                      active ? "bg-linear-to-l from-brand-500 via-bronze-400 to-brand-500 opacity-100" : "opacity-0"
+                    }`}
+                  />
+                </button>
+              );
+            })}
           </div>
           {roomKey === "ROOM1_2" && (
-            <p className="text-xs text-slate-500 mt-2">
+            <p className="flex items-start gap-2 text-xs text-bronze-700 bg-bronze-50 ring-1 ring-bronze-100 rounded-xl px-3.5 py-2.5 mt-4">
+              <Icon name="sparkle" className="w-4 h-4 shrink-0" />
               שים לב: הזמנת חדר 1+2 חוסמת גם את חדר 1 וגם את חדר 2 בטווח הזמן שנבחר.
             </p>
           )}
-        </div>
+        </section>
 
         <div className="grid md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">תאריך</label>
-            <div className="border border-slate-200 rounded-lg p-3">
+          <section className="card p-5 sm:p-8">
+            <SectionTitle index="02" hint="ימים שעברו אינם זמינים">
+              תאריך
+            </SectionTitle>
+            <div className="rounded-2xl bg-cream-50 ring-1 ring-cream-200 p-4 sm:p-5">
               <MonthCalendar value={date} onChange={setDate} minDate={todayIsoDate()} />
             </div>
-          </div>
+          </section>
 
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-slate-700">שעת התחלה</label>
-              {loadingBusy && <span className="text-xs text-slate-400">בודק זמינות...</span>}
-            </div>
-            <div className="border border-slate-200 rounded-lg">
-              <TimeSlotGrid
-                date={date}
-                timeOptions={TIME_OPTIONS}
-                selected={startTime}
-                onSelect={setStartTime}
-                busy={busy}
-              />
-            </div>
+          <div className="space-y-6">
+            <section className="card p-5 sm:p-8">
+              <SectionTitle index="03" hint="כמה זמן תצטרכו את החדר?">
+                משך התור
+              </SectionTitle>
+              <div className="flex flex-wrap gap-2">
+                {DURATION_OPTIONS.map((opt) => {
+                  const active = durationMinutes === opt.minutes;
+                  return (
+                    <button
+                      type="button"
+                      key={opt.minutes}
+                      onClick={() => setDurationMinutes(opt.minutes)}
+                      aria-pressed={active}
+                      className={`btn ${active ? "btn-primary" : "btn-secondary"}`}
+                    >
+                      <Icon name="clock" className={`w-4 h-4 ${active ? "opacity-90" : "text-bronze-500"}`} />
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
 
-            <label className="block text-sm font-medium text-slate-700 mb-1 mt-4">משך התור</label>
-            <select
-              value={durationMinutes}
-              onChange={(e) => setDurationMinutes(Number(e.target.value))}
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
-            >
-              {DURATION_OPTIONS.map((opt) => (
-                <option key={opt.minutes} value={opt.minutes}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-slate-500 mt-1">
-              {startTime} – {endTimeLabel}
-              {conflict && <span className="text-red-600 font-medium"> · השעה מתנגשת עם תור קיים</span>}
-            </p>
+            <section className="card p-5 sm:p-8">
+              <SectionTitle
+                index="04"
+                hint="שעות תפוסות מסומנות בקו חוצה"
+                aside={
+                  loadingBusy && (
+                    <span className="flex items-center gap-1.5 text-xs text-stone-400">
+                      <span className="w-3 h-3 rounded-full border-2 border-brand-200 border-t-brand-600 animate-spin" />
+                      בודק זמינות...
+                    </span>
+                  )
+                }
+              >
+                שעת התחלה
+              </SectionTitle>
+              <div className="rounded-2xl bg-cream-50 ring-1 ring-cream-200">
+                <TimeSlotGrid
+                  date={date}
+                  timeOptions={TIME_OPTIONS}
+                  selected={startTime}
+                  onSelect={setStartTime}
+                  busy={busy}
+                />
+              </div>
+            </section>
           </div>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">הערות (לא חובה)</label>
+        <section className="card p-5 sm:p-8">
+          <label htmlFor="booking-notes" className="field-label">
+            הערות <span className="font-normal text-stone-400">(לא חובה)</span>
+          </label>
           <textarea
+            id="booking-notes"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={3}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
+            className="field"
           />
+        </section>
+
+        {error && <Alert tone="error">{error}</Alert>}
+        {success && <Alert tone="success">התור נקבע בהצלחה! מעביר אותך לתורים שלי...</Alert>}
+
+        <div className="sticky bottom-3 z-10 panel-brand rounded-[1.5rem] p-4 sm:px-7 sm:py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-4 min-w-0">
+            <RoomTile roomKey={roomKey} className="hidden sm:flex w-12 h-12" />
+            <div className="min-w-0">
+              <p className="text-xs text-bronze-200 tracking-wide truncate">
+                {ROOM_LABELS[roomKey]} ·{" "}
+                {new Date(`${date}T00:00:00`).toLocaleDateString("he-IL", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "numeric",
+                })}
+              </p>
+              <p className="font-display text-2xl font-bold tabular-nums">
+                {startTime} – {endTimeLabel}
+              </p>
+              {conflict && (
+                <p className="text-sm text-red-200 font-semibold">השעה מתנגשת עם תור קיים</p>
+              )}
+            </div>
+          </div>
+          <button type="submit" disabled={submitting || conflict} className="btn btn-bronze px-8! py-3! text-base!">
+            {submitting ? "קובע תור..." : "קביעת תור"}
+            {!submitting && <Icon name="arrowLeft" className="w-4 h-4" />}
+          </button>
         </div>
-
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        {success && <p className="text-sm text-emerald-600">התור נקבע בהצלחה! מעביר אותך לתורים שלי...</p>}
-
-        <button
-          type="submit"
-          disabled={submitting || conflict}
-          className="w-full py-2.5 rounded-lg bg-teal-600 text-white font-medium hover:bg-teal-700 disabled:opacity-50 transition-colors"
-        >
-          {submitting ? "קובע תור..." : "קביעת תור"}
-        </button>
       </form>
     </div>
   );
