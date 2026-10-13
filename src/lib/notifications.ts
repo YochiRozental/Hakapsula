@@ -5,7 +5,11 @@ import nodemailer from "nodemailer";
  * משתמש שנרשם באתר (יש לו אימייל) מקבל מייל; משתמש שנרשם דרך ה-IVR (רק טלפון, בלי אימייל) מקבל שיחת טלפון.
  * כשל בשליחה לא אמור להפיל את פעולת האישור באדמין - קוראים לפונקציה הזו מתוך try/catch שם.
  */
-export async function sendApprovalNotification(user: { name: string; email: string | null; phone: string | null }) {
+export async function sendApprovalNotification(user: {
+  name: string;
+  email: string | null;
+  phone: string | null;
+}) {
   if (user.email) {
     await sendApprovalEmail(user.email, user.name);
   } else if (user.phone) {
@@ -15,7 +19,7 @@ export async function sendApprovalNotification(user: { name: string; email: stri
 
 /**
  * שולח מייל אישור דרך שרת SMTP. יש להגדיר את משתני הסביבה הבאים ב-.env:
- * SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM (כתובת השולח, לדוגמה "מרפאות <no-reply@example.com>").
+ * SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM ("כתובת השולח, לדוגמה "קליניקות <no-reply@example.com>").
  * ללא הגדרת SMTP_HOST הפונקציה רק רושמת אזהרה ל-console ולא שולחת בפועל (כדי לא לשבור פיתוח מקומי).
  */
 async function sendApprovalEmail(email: string, name: string) {
@@ -23,7 +27,7 @@ async function sendApprovalEmail(email: string, name: string) {
 
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS || !SMTP_FROM) {
     console.warn(
-      `[notifications] SMTP אינו מוגדר (SMTP_HOST/SMTP_USER/SMTP_PASS/SMTP_FROM) - לא נשלח מייל אישור ל-${email}`
+      `[notifications] SMTP אינו מוגדר (SMTP_HOST/SMTP_USER/SMTP_PASS/SMTP_FROM) - לא נשלח מייל אישור ל-${email}`,
     );
     return;
   }
@@ -67,20 +71,23 @@ async function sendApprovalCallViaYemot(phone: string, name: string) {
 
   if (!YEMOT_API_TOKEN || !YEMOT_APPROVAL_TEMPLATE_ID) {
     console.warn(
-      `[notifications] YEMOT_API_TOKEN/YEMOT_APPROVAL_TEMPLATE_ID אינם מוגדרים - לא בוצעה שיחת אישור ל-${phone} (${name})`
+      `[notifications] YEMOT_API_TOKEN/YEMOT_APPROVAL_TEMPLATE_ID אינם מוגדרים - לא בוצעה שיחת אישור ל-${phone} (${name})`,
     );
     return;
   }
 
-  const response = await fetch("https://www.call2all.co.il/ym/api/RunCampaign", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      token: YEMOT_API_TOKEN,
-      templateId: YEMOT_APPROVAL_TEMPLATE_ID,
-      phone,
-    }),
-  });
+  const response = await fetch(
+    "https://www.call2all.co.il/ym/api/RunCampaign",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token: YEMOT_API_TOKEN,
+        templateId: YEMOT_APPROVAL_TEMPLATE_ID,
+        phone,
+      }),
+    },
+  );
 
   const data = await response.json().catch(() => null);
   if (!response.ok || data?.responseStatus !== "OK") {

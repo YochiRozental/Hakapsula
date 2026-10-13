@@ -19,20 +19,29 @@ export function Navbar() {
     <header className="border-b border-slate-200 bg-white/80 backdrop-blur sticky top-0 z-20">
       <div className="max-w-5xl mx-auto flex items-center justify-between px-4 py-3">
         <Link href="/" className="text-lg font-bold text-teal-700">
-          מרפאות · קביעת תורים
+          קליניקות · קביעת תורים
         </Link>
 
         <nav className="flex items-center gap-2">
-          <Link href="/booking" className={linkClass(pathname?.startsWith("/booking") ?? false)}>
+          <Link
+            href="/booking"
+            className={linkClass(pathname?.startsWith("/booking") ?? false)}
+          >
             קביעת תור
           </Link>
           {status === "authenticated" && (
-            <Link href="/booking/my" className={linkClass(pathname === "/booking/my")}>
+            <Link
+              href="/booking/my"
+              className={linkClass(pathname === "/booking/my")}
+            >
               התורים שלי
             </Link>
           )}
           {session?.user?.role === "ADMIN" && (
-            <Link href="/admin" className={linkClass(pathname?.startsWith("/admin") ?? false)}>
+            <Link
+              href="/admin"
+              className={linkClass(pathname?.startsWith("/admin") ?? false)}
+            >
               ניהול
             </Link>
           )}
