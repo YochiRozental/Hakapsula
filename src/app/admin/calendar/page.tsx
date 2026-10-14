@@ -18,7 +18,7 @@ type Appointment = {
   user: { id: string; name: string; email: string; phone: string | null };
 };
 
-const ROOM_KEYS: RoomKey[] = ["ROOM1", "ROOM2", "WORKSHOP", "ROOM1_2"];
+const ROOM_KEYS: RoomKey[] = ["ROOM1", "ROOM2", "ROOM3", "ROOM4", "WORKSHOP", "ROOM1_2"];
 const PX_PER_MINUTE = 0.9;
 const DAY_START_MIN = BUSINESS_HOURS.startHour * 60;
 const DAY_END_MIN = BUSINESS_HOURS.endHour * 60;

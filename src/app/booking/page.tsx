@@ -11,7 +11,7 @@ import type { RoomKey } from "@/generated/prisma/client";
 
 type BusyInterval = { startTime: string; endTime: string; room: { key: RoomKey; name: string } };
 
-const ROOM_KEYS: RoomKey[] = ["ROOM1", "ROOM2", "WORKSHOP", "ROOM1_2"];
+const ROOM_KEYS: RoomKey[] = ["ROOM1", "ROOM2", "ROOM3", "ROOM4", "WORKSHOP", "ROOM1_2"];
 const TIME_OPTIONS = buildTimeOptions();
 const LAST_SELECTION_KEY = "booking:lastSelection";
 
@@ -150,7 +150,7 @@ export default function BookingPage() {
           <SectionTitle index="01" hint="בחרו את החלל המתאים לפגישה">
             בחירת חדר
           </SectionTitle>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {ROOM_KEYS.map((key) => {
               const active = roomKey === key;
               return (

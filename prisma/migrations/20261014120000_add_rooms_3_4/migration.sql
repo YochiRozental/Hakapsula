@@ -1,0 +1,3 @@
+-- AlterEnum
+ALTER TYPE "RoomKey" ADD VALUE 'ROOM3';
+ALTER TYPE "RoomKey" ADD VALUE 'ROOM4';

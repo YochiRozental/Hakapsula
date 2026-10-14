@@ -18,19 +18,35 @@ export function Navbar() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const links: { href: string; label: string; icon: IconName; active: boolean }[] = [
-    {
-      href: "/booking",
-      label: "קביעת תור",
-      icon: "calendar",
-      active: pathname === "/booking",
-    },
-  ];
+  const links: {
+    href: string;
+    label: string;
+    icon: IconName;
+    active: boolean;
+  }[] = [];
   if (status === "authenticated") {
-    links.push({ href: "/booking/my", label: "התורים שלי", icon: "calendarCheck", active: pathname === "/booking/my" });
+    links.push(
+      {
+        href: "/booking",
+        label: "קביעת תור",
+        icon: "calendar",
+        active: pathname === "/booking",
+      },
+      {
+        href: "/booking/my",
+        label: "התורים שלי",
+        icon: "calendarCheck",
+        active: pathname === "/booking/my",
+      },
+    );
   }
   if (session?.user?.role === "ADMIN") {
-    links.push({ href: "/admin", label: "ניהול", icon: "chart", active: pathname?.startsWith("/admin") ?? false });
+    links.push({
+      href: "/admin",
+      label: "ניהול",
+      icon: "chart",
+      active: pathname?.startsWith("/admin") ?? false,
+    });
   }
 
   const initial = session?.user?.name?.trim().charAt(0) ?? "";
@@ -55,7 +71,10 @@ export function Navbar() {
       </div>
     ) : status === "unauthenticated" ? (
       <div className="flex items-center gap-2">
-        <Link href="/login" className={`btn btn-sm ${pathname === "/login" ? "btn-secondary" : "btn-ghost"}`}>
+        <Link
+          href="/login"
+          className={`btn btn-sm ${pathname === "/login" ? "btn-secondary" : "btn-ghost"}`}
+        >
           התחברות
         </Link>
         <Link href="/register" className="btn btn-primary btn-sm">
@@ -99,7 +118,12 @@ export function Navbar() {
         <div className="md:hidden border-t border-cream-200 bg-white px-4 py-4 space-y-3">
           <nav className="flex flex-col gap-1">
             {links.map((l) => (
-              <Link key={l.href} href={l.href} className={linkClass(l.active)} onClick={() => setMenuOpen(false)}>
+              <Link
+                key={l.href}
+                href={l.href}
+                className={linkClass(l.active)}
+                onClick={() => setMenuOpen(false)}
+              >
                 <Icon name={l.icon} className="w-4 h-4" />
                 {l.label}
               </Link>

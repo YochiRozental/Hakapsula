@@ -5,6 +5,8 @@ import { DURATION_OPTIONS } from "@/lib/slots";
 export const ROOM_DIGIT_MAP: Record<string, RoomKey> = {
   "1": "ROOM1",
   "2": "ROOM2",
+  "5": "ROOM3",
+  "6": "ROOM4",
   "3": "WORKSHOP",
   "4": "ROOM1_2",
 };

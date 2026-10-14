@@ -24,6 +24,8 @@ enum UserStatus {
 enum RoomKey {
   ROOM1
   ROOM2
+  ROOM3
+  ROOM4
   WORKSHOP
   ROOM1_2
 }

@@ -297,6 +297,20 @@ export const ROOM_ACCENTS: Record<RoomKey, { tile: string; block: string; text: 
     dot: "bg-sky-600",
     visual: "from-sky-100 via-cream-50 to-sky-50",
   },
+  ROOM3: {
+    tile: "bg-linear-to-b from-rose-50 to-rose-100 text-rose-700 ring-rose-100",
+    block: "bg-rose-50 border-rose-200 text-rose-900",
+    text: "text-rose-700",
+    dot: "bg-rose-500",
+    visual: "from-rose-100 via-cream-50 to-rose-50",
+  },
+  ROOM4: {
+    tile: "bg-linear-to-b from-violet-50 to-violet-100 text-violet-700 ring-violet-100",
+    block: "bg-violet-50 border-violet-200 text-violet-900",
+    text: "text-violet-700",
+    dot: "bg-violet-500",
+    visual: "from-violet-100 via-cream-50 to-violet-50",
+  },
   WORKSHOP: {
     tile: "bg-linear-to-b from-bronze-50 to-bronze-100 text-bronze-600 ring-bronze-200",
     block: "bg-bronze-50 border-bronze-200 text-bronze-700",
@@ -316,6 +330,8 @@ export const ROOM_ACCENTS: Record<RoomKey, { tile: string; block: string; text: 
 const ROOM_ICONS: Record<RoomKey, IconName> = {
   ROOM1: "door",
   ROOM2: "door",
+  ROOM3: "door",
+  ROOM4: "door",
   WORKSHOP: "users",
   ROOM1_2: "grid",
 };

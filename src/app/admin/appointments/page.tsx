@@ -19,7 +19,7 @@ type Appointment = {
 
 type UserOption = { id: string; name: string; email: string | null; phone: string | null };
 
-const ROOM_KEYS: RoomKey[] = ["ROOM1", "ROOM2", "WORKSHOP", "ROOM1_2"];
+const ROOM_KEYS: RoomKey[] = ["ROOM1", "ROOM2", "ROOM3", "ROOM4", "WORKSHOP", "ROOM1_2"];
 const TIME_OPTIONS = buildTimeOptions();
 
 export default function AdminAppointmentsPage() {
