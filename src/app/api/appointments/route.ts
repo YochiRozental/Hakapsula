@@ -4,6 +4,7 @@ import { createAppointment, BookingError } from "@/lib/booking";
 import type { RoomKey } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getMissingBookingDetails } from "@/lib/profile";
+import { WEB_BOOKING_DURATION_MINUTES } from "@/lib/slots";
 
 export async function GET() {
   const session = await auth();
@@ -50,6 +51,11 @@ export async function POST(request: Request) {
 
   if (!roomKey || !startTime || !endTime) {
     return NextResponse.json({ error: "חסרים פרטים לקביעת התור" }, { status: 400 });
+  }
+
+  const durationMinutes = (new Date(endTime).getTime() - new Date(startTime).getTime()) / 60000;
+  if (durationMinutes !== WEB_BOOKING_DURATION_MINUTES) {
+    return NextResponse.json({ error: "ניתן להזמין חדר לשעה אחת בלבד" }, { status: 400 });
   }
 
   try {

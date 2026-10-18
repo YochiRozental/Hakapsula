@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ROOM_KEYS, ROOM_LABELS } from "@/lib/rooms";
-import { buildTimeOptions, combineDateAndTime, todayIsoDate, DURATION_OPTIONS } from "@/lib/slots";
+import { buildTimeOptions, combineDateAndTime, todayIsoDate, WEB_BOOKING_DURATION_MINUTES } from "@/lib/slots";
+import { BUSINESS_HOURS } from "@/lib/business-rules";
 import { MonthCalendar } from "@/components/month-calendar";
 import { TimeSlotGrid } from "@/components/time-slot-grid";
 import { Alert, BrandHeader, Icon, ROOM_ACCENTS, RoomTile, RoomVisual, SectionTitle } from "@/components/ui";
@@ -11,14 +12,18 @@ import type { RoomKey } from "@/generated/prisma/client";
 
 type BusyInterval = { startTime: string; endTime: string; room: { key: RoomKey; name: string } };
 
-const TIME_OPTIONS = buildTimeOptions();
+const durationMinutes = WEB_BOOKING_DURATION_MINUTES;
+// רק שעות התחלה שבהן שעה שלמה נכנסת בתוך שעות הפעילות
+const TIME_OPTIONS = buildTimeOptions().filter((t) => {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m + durationMinutes <= BUSINESS_HOURS.endHour * 60;
+});
 const LAST_SELECTION_KEY = "booking:lastSelection";
 
 type StoredSelection = {
   date: string;
   roomKey: RoomKey;
   startTime: string;
-  durationMinutes: number;
   notes?: string;
 };
 
@@ -27,7 +32,6 @@ export default function BookingPage() {
   const [roomKey, setRoomKey] = useState<RoomKey>("ROOM1");
   const [date, setDate] = useState(todayIsoDate());
   const [startTime, setStartTime] = useState(TIME_OPTIONS[0]);
-  const [durationMinutes, setDurationMinutes] = useState(30);
   const [notes, setNotes] = useState("");
 
   const [busy, setBusy] = useState<BusyInterval[]>([]);
@@ -45,7 +49,6 @@ export default function BookingPage() {
       if (stored.date && stored.date >= todayIsoDate()) setDate(stored.date);
       if (stored.roomKey && ROOM_KEYS.includes(stored.roomKey)) setRoomKey(stored.roomKey);
       if (stored.startTime && TIME_OPTIONS.includes(stored.startTime)) setStartTime(stored.startTime);
-      if (stored.durationMinutes) setDurationMinutes(stored.durationMinutes);
       if (stored.notes) setNotes(stored.notes);
     } catch {
       // ignore corrupt storage
@@ -62,9 +65,9 @@ export default function BookingPage() {
       hasMountedRef.current = true;
       return;
     }
-    const selection: StoredSelection = { date, roomKey, startTime, durationMinutes, notes };
+    const selection: StoredSelection = { date, roomKey, startTime, notes };
     window.localStorage.setItem(LAST_SELECTION_KEY, JSON.stringify(selection));
-  }, [date, roomKey, startTime, durationMinutes, notes]);
+  }, [date, roomKey, startTime, notes]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- loading flag for a client-side fetch triggered by date/room changes
@@ -89,7 +92,7 @@ export default function BookingPage() {
       conflict: hasConflict,
       endTimeLabel: `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`,
     };
-  }, [busy, date, startTime, durationMinutes]);
+  }, [busy, date, startTime]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -148,13 +151,13 @@ export default function BookingPage() {
         subtitle="בחרו חדר, תאריך ושעה — ואנחנו נדאג לשאר"
       >
         <ol className="hidden md:flex items-center gap-2 text-xs text-white/70">
-          {["חדר", "תאריך", "משך", "שעה"].map((step, i) => (
+          {["חדר", "תאריך", "שעה"].map((step, i) => (
             <li key={step} className="flex items-center gap-2">
               <span className="w-6 h-6 rounded-full border border-bronze-300/50 text-bronze-200 flex items-center justify-center tabular-nums">
                 {i + 1}
               </span>
               {step}
-              {i < 3 && <span className="w-5 h-px bg-white/25" />}
+              {i < 2 &&<span className="w-5 h-px bg-white/25" />}
             </li>
           ))}
         </ol>
@@ -227,32 +230,9 @@ export default function BookingPage() {
 
           <div className="space-y-6">
             <section className="card p-5 sm:p-8">
-              <SectionTitle index="03" hint="כמה זמן תצטרכו את החדר?">
-                משך התור
-              </SectionTitle>
-              <div className="flex flex-wrap gap-2">
-                {DURATION_OPTIONS.map((opt) => {
-                  const active = durationMinutes === opt.minutes;
-                  return (
-                    <button
-                      type="button"
-                      key={opt.minutes}
-                      onClick={() => setDurationMinutes(opt.minutes)}
-                      aria-pressed={active}
-                      className={`btn ${active ? "btn-primary" : "btn-secondary"}`}
-                    >
-                      <Icon name="clock" className={`w-4 h-4 ${active ? "opacity-90" : "text-bronze-500"}`} />
-                      {opt.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-
-            <section className="card p-5 sm:p-8">
               <SectionTitle
-                index="04"
-                hint="שעות תפוסות מסומנות בקו חוצה"
+                index="03"
+                hint="ההזמנה היא לשעה אחת · שעות תפוסות מסומנות בקו חוצה"
                 aside={
                   loadingBusy && (
                     <span className="flex items-center gap-1.5 text-xs text-stone-400">

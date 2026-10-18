@@ -22,6 +22,9 @@ export function combineDateAndTime(dateStr: string, timeStr: string): Date {
   return new Date(`${dateStr}T${timeStr}:00`);
 }
 
+/** משך ההזמנה היחיד שמוצע כרגע באתר (שעה). שאר האפשרויות ב-DURATION_OPTIONS נשמרות לשימוש עתידי, וכן לטלפון ולממשק המנהל */
+export const WEB_BOOKING_DURATION_MINUTES = 60;
+
 export const DURATION_OPTIONS = [
   { label: "15 דקות", minutes: 15 },
   { label: "30 דקות", minutes: 30 },
