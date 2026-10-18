@@ -9,6 +9,15 @@ export default auth((req) => {
   const isLoggedIn = !!req.auth;
   const isAdmin = req.auth?.user?.role === "ADMIN";
 
+  // סיסמה זמנית (שהוגדרה ע"י מנהל) — חובה להחליף לפני כל שימוש אחר
+  if (isLoggedIn && req.auth?.user?.mustChangePassword) {
+    if (pathname === "/change-password") return NextResponse.next();
+    return NextResponse.redirect(new URL("/change-password", req.url));
+  }
+  if (pathname === "/change-password") {
+    return NextResponse.redirect(new URL(isLoggedIn ? "/" : "/login", req.url));
+  }
+
   // מנהל רואה רק את אזור הניהול
   if (isAdmin && !pathname.startsWith("/admin")) {
     return NextResponse.redirect(new URL("/admin", req.url));
@@ -41,5 +50,5 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/", "/booking/:path*", "/admin/:path*", "/login", "/register", "/account-status", "/complete-profile"],
+  matcher: ["/", "/booking/:path*", "/admin/:path*", "/login", "/register", "/account-status", "/complete-profile", "/change-password"],
 };

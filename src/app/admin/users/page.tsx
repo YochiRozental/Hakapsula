@@ -27,11 +27,27 @@ const STATUS_CLASSES: Record<UserRow["status"], string> = {
   BLOCKED: "bg-red-50 text-red-700",
 };
 
+const EMPTY_FORM = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+  idNumber: "",
+  password: "",
+  role: "CLIENT",
+  status: "APPROVED",
+};
+
 export default function AdminUsersPage() {
   const { data: session } = useSession();
   const [search, setSearch] = useState("");
   const [users, setUsers] = useState<UserRow[] | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [creating, setCreating] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [createdInfo, setCreatedInfo] = useState<{ name: string; email: string | null; password: string } | null>(null);
 
   function load() {
     const params = search ? `?search=${encodeURIComponent(search)}` : "";
@@ -45,6 +61,28 @@ export default function AdminUsersPage() {
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
+
+  async function createUser(e: React.FormEvent) {
+    e.preventDefault();
+    setFormError(null);
+    setCreating(true);
+    const res = await fetch("/api/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form),
+    });
+    setCreating(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setFormError(data?.error ?? "שגיאה בהוספת המשתמש");
+      return;
+    }
+    const created = await res.json();
+    setCreatedInfo({ name: created.name, email: created.email, password: created.temporaryPassword });
+    setForm(EMPTY_FORM);
+    setShowForm(false);
+    load();
+  }
 
   async function setStatus(user: UserRow, status: UserRow["status"]) {
     setSavingId(user.id);
@@ -79,16 +117,135 @@ export default function AdminUsersPage() {
     <div>
       <PageHeader eyebrow="לקוחות ומנהלים" title="ניהול משתמשים" subtitle="אישור, חסימה ומחיקה של משתמשי המערכת" />
 
-      <div className="relative max-w-sm mb-4">
-        <Icon name="search" className="w-4 h-4 text-stone-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="חיפוש לפי שם או אימייל..."
-          aria-label="חיפוש משתמשים"
-          className="field bg-white! pr-10!"
-        />
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="relative max-w-sm flex-1 min-w-56">
+          <Icon name="search" className="w-4 h-4 text-stone-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="חיפוש לפי שם או אימייל..."
+            aria-label="חיפוש משתמשים"
+            className="field bg-white! pr-10!"
+          />
+        </div>
+        <button onClick={() => setShowForm((v) => !v)} className="btn btn-primary">
+          {showForm ? "ביטול" : "+ הוספת משתמש"}
+        </button>
       </div>
+
+      {createdInfo && (
+        <div className="card p-5 mb-5 border border-brand-100 bg-brand-50/40" role="status">
+          <p className="font-semibold text-stone-800 mb-2">המשתמש {createdInfo.name} נוצר בהצלחה</p>
+          {createdInfo.email && (
+            <p className="text-sm text-stone-600">
+              אימייל: <span dir="ltr" className="font-mono">{createdInfo.email}</span>
+            </p>
+          )}
+          <p className="text-sm text-stone-600 flex flex-wrap items-center gap-2">
+            סיסמה זמנית:
+            <span dir="ltr" className="font-mono text-base font-bold text-stone-900 select-all">{createdInfo.password}</span>
+            <button
+              type="button"
+              onClick={() => navigator.clipboard?.writeText(createdInfo.password)}
+              className="btn btn-secondary btn-sm"
+            >
+              העתקה
+            </button>
+          </p>
+          <p className="text-xs text-stone-500 mt-2">
+            הסיסמה מוצגת רק עכשיו. בכניסה הראשונה המשתמש יידרש להחליף אותה.
+          </p>
+          <button type="button" onClick={() => setCreatedInfo(null)} className="btn btn-ghost btn-sm mt-2">
+            סגירה
+          </button>
+        </div>
+      )}
+
+      {showForm && (
+        <form onSubmit={createUser} className="card p-5 mb-5 grid gap-4 sm:grid-cols-2">
+          <input
+            required
+            value={form.firstName}
+            onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+            placeholder="שם פרטי *"
+            aria-label="שם פרטי"
+            className="field"
+          />
+          <input
+            required
+            value={form.lastName}
+            onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+            placeholder="שם משפחה *"
+            aria-label="שם משפחה"
+            className="field"
+          />
+          <input
+            type="email"
+            dir="ltr"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            placeholder="אימייל"
+            aria-label="אימייל"
+            className="field"
+          />
+          <input
+            type="tel"
+            dir="ltr"
+            value={form.phone}
+            onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            placeholder="פלאפון"
+            aria-label="פלאפון"
+            className="field"
+          />
+          <input
+            inputMode="numeric"
+            dir="ltr"
+            value={form.idNumber}
+            onChange={(e) => setForm({ ...form, idNumber: e.target.value })}
+            placeholder="תעודת זהות"
+            aria-label="תעודת זהות"
+            className="field"
+          />
+          <input
+            type="password"
+            dir="ltr"
+            autoComplete="new-password"
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+            placeholder="סיסמה זמנית (ריק = יצירה אוטומטית)"
+            aria-label="סיסמה"
+            className="field"
+          />
+          <select
+            value={form.role}
+            onChange={(e) => setForm({ ...form, role: e.target.value })}
+            aria-label="תפקיד"
+            className="field"
+          >
+            <option value="CLIENT">לקוח</option>
+            <option value="ADMIN">מנהל</option>
+          </select>
+          <select
+            value={form.status}
+            onChange={(e) => setForm({ ...form, status: e.target.value })}
+            aria-label="סטטוס"
+            className="field"
+          >
+            <option value="APPROVED">מאושר</option>
+            <option value="PENDING">ממתין לאישור</option>
+            <option value="BLOCKED">חסום</option>
+          </select>
+          <p className="sm:col-span-2 text-xs text-stone-500">
+            יש להזין אימייל או פלאפון (ההתחברות היא באמצעות אימייל). הסיסמה תוצג לך לאחר היצירה, והמשתמש יחליף אותה בכניסה הראשונה.
+          </p>
+          {formError && <p className="sm:col-span-2 text-sm text-red-700">{formError}</p>}
+          <div className="sm:col-span-2">
+            <button type="submit" disabled={creating} className="btn btn-primary">
+              {creating ? "שומר..." : "הוספה"}
+            </button>
+          </div>
+        </form>
+      )}
 
       {users === null ? (
         <Loading />

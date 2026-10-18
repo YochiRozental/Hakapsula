@@ -6,12 +6,14 @@ declare module "next-auth" {
       id: string;
       role: "CLIENT" | "ADMIN";
       status: "PENDING" | "APPROVED" | "BLOCKED";
+      mustChangePassword: boolean;
     } & DefaultSession["user"];
   }
 
   interface User {
     role: "CLIENT" | "ADMIN";
     status: "PENDING" | "APPROVED" | "BLOCKED";
+    mustChangePassword?: boolean;
   }
 }
 
@@ -20,5 +22,6 @@ declare module "next-auth/jwt" {
     id: string;
     role: "CLIENT" | "ADMIN";
     status: "PENDING" | "APPROVED" | "BLOCKED";
+    mustChangePassword?: boolean;
   }
 }

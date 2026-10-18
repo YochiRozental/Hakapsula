@@ -16,6 +16,7 @@ export const authConfig: NextAuthConfig = {
         token.id = user.id as string;
         token.role = (user as { role: string }).role;
         token.status = (user as { status: "PENDING" | "APPROVED" | "BLOCKED" }).status;
+        token.mustChangePassword = (user as { mustChangePassword?: boolean }).mustChangePassword ?? false;
       }
       return token;
     },
@@ -24,6 +25,7 @@ export const authConfig: NextAuthConfig = {
         session.user.id = token.id as string;
         session.user.role = token.role as "CLIENT" | "ADMIN";
         session.user.status = token.status as "PENDING" | "APPROVED" | "BLOCKED";
+        session.user.mustChangePassword = !!token.mustChangePassword;
       }
       return session;
     },
