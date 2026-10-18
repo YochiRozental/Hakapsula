@@ -94,3 +94,42 @@ async function sendApprovalCallViaYemot(phone: string, name: string) {
     throw new Error(`Yemot RunCampaign failed: ${JSON.stringify(data)}`);
   }
 }
+
+export const CONTACT_EMAIL = "hakapsula@gmail.com";
+
+/**
+ * מעביר הודעה מטופס "צור קשר" לתיבת המייל של המערכת. Reply-To מוגדר לכתובת הפונה כדי שאפשר יהיה לחזור אליו ישירות.
+ * משתמש באותה הגדרת SMTP כמו מייל האישור.
+ */
+export async function sendContactMessage(msg: { name: string; email: string; phone?: string; message: string }) {
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
+
+  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS || !SMTP_FROM) {
+    throw new Error("SMTP is not configured");
+  }
+
+  const transport = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: Number(SMTP_PORT) || 587,
+    secure: Number(SMTP_PORT) === 465,
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
+  });
+
+  const text = [
+    `שם: ${msg.name}`,
+    `אימייל: ${msg.email}`,
+    msg.phone ? `טלפון: ${msg.phone}` : null,
+    "",
+    msg.message,
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
+
+  await transport.sendMail({
+    from: SMTP_FROM,
+    to: CONTACT_EMAIL,
+    replyTo: `"${msg.name.replace(/["\r\n]/g, "")}" <${msg.email}>`,
+    subject: `פנייה חדשה מהאתר - ${msg.name.replace(/[\r\n]/g, " ")}`,
+    text,
+  });
+}

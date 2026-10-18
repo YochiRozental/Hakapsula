@@ -3,6 +3,7 @@ import { Assistant, Frank_Ruhl_Libre } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { Navbar } from "@/components/navbar";
+import { ContactBanner } from "@/components/contact-banner";
 
 const assistant = Assistant({
   variable: "--font-assistant",
@@ -33,7 +34,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-10">
             {children}
           </main>
-          <footer className="mt-8 border-t border-cream-200/80 bg-white/40">
+          <ContactBanner />
+          <footer className="border-t border-cream-200/80 bg-white/40">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-stone-400">
               <span className="font-display text-sm text-stone-600">הקפסולה</span>
               <span>הבית שלך לפגישות עסקיות · מערכת ניהול קליניקות</span>
