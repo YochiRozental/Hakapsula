@@ -24,7 +24,8 @@ export function Navbar() {
     icon: IconName;
     active: boolean;
   }[] = [];
-  if (status === "authenticated") {
+  const isAdmin = session?.user?.role === "ADMIN";
+  if (status === "authenticated" && !isAdmin) {
     links.push(
       {
         href: "/booking",
@@ -40,7 +41,7 @@ export function Navbar() {
       },
     );
   }
-  if (session?.user?.role === "ADMIN") {
+  if (isAdmin) {
     links.push({
       href: "/admin",
       label: "ניהול",
@@ -86,7 +87,7 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md shadow-[0_1px_0_rgb(221_211_196/0.6),0_8px_24px_-18px_rgb(35_48_45/0.25)]">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4 px-4 sm:px-6 h-20 py-3">
-        <Link href="/" className="shrink-0" onClick={() => setMenuOpen(false)}>
+        <Link href={isAdmin ? "/admin" : "/"} className="shrink-0" onClick={() => setMenuOpen(false)}>
           <Logo />
         </Link>
 
