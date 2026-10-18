@@ -41,6 +41,14 @@ export function Navbar() {
       active: pathname === "/booking/my",
     });
   }
+  if (status === "authenticated" && !isAdmin) {
+    links.push({
+      href: "/profile",
+      label: "הכרטיס שלי",
+      icon: "user",
+      active: pathname === "/profile",
+    });
+  }
   if (isAdmin) {
     links.push({
       href: "/admin",

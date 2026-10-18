@@ -46,9 +46,15 @@ export default auth((req) => {
     return NextResponse.redirect(url);
   }
 
+  if (pathname.startsWith("/profile") && !isLoggedIn) {
+    const url = new URL("/login", req.url);
+    url.searchParams.set("callbackUrl", pathname);
+    return NextResponse.redirect(url);
+  }
+
   return NextResponse.next();
 });
 
 export const config = {
-  matcher: ["/", "/booking/:path*", "/admin/:path*", "/login", "/register", "/account-status", "/complete-profile", "/change-password"],
+  matcher: ["/", "/booking/:path*", "/admin/:path*", "/login", "/register", "/account-status", "/complete-profile", "/change-password", "/profile"],
 };

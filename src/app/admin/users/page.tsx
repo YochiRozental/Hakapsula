@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { Icon, Loading, PageHeader } from "@/components/ui";
 
@@ -268,12 +269,16 @@ export default function AdminUsersPage() {
               {users.map((u) => (
                 <tr key={u.id}>
                   <td>
-                    <span className="flex items-center gap-2.5 font-semibold text-stone-800 whitespace-nowrap">
+                    <Link
+                      href={`/admin/users/${u.id}`}
+                      title="פתיחת כרטיס משתמש"
+                      className="flex items-center gap-2.5 font-semibold text-stone-800 whitespace-nowrap hover:text-brand-700 hover:underline"
+                    >
                       <span className="w-9 h-9 rounded-full bg-linear-to-b from-bronze-50 to-bronze-100 text-bronze-700 ring-1 ring-bronze-200 text-xs font-bold flex items-center justify-center shrink-0">
                         {u.name.trim().charAt(0)}
                       </span>
                       {u.name}
-                    </span>
+                    </Link>
                   </td>
                   <td className="text-stone-500">{u.email ?? "נרשם/ה דרך הטלפון"}</td>
                   <td className="text-stone-500 tabular-nums whitespace-nowrap">{u.phone ?? "—"}</td>

@@ -17,11 +17,12 @@ function formatExpiry(value: string) {
 
 type Props = {
   nextPath: string;
+  isEdit?: boolean;
   initial: { firstName: string; lastName: string; phone: string; idNumber: string; cardExpiry: string };
   cardLast4: string | null;
 };
 
-export function CompleteProfileForm({ nextPath, initial, cardLast4 }: Props) {
+export function CompleteProfileForm({ nextPath, isEdit = false, initial, cardLast4 }: Props) {
   const router = useRouter();
   const [form, setForm] = useState({ ...initial, cardNumber: "", cardCvv: "" });
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +61,14 @@ export function CompleteProfileForm({ nextPath, initial, cardLast4 }: Props) {
   }
 
   return (
-    <AuthShell title="השלמת פרטים" subtitle="כדי להזמין חדר יש להשלים את הפרטים הבאים. בחירת החדר והמועד נשמרת.">
+    <AuthShell
+      title={isEdit ? "עריכת פרטים" : "השלמת פרטים"}
+      subtitle={
+        isEdit
+          ? "עדכון הפרטים האישיים ופרטי האשראי שלך."
+          : "כדי להזמין חדר יש להשלים את הפרטים הבאים. בחירת החדר והמועד נשמרת."
+      }
+    >
       <form onSubmit={handleSubmit} className="space-y-5">
         <SectionTitle index="1">פרטים אישיים</SectionTitle>
         <div className="grid sm:grid-cols-2 gap-5">
@@ -190,7 +198,7 @@ export function CompleteProfileForm({ nextPath, initial, cardLast4 }: Props) {
         {error && <Alert tone="error">{error}</Alert>}
 
         <button type="submit" disabled={loading} className="btn btn-primary w-full py-3!">
-          {loading ? "שומר..." : "שמירה והמשך להזמנה"}
+          {loading ? "שומר..." : isEdit ? "שמירה" : "שמירה והמשך להזמנה"}
         </button>
       </form>
     </AuthShell>
