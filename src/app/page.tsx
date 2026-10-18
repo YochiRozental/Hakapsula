@@ -37,7 +37,7 @@ export default function Home() {
             </h1>
             <p className="text-white/80 text-lg leading-relaxed mb-8 max-w-md">
               ברוכים הבאים למערכת קביעת התורים. קבעו תור בקלות לחדר 1, חדר 2, חדר הסדנאות, או לחדר 1+2
-              המשולב. יש להתחבר או להירשם כדי לקבוע תור.
+              המשולב. אפשר לעיין בחדרים ובזמינות ללא הרשמה — ההתחברות נדרשת רק בעת הזמנת החדר.
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <Link href="/booking" className="btn btn-bronze px-7! py-3! text-base!">

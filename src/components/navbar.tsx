@@ -25,21 +25,21 @@ export function Navbar() {
     active: boolean;
   }[] = [];
   const isAdmin = session?.user?.role === "ADMIN";
+  if (status !== "loading" && !isAdmin) {
+    links.push({
+      href: "/booking",
+      label: "קביעת תור",
+      icon: "calendar",
+      active: pathname === "/booking",
+    });
+  }
   if (status === "authenticated" && !isAdmin) {
-    links.push(
-      {
-        href: "/booking",
-        label: "קביעת תור",
-        icon: "calendar",
-        active: pathname === "/booking",
-      },
-      {
-        href: "/booking/my",
-        label: "התורים שלי",
-        icon: "calendarCheck",
-        active: pathname === "/booking/my",
-      },
-    );
+    links.push({
+      href: "/booking/my",
+      label: "התורים שלי",
+      icon: "calendarCheck",
+      active: pathname === "/booking/my",
+    });
   }
   if (isAdmin) {
     links.push({

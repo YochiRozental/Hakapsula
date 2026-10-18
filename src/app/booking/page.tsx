@@ -20,6 +20,7 @@ type StoredSelection = {
   roomKey: RoomKey;
   startTime: string;
   durationMinutes: number;
+  notes?: string;
 };
 
 export default function BookingPage() {
@@ -46,6 +47,7 @@ export default function BookingPage() {
       if (stored.roomKey && ROOM_KEYS.includes(stored.roomKey)) setRoomKey(stored.roomKey);
       if (stored.startTime && TIME_OPTIONS.includes(stored.startTime)) setStartTime(stored.startTime);
       if (stored.durationMinutes) setDurationMinutes(stored.durationMinutes);
+      if (stored.notes) setNotes(stored.notes);
     } catch {
       // ignore corrupt storage
     }
@@ -61,9 +63,9 @@ export default function BookingPage() {
       hasMountedRef.current = true;
       return;
     }
-    const selection: StoredSelection = { date, roomKey, startTime, durationMinutes };
+    const selection: StoredSelection = { date, roomKey, startTime, durationMinutes, notes };
     window.localStorage.setItem(LAST_SELECTION_KEY, JSON.stringify(selection));
-  }, [date, roomKey, startTime, durationMinutes]);
+  }, [date, roomKey, startTime, durationMinutes, notes]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- loading flag for a client-side fetch triggered by date/room changes
@@ -110,6 +112,20 @@ export default function BookingPage() {
         }),
       });
       const data = await res.json();
+
+      // הבחירה כבר נשמרת ב-localStorage, ולכן היא תשוחזר בחזרה לעמוד זה
+      if (res.status === 401) {
+        router.push(`/login?callbackUrl=${encodeURIComponent("/booking")}`);
+        return;
+      }
+      if (data.code === "PROFILE_INCOMPLETE") {
+        router.push(`/complete-profile?next=${encodeURIComponent("/booking")}`);
+        return;
+      }
+      if (data.code === "NOT_APPROVED") {
+        router.push("/account-status");
+        return;
+      }
 
       if (!res.ok) {
         setError(data.error ?? "שגיאה בקביעת התור");

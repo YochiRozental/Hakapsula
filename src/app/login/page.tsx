@@ -72,7 +72,10 @@ function LoginForm() {
 
         <p className="text-sm text-stone-500 text-center">
           אין לך חשבון?{" "}
-          <Link href="/register" className="text-brand-700 font-semibold hover:underline">
+          <Link
+            href={searchParams.has("callbackUrl") ? `/register?callbackUrl=${encodeURIComponent(callbackUrl)}` : "/register"}
+            className="text-brand-700 font-semibold hover:underline"
+          >
             הרשמה
           </Link>
         </p>

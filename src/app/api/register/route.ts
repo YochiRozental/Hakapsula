@@ -2,22 +2,36 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
-import { last9Digits } from "@/ivr/phone";
-import { isValidCardExpiry, isValidCardNumber, isValidIsraeliId, isValidIsraeliPhone } from "@/lib/validators";
+import {
+  digitsOnly,
+  findIdentityConflict,
+  normalizeIdNumber,
+  normalizePhone,
+  optionalField,
+  profileFieldSchemas as fields,
+} from "@/lib/profile";
 
-const digitsOnly = (value: string) => value.replace(/\D/g, "");
-
-const registerSchema = z.object({
-  firstName: z.string().trim().min(2, "יש להזין שם פרטי"),
-  lastName: z.string().trim().min(2, "יש להזין שם משפחה"),
-  email: z.string().trim().email("כתובת אימייל לא תקינה"),
-  phone: z.string().trim().refine(isValidIsraeliPhone, "מספר פלאפון לא תקין"),
-  idNumber: z.string().trim().refine(isValidIsraeliId, "מספר זהות לא תקין"),
-  cardNumber: z.string().trim().refine(isValidCardNumber, "מספר כרטיס אשראי לא תקין"),
-  cardExpiry: z.string().trim().refine((v) => isValidCardExpiry(v), "תוקף הכרטיס לא תקין או שפג"),
-  cardCvv: z.string().trim().regex(/^\d{3}$/, "יש להזין 3 ספרות בגב הכרטיס"),
-  password: z.string().min(4, "הסיסמה חייבת להכיל לפחות 4 תווים"),
-});
+// בהרשמה רק אימייל וסיסמה הכרחיים; שאר הפרטים אופציונליים (אך אם הוזנו — חייבים להיות תקינים).
+// פרטי חובה להזמנת חדר נאכפים בעת ההזמנה (ראו src/lib/profile.ts).
+const registerSchema = z
+  .object({
+    email: z.string().trim().email("כתובת אימייל לא תקינה"),
+    password: z.string().min(4, "הסיסמה חייבת להכיל לפחות 4 תווים"),
+    firstName: optionalField(fields.firstName),
+    lastName: optionalField(fields.lastName),
+    phone: optionalField(fields.phone),
+    idNumber: optionalField(fields.idNumber),
+    cardNumber: optionalField(fields.cardNumber),
+    cardExpiry: optionalField(fields.cardExpiry),
+    cardCvv: optionalField(fields.cardCvv),
+  })
+  .superRefine((data, ctx) => {
+    // פרטי אשראי הם חבילה אחת: אם הוזן חלק מהם, יש להזין את כולם
+    const provided = [data.cardNumber, data.cardExpiry, data.cardCvv].filter(Boolean).length;
+    if (provided > 0 && provided < 3) {
+      ctx.addIssue({ code: "custom", message: "יש להזין את כל פרטי כרטיס האשראי (מספר, תוקף ו-CVV) או להשאיר ריק" });
+    }
+  });
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
@@ -34,24 +48,17 @@ export async function POST(request: Request) {
   // נשמרות רק 4 הספרות האחרונות והתוקף, לצורך זיהוי הכרטיס.
   const { firstName, lastName, email, phone, idNumber, cardNumber, cardExpiry, password } = parsed.data;
   const normalizedEmail = email.toLowerCase();
-  const normalizedPhone = digitsOnly(phone).replace(/^972/, "0");
-  const normalizedId = digitsOnly(idNumber).padStart(9, "0");
+  const normalizedPhone = phone ? normalizePhone(phone) : undefined;
+  const normalizedId = idNumber ? normalizeIdNumber(idNumber) : undefined;
 
   const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (existing) {
     return NextResponse.json({ error: "כתובת האימייל כבר רשומה במערכת" }, { status: 409 });
   }
 
-  const phoneTaken = await prisma.user.findFirst({
-    where: { phone: { endsWith: last9Digits(normalizedPhone) ?? normalizedPhone } },
-  });
-  if (phoneTaken) {
-    return NextResponse.json({ error: "מספר הפלאפון כבר רשום במערכת" }, { status: 409 });
-  }
-
-  const idTaken = await prisma.user.findUnique({ where: { idNumber: normalizedId } });
-  if (idTaken) {
-    return NextResponse.json({ error: "מספר הזהות כבר רשום במערכת" }, { status: 409 });
+  const conflict = await findIdentityConflict({ phone: normalizedPhone, idNumber: normalizedId });
+  if (conflict) {
+    return NextResponse.json({ error: conflict }, { status: 409 });
   }
 
   const passwordHash = await hashPassword(password);
@@ -59,13 +66,13 @@ export async function POST(request: Request) {
   try {
     const user = await prisma.user.create({
       data: {
-        name: `${firstName} ${lastName}`,
+        name: [firstName, lastName].filter(Boolean).join(" ") || normalizedEmail.split("@")[0],
         firstName,
         lastName,
         email: normalizedEmail,
         phone: normalizedPhone,
         idNumber: normalizedId,
-        cardLast4: digitsOnly(cardNumber).slice(-4),
+        cardLast4: cardNumber ? digitsOnly(cardNumber).slice(-4) : undefined,
         cardExpiry,
         passwordHash,
       },

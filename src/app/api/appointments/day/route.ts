@@ -1,15 +1,10 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { CONFLICTING_ROOM_KEYS } from "@/lib/rooms";
 import type { RoomKey } from "@/generated/prisma/client";
 
 export async function GET(request: Request) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "יש להתחבר" }, { status: 401 });
-  }
-
+  // זמינות החדרים ציבורית (ללא פרטי משתמשים), כדי שמבקרים יוכלו לראות שעות פנויות לפני התחברות
   const { searchParams } = new URL(request.url);
   const date = searchParams.get("date");
   const roomKey = searchParams.get("roomKey") as RoomKey | null;

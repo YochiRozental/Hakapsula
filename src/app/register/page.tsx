@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { Alert, AuthShell, Icon, SectionTitle } from "@/components/ui";
+import { safeInternalPath } from "@/lib/safe-path";
 
 const EMPTY_FORM = {
   firstName: "",
@@ -29,8 +30,10 @@ function formatExpiry(value: string) {
   return digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
 }
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl");
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -65,7 +68,8 @@ export default function RegisterPage() {
         return;
       }
 
-      router.push("/account-status");
+      // מגיעים מתהליך הזמנה — חוזרים אליו; אחרת למסך הסטטוס
+      router.push(safeInternalPath(callbackUrl, "/account-status"));
       router.refresh();
     } catch {
       setError("שגיאה בלתי צפויה, נסה שוב");
@@ -74,15 +78,14 @@ export default function RegisterPage() {
   }
 
   return (
-    <AuthShell title="הרשמה למערכת" subtitle="פתחו חשבון כדי לקבוע תורים לחדרי הקליניקה.">
+    <AuthShell title="הרשמה למערכת" subtitle="פתחו חשבון כדי לקבוע תורים לחדרי הקליניקה. רק אימייל וסיסמה הכרחיים — את שאר הפרטים אפשר להשלים בעת ההזמנה.">
       <form onSubmit={handleSubmit} className="space-y-5">
-        <SectionTitle index="1">פרטים אישיים</SectionTitle>
+        <SectionTitle index="1" hint="לא חובה בשלב זה">פרטים אישיים</SectionTitle>
         <div className="grid sm:grid-cols-2 gap-5">
           <div>
             <label htmlFor="reg-first-name" className="field-label">שם פרטי</label>
             <input
               id="reg-first-name"
-              required
               autoComplete="given-name"
               value={form.firstName}
               onChange={(e) => setForm({ ...form, firstName: e.target.value })}
@@ -93,7 +96,6 @@ export default function RegisterPage() {
             <label htmlFor="reg-last-name" className="field-label">שם משפחה</label>
             <input
               id="reg-last-name"
-              required
               autoComplete="family-name"
               value={form.lastName}
               onChange={(e) => setForm({ ...form, lastName: e.target.value })}
@@ -106,7 +108,6 @@ export default function RegisterPage() {
             <label htmlFor="reg-phone" className="field-label">פלאפון</label>
             <input
               id="reg-phone"
-              required
               type="tel"
               dir="ltr"
               autoComplete="tel"
@@ -120,7 +121,6 @@ export default function RegisterPage() {
             <label htmlFor="reg-id-number" className="field-label">מספר זהות</label>
             <input
               id="reg-id-number"
-              required
               inputMode="numeric"
               dir="ltr"
               maxLength={9}
@@ -162,7 +162,7 @@ export default function RegisterPage() {
 
         <div className="hairline-bronze" />
 
-        <SectionTitle index="2" hint="מספר הכרטיס המלא וה-CVV אינם נשמרים במערכת">
+        <SectionTitle index="2" hint="לא חובה בשלב זה · מספר הכרטיס המלא וה-CVV אינם נשמרים במערכת">
           פרטי אשראי
         </SectionTitle>
         <div>
@@ -170,7 +170,6 @@ export default function RegisterPage() {
           <div className="relative">
             <input
               id="reg-card-number"
-              required
               inputMode="numeric"
               dir="ltr"
               autoComplete="cc-number"
@@ -190,7 +189,6 @@ export default function RegisterPage() {
             <label htmlFor="reg-card-expiry" className="field-label">תוקף</label>
             <input
               id="reg-card-expiry"
-              required
               inputMode="numeric"
               dir="ltr"
               autoComplete="cc-exp"
@@ -208,7 +206,6 @@ export default function RegisterPage() {
             </label>
             <input
               id="reg-card-cvv"
-              required
               type="password"
               inputMode="numeric"
               dir="ltr"
@@ -231,11 +228,22 @@ export default function RegisterPage() {
 
         <p className="text-sm text-stone-500 text-center">
           כבר יש לך חשבון?{" "}
-          <Link href="/login" className="text-brand-700 font-semibold hover:underline">
+          <Link
+            href={callbackUrl ? `/login?callbackUrl=${encodeURIComponent(callbackUrl)}` : "/login"}
+            className="text-brand-700 font-semibold hover:underline"
+          >
             התחברות
           </Link>
         </p>
       </form>
     </AuthShell>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense>
+      <RegisterForm />
+    </Suspense>
   );
 }

@@ -1,13 +1,18 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { Icon } from "@/components/ui";
+import { prisma } from "@/lib/prisma";
 
 export default async function AccountStatusPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (session.user.status === "APPROVED") redirect("/booking");
 
-  const isBlocked = session.user.status === "BLOCKED";
+  // הסטטוס נקרא ממסד הנתונים: ה-session (JWT) עלול להיות ישן אחרי אישור/חסימה של מנהל
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { status: true } });
+  if (!user) redirect("/login");
+  if (user.status === "APPROVED") redirect("/booking");
+
+  const isBlocked = user.status === "BLOCKED";
 
   return (
     <div className="max-w-lg mx-auto card shadow-deep! relative overflow-hidden p-8 sm:p-12 text-center">

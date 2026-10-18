@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { createAppointment, BookingError } from "@/lib/booking";
 import type { RoomKey } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { getMissingBookingDetails } from "@/lib/profile";
 
 export async function GET() {
   const session = await auth();
@@ -22,10 +23,23 @@ export async function GET() {
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user) {
-    return NextResponse.json({ error: "יש להתחבר כדי לקבוע תור" }, { status: 401 });
+    return NextResponse.json({ error: "יש להתחבר כדי לקבוע תור", code: "AUTH_REQUIRED" }, { status: 401 });
   }
-  if (session.user.status !== "APPROVED") {
-    return NextResponse.json({ error: "החשבון שלך טרם אושר לקביעת תורים" }, { status: 403 });
+
+  // פרטי החובה נבדקים מול מסד הנתונים (לא מול ה-session), כדי שלא ניתן לעקוף את הבדיקה
+  const user = await prisma.user.findUnique({ where: { id: session.user.id } });
+  if (!user) {
+    return NextResponse.json({ error: "יש להתחבר כדי לקבוע תור", code: "AUTH_REQUIRED" }, { status: 401 });
+  }
+  const missing = getMissingBookingDetails(user);
+  if (missing.length > 0) {
+    return NextResponse.json(
+      { error: "יש להשלים את פרטי החשבון לפני קביעת תור", code: "PROFILE_INCOMPLETE", missing },
+      { status: 422 }
+    );
+  }
+  if (user.status !== "APPROVED") {
+    return NextResponse.json({ error: "החשבון שלך טרם אושר לקביעת תורים", code: "NOT_APPROVED" }, { status: 403 });
   }
 
   const body = await request.json().catch(() => null);
@@ -40,7 +54,7 @@ export async function POST(request: Request) {
 
   try {
     const appointment = await createAppointment({
-      userId: session.user.id,
+      userId: user.id,
       roomKey,
       startTime: new Date(startTime),
       endTime: new Date(endTime),

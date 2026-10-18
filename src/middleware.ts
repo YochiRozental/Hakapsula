@@ -20,20 +20,26 @@ export default auth((req) => {
     return NextResponse.redirect(url);
   }
 
-  if (pathname.startsWith("/booking")) {
+  // עמוד הזמנת החדר (/booking) פתוח לכולם; ההתחברות והפרטים נבדקים רק בעת ההזמנה בפועל
+  if (pathname.startsWith("/booking") && pathname !== "/booking" && pathname !== "/booking/") {
     if (!isLoggedIn) {
       const url = new URL("/login", req.url);
       url.searchParams.set("callbackUrl", pathname);
       return NextResponse.redirect(url);
     }
-    if (req.auth?.user?.status !== "APPROVED") {
-      return NextResponse.redirect(new URL("/account-status", req.url));
-    }
+    // סטטוס האישור ב-session עלול להיות ישן (נשמר ב-JWT), לכן הוא נאכף בשרת מול מסד הנתונים בעת ההזמנה
+  }
+
+  // השלמת פרטים דורשת התחברות (גם למשתמש שטרם אושר)
+  if (pathname.startsWith("/complete-profile") && !isLoggedIn) {
+    const url = new URL("/login", req.url);
+    url.searchParams.set("callbackUrl", pathname + req.nextUrl.search);
+    return NextResponse.redirect(url);
   }
 
   return NextResponse.next();
 });
 
 export const config = {
-  matcher: ["/", "/booking/:path*", "/admin/:path*", "/login", "/register", "/account-status"],
+  matcher: ["/", "/booking/:path*", "/admin/:path*", "/login", "/register", "/account-status", "/complete-profile"],
 };
