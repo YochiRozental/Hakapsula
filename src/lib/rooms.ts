@@ -33,6 +33,9 @@ export const ROOM_SEED: {
   },
 ];
 
+/** רשימת מפתחות החדרים לפי סדר התצוגה — נגזרת מ-ROOM_SEED */
+export const ROOM_KEYS: RoomKey[] = ROOM_SEED.map((r) => r.key);
+
 /**
  * חדר 1 וחדר 2 מחוברים פיזית וניתן לחבר אותם לחדר 1+2 אחד.
  * הזמנה של ROOM1_2 חוסמת גם ROOM1 וגם ROOM2 ולהפך, כדי למנוע התנגשות פיזית.

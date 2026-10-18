@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { ROOM_LABELS } from "@/lib/rooms";
+import { ensureRooms } from "@/lib/rooms-db";
 import Link from "next/link";
 import { EmptyState, Icon, PageHeader, RoomTile, SectionTitle, StatCard } from "@/components/ui";
 
@@ -8,6 +9,7 @@ export default async function AdminDashboardPage() {
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
 
+  await ensureRooms();
   const [todayAppointments, totalUsers, totalUpcoming, rooms] = await Promise.all([
     prisma.appointment.findMany({
       where: { status: "CONFIRMED", startTime: { gte: todayStart, lte: todayEnd } },

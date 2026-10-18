@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { MonthCalendar } from "@/components/month-calendar";
 import { PageHeader, ROOM_ACCENTS } from "@/components/ui";
-import { ROOM_LABELS } from "@/lib/rooms";
+import { ROOM_KEYS, ROOM_LABELS } from "@/lib/rooms";
 import { BUSINESS_HOURS } from "@/lib/business-rules";
 import { todayIsoDate } from "@/lib/slots";
 import type { RoomKey } from "@/generated/prisma/client";
@@ -18,7 +18,6 @@ type Appointment = {
   user: { id: string; name: string; email: string; phone: string | null };
 };
 
-const ROOM_KEYS: RoomKey[] = ["ROOM1", "ROOM2", "ROOM3", "ROOM4", "WORKSHOP", "ROOM1_2"];
 const PX_PER_MINUTE = 0.9;
 const DAY_START_MIN = BUSINESS_HOURS.startHour * 60;
 const DAY_END_MIN = BUSINESS_HOURS.endHour * 60;

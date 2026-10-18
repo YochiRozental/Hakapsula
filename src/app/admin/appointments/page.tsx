@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ROOM_LABELS } from "@/lib/rooms";
+import { ROOM_KEYS, ROOM_LABELS } from "@/lib/rooms";
 import { buildTimeOptions, combineDateAndTime, todayIsoDate, DURATION_OPTIONS } from "@/lib/slots";
 import type { RoomKey } from "@/generated/prisma/client";
 import { Alert, EmptyState, Icon, Loading, PageHeader, ROOM_ACCENTS, SectionTitle } from "@/components/ui";
@@ -19,7 +19,6 @@ type Appointment = {
 
 type UserOption = { id: string; name: string; email: string | null; phone: string | null };
 
-const ROOM_KEYS: RoomKey[] = ["ROOM1", "ROOM2", "ROOM3", "ROOM4", "WORKSHOP", "ROOM1_2"];
 const TIME_OPTIONS = buildTimeOptions();
 
 export default function AdminAppointmentsPage() {

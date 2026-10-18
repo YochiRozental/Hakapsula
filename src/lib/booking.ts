@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { CONFLICTING_ROOM_KEYS } from "@/lib/rooms";
+import { ensureRooms } from "@/lib/rooms-db";
 import { BUSINESS_HOURS, MIN_DURATION_MINUTES, MAX_DURATION_MINUTES } from "@/lib/business-rules";
 import { BookingError } from "@/lib/booking-error";
 import type { BookingSource, RoomKey } from "@/generated/prisma/client";
@@ -65,6 +66,7 @@ export async function createAppointment(params: {
 
   validateTimeRange(startTime, endTime);
 
+  await ensureRooms();
   const room = await prisma.room.findUnique({ where: { key: roomKey } });
   if (!room || !room.active) {
     throw new BookingError("החדר המבוקש אינו זמין");

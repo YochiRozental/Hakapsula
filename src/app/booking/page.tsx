@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ROOM_LABELS } from "@/lib/rooms";
+import { ROOM_KEYS, ROOM_LABELS } from "@/lib/rooms";
 import { buildTimeOptions, combineDateAndTime, todayIsoDate, DURATION_OPTIONS } from "@/lib/slots";
 import { MonthCalendar } from "@/components/month-calendar";
 import { TimeSlotGrid } from "@/components/time-slot-grid";
@@ -11,7 +11,6 @@ import type { RoomKey } from "@/generated/prisma/client";
 
 type BusyInterval = { startTime: string; endTime: string; room: { key: RoomKey; name: string } };
 
-const ROOM_KEYS: RoomKey[] = ["ROOM1", "ROOM2", "ROOM3", "ROOM4", "WORKSHOP", "ROOM1_2"];
 const TIME_OPTIONS = buildTimeOptions();
 const LAST_SELECTION_KEY = "booking:lastSelection";
 
