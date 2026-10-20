@@ -11,7 +11,7 @@ const router = YemotRouter({
     removeInvalidChars: true,
   },
   uncaughtErrorHandler: (error, call) => {
-    console.error(`[ivr] uncaught error for call ${call.callId} from ${call.phone}:`, error);
+    console.error(`[ivr] uncaught error for call ${call.callId}:`, error);
     // נשאר טקסט (ולא קובץ מוקלט) בכוונה: זו נפילת חירום גלובלית שיכולה לקרות בכל שלוחה,
     // ואין שלוחת-בית אחת שבה אפשר להקליט לה קובץ.
     return call.id_list_message([
@@ -21,8 +21,8 @@ const router = YemotRouter({
 });
 
 router.events.on("new_call", (call) => {
-  // DEBUG TEMP - חותמת זמן לאבחון עיכוב תגובה אפשרי אחרי מעבר ל-Render, להסרה בסיום האבחון
-  console.log(`[ivr] new call ${call.callId} from ${call.phone} extension=${call.extension} t=${new Date().toISOString()}`);
+  // בכוונה בלי מספר הטלפון של המתקשר בלוג
+  console.log(`[ivr] new call ${call.callId} extension=${call.extension}`);
 });
 router.events.on("call_hangup", (call) => {
   console.log(`[ivr] call ${call.callId} hung up`);

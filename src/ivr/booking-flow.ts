@@ -2,7 +2,7 @@ import type { Call, Msg } from "yemot-router2";
 import { prisma } from "@/lib/prisma";
 import { createAppointment, BookingError } from "@/lib/booking";
 import { hashPassword } from "@/lib/password";
-import { last9Digits } from "@/ivr/phone";
+import { identifyCaller, type CallerIdentity } from "@/ivr/identify";
 import { ROOM_DIGIT_MAP, DURATION_DIGIT_MAP } from "@/ivr/ivr-options";
 import { ROOM_LABELS } from "@/lib/rooms";
 import { DURATION_OPTIONS } from "@/lib/slots";
@@ -235,43 +235,77 @@ async function runBookingDialog(call: Call, user: { id: string; name: string }) 
   return call.id_list_message([bookingFile(BOOKING_FILES.SUCCESS)]);
 }
 
-async function findUserByCallerPhone(call: Call) {
-  const phone = last9Digits(call.phone);
-  return phone ? prisma.user.findFirst({ where: { phone: { endsWith: phone } } }) : null;
+/** הודעות שאין להן קובץ מוקלט בפאנל (מספר חסוי, תקלה) — נשארות טקסט עד שיוקלטו קבצים ייעודיים */
+const PRIVATE_NUMBER_TEXT = "לא ניתן לזהות את מספר הטלפון שממנו התקשרתם. אנא התקשרו שוב ממספר גלוי. תודה ולהתראות";
+const SYSTEM_FAULT_TEXT = "אירעה תקלה זמנית במערכת. אנא נסו שוב מאוחר יותר. תודה ולהתראות";
+
+/** זיהוי המתקשר — החיפוש היחיד ב-IVR. בוחר רק id/name/status, לעולם לא את passwordHash */
+function identifyCurrentCaller(call: Call) {
+  return identifyCaller(call.phone, (last9) =>
+    prisma.user.findMany({
+      where: { phone: { endsWith: last9 } },
+      select: { id: true, name: true, status: true },
+      take: 2,
+    })
+  );
 }
 
-/** שלוחת הבדיקה — הכניסה הראשונית לשיחה. בודקת אם המספר רשום ומנתבת לשלוחת המחוברים (9/1) או ללא-רשומים (9/2) */
-export async function handleCheckCall(call: Call) {
-  // DEBUG TEMP - לוגים זמניים לאבחון בעיית go_to_folder אחרי מעבר ל-Render, להסרה בסיום האבחון
-  console.log(`[ivr][DEBUG] handleCheckCall START callId=${call.callId} phone=${call.phone} extension=${call.extension} t=${new Date().toISOString()}`);
-  const user = await findUserByCallerPhone(call);
-  console.log(`[ivr][DEBUG] findUserByCallerPhone DONE callId=${call.callId} normalizedPhone=${last9Digits(call.phone)} userFound=${!!user} userId=${user?.id ?? "null"} t=${new Date().toISOString()}`);
-  const target = user ? MEMBERS_EXTENSION : NOT_REGISTERED_EXTENSION;
-  console.log(`[ivr][DEBUG] handleCheckCall go_to_folder -> ${target} callId=${call.callId} t=${new Date().toISOString()}`);
-  return call.go_to_folder(target);
+/** מסיים את השיחה בהודעה מתאימה למצבי הזיהוי שאינם מובילים לשלוחה: חסוי / תקלה / ממתין / חסום */
+function endCallForIdentity(call: Call, identity: Extract<CallerIdentity, { kind: "PRIVATE" | "ERROR" | "PENDING" | "BLOCKED" }>) {
+  switch (identity.kind) {
+    case "PRIVATE":
+      return call.id_list_message([text(PRIVATE_NUMBER_TEXT)]);
+    case "ERROR":
+      return call.id_list_message([text(SYSTEM_FAULT_TEXT)]);
+    case "PENDING":
+      return call.id_list_message([bookingFile(BOOKING_FILES.PENDING_APPROVAL)]);
+    case "BLOCKED":
+      return call.id_list_message([bookingFile(BOOKING_FILES.BLOCKED)]);
+  }
 }
 
 /**
- * שלוחה 9/1 — "מחוברים": מניחה שהמתקשר רשום (הגיע דרך שלוחת הבדיקה), ומריצה את שיחת קביעת התור.
- * לפני כן בודקת שהחשבון מאושר - משתמש שממתין לאישור או חסום שומע הודעה מתאימה ומנותק, בלי לקבוע תור.
+ * שלוחת הבדיקה — הכניסה הראשונית לשיחה. מזהה את המתקשר פעם אחת ומנתבת:
+ * APPROVED -> 9/1, לא רשום -> 9/2, ממתין/חסום/חסוי/תקלה -> הודעה וסיום (בלי ניתוב).
  */
-export async function handleMembersCall(call: Call) {
-  const user = await findUserByCallerPhone(call);
-  if (!user) {
-    // הגעה ישירה לשלוחה זו בלי לעבור דרך שלוחת הבדיקה (מקרה קצה) — מנתבים חזרה למסלול הנכון
-    return call.go_to_folder(NOT_REGISTERED_EXTENSION);
+export async function handleCheckCall(call: Call) {
+  const identity = await identifyCurrentCaller(call);
+  console.log(`[ivr] caller identity=${identity.kind} callId=${call.callId}`);
+  switch (identity.kind) {
+    case "APPROVED":
+      return call.go_to_folder(MEMBERS_EXTENSION);
+    case "NOT_FOUND":
+      return call.go_to_folder(NOT_REGISTERED_EXTENSION);
+    default:
+      return endCallForIdentity(call, identity);
   }
-  if (user.status === "PENDING") {
-    return call.id_list_message([bookingFile(BOOKING_FILES.PENDING_APPROVAL)]);
-  }
-  if (user.status === "BLOCKED") {
-    return call.id_list_message([bookingFile(BOOKING_FILES.BLOCKED)]);
-  }
-  return runBookingDialog(call, user);
 }
 
-/** שלוחה 9/2 — מספר לא רשום: הרשמה / הסבר על המערכת (שלוחה 9/3) / ניתוק */
+/**
+ * שלוחה 9/1 — "מחוברים". מזהה את המתקשר מחדש בכל כניסה (גם כניסה ישירה, בלי לסמוך על שלוחת הבדיקה),
+ * ומריצה את שיחת קביעת התור רק למשתמש APPROVED. כל מצב אחר מקבל הודעה/ניתוב מתאים.
+ */
+export async function handleMembersCall(call: Call) {
+  const identity = await identifyCurrentCaller(call);
+  switch (identity.kind) {
+    case "APPROVED":
+      return runBookingDialog(call, identity.user);
+    case "NOT_FOUND":
+      return call.go_to_folder(NOT_REGISTERED_EXTENSION);
+    default:
+      return endCallForIdentity(call, identity);
+  }
+}
+
+/**
+ * שלוחה 9/2 — מספר לא רשום: הרשמה / הסבר על המערכת (שלוחה 9/3) / ניתוק.
+ * גם כאן מזהים מחדש בכניסה: רשום מאושר מנותב ל-9/1, וחסוי/ממתין/חסום/תקלה לא מגיעים לתפריט ההרשמה.
+ */
 export async function handleNotRegisteredCall(call: Call) {
+  const identity = await identifyCurrentCaller(call);
+  if (identity.kind === "APPROVED") return call.go_to_folder(MEMBERS_EXTENSION);
+  if (identity.kind !== "NOT_FOUND") return endCallForIdentity(call, identity);
+
   const choice = await call.read([notRegisteredFile(NOT_REGISTERED_FILES.MAIN_MENU)], "tap", {
     max_digits: 1,
     min_digits: 1,
@@ -282,6 +316,7 @@ export async function handleNotRegisteredCall(call: Call) {
   if (choice === "2") return call.go_to_folder(EXPLANATION_EXTENSION);
   if (choice !== "1") return call.hangup();
 
-  // performRegistration מסיימת את השיחה בעצמה (הודעת המתנה לאישור, או שגיאה) - לא ממשיכים לקביעת תור
-  return performRegistration(call, call.phone);
+  // performRegistration מסיימת את השיחה בעצמה (הודעת המתנה לאישור, או שגיאה) - לא ממשיכים לקביעת תור.
+  // נשמר המספר המנורמל והמאומת מהזיהוי, לא call.phone הגולמי
+  return performRegistration(call, identity.phone);
 }
