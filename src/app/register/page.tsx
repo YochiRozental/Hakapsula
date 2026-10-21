@@ -79,9 +79,9 @@ function RegisterForm() {
   }
 
   return (
-    <AuthShell title="הרשמה למערכת" subtitle="פתחו חשבון כדי לקבוע תורים לחדרי הקליניקה. רק אימייל וסיסמה הכרחיים — את שאר הפרטים אפשר להשלים בעת ההזמנה.">
+    <AuthShell title="הרשמה למערכת" subtitle="שדות המסומנים בכוכבית (*) הם שדות חובה">
       <form onSubmit={handleSubmit} className="space-y-5">
-        <SectionTitle index="1" hint="לא חובה בשלב זה">פרטים אישיים</SectionTitle>
+        <SectionTitle index="1">פרטים אישיים</SectionTitle>
         <div className="grid sm:grid-cols-2 gap-5">
           <div>
             <label htmlFor="reg-first-name" className="field-label">שם פרטי</label>
@@ -156,7 +156,7 @@ function RegisterForm() {
           <p className="text-xs text-stone-400 mt-1.5">נדרש לצורך התאמת שעות בנים / בנות</p>
         </div>
         <div>
-          <label htmlFor="reg-email" className="field-label">אימייל</label>
+          <label htmlFor="reg-email" className="field-label">אימייל *</label>
           <input
             id="reg-email"
             required
@@ -169,7 +169,7 @@ function RegisterForm() {
           />
         </div>
         <div>
-          <label htmlFor="reg-password" className="field-label">סיסמה</label>
+          <label htmlFor="reg-password" className="field-label">סיסמה *</label>
           <input
             id="reg-password"
             required
@@ -185,7 +185,7 @@ function RegisterForm() {
 
         <div className="hairline-bronze" />
 
-        <SectionTitle index="2" hint="לא חובה בשלב זה · מספר הכרטיס המלא וה-CVV אינם נשמרים במערכת">
+        <SectionTitle index="2" hint="מספר הכרטיס המלא וה-CVV אינם נשמרים במערכת">
           פרטי אשראי
         </SectionTitle>
         <div>
