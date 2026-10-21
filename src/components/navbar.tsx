@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
@@ -17,6 +17,26 @@ export function Navbar() {
   const { data: session, status } = useSession();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [contactActive, setContactActive] = useState(false);
+
+  useEffect(() => {
+    const section = document.getElementById("contact");
+    if (!section) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setContactActive(entry.isIntersecting);
+      },
+      {
+        rootMargin: "-80px 0px -40% 0px",
+        threshold: 0,
+      },
+    );
+
+    observer.observe(section);
+
+    return () => observer.disconnect();
+  }, [pathname]);
 
   const links: {
     href: string;
@@ -24,15 +44,31 @@ export function Navbar() {
     icon: IconName;
     active: boolean;
   }[] = [];
+
   const isAdmin = session?.user?.role === "ADMIN";
+
+  links.push({
+    href: "/",
+    label: "דף הבית",
+    icon: "home",
+    active: pathname === "/" && !contactActive,
+  });
+
   if (status !== "loading" && !isAdmin) {
     links.push({
       href: "/booking",
       label: "קביעת תור",
       icon: "calendar",
-      active: pathname === "/booking",
+      active: pathname === "/booking" && !contactActive,
+    });
+    links.push({
+      href: "#contact",
+      label: "צור קשר",
+      icon: "phone",
+      active: contactActive,
     });
   }
+
   if (status === "authenticated" && !isAdmin) {
     links.push({
       href: "/booking/my",
@@ -40,15 +76,14 @@ export function Navbar() {
       icon: "calendarCheck",
       active: pathname === "/booking/my",
     });
-  }
-  if (status === "authenticated" && !isAdmin) {
     links.push({
       href: "/profile",
       label: "הכרטיס שלי",
       icon: "user",
-      active: pathname === "/profile",
+      active: pathname === "/profile" && !contactActive,
     });
   }
+
   if (isAdmin) {
     links.push({
       href: "/admin",
@@ -95,7 +130,11 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md shadow-[0_1px_0_rgb(221_211_196/0.6),0_8px_24px_-18px_rgb(35_48_45/0.25)]">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4 px-4 sm:px-6 h-20 py-3">
-        <Link href={isAdmin ? "/admin" : "/"} className="shrink-0" onClick={() => setMenuOpen(false)}>
+        <Link
+          href={isAdmin ? "/admin" : "/"}
+          className="shrink-0"
+          onClick={() => setMenuOpen(false)}
+        >
           <Logo />
         </Link>
 
