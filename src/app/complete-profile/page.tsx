@@ -33,6 +33,7 @@ export default async function CompleteProfilePage({
         lastName: user.lastName ?? "",
         phone: user.phone ?? "",
         idNumber: user.idNumber ?? "",
+        gender: user.gender ?? "",
         cardExpiry: user.cardExpiry ?? "",
       }}
       cardLast4={user.cardLast4}

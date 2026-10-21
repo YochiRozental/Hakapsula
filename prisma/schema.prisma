@@ -15,6 +15,11 @@ enum Role {
   ADMIN
 }
 
+enum Gender {
+  MALE
+  FEMALE
+}
+
 enum UserStatus {
   PENDING
   APPROVED
@@ -49,6 +54,7 @@ model User {
   email        String?       @unique
   phone        String?       @unique
   idNumber     String?       @unique
+  gender       Gender?
   /// לעולם לא נשמרים מספר כרטיס מלא או CVV — רק 4 ספרות אחרונות ותוקף (MM/YY)
   cardLast4    String?
   cardExpiry   String?

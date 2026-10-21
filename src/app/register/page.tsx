@@ -13,6 +13,7 @@ const EMPTY_FORM = {
   email: "",
   phone: "",
   idNumber: "",
+  gender: "",
   cardNumber: "",
   cardExpiry: "",
   cardCvv: "",
@@ -130,6 +131,27 @@ function RegisterForm() {
               onChange={(e) => setForm({ ...form, idNumber: e.target.value.replace(/\D/g, "") })}
               className="field text-right tabular-nums"
             />
+          </div>
+        </div>
+        <div>
+          <span className="field-label">מגדר</span>
+          <div className="flex gap-6" role="radiogroup" aria-label="מגדר">
+            {[
+              { value: "MALE", label: "זכר" },
+              { value: "FEMALE", label: "נקבה" },
+            ].map((o) => (
+              <label key={o.value} className="inline-flex items-center gap-2 text-sm text-stone-800 cursor-pointer">
+                <input
+                  type="radio"
+                  name="gender"
+                  required
+                  value={o.value}
+                  checked={form.gender === o.value}
+                  onChange={() => setForm({ ...form, gender: o.value })}
+                />
+                {o.label}
+              </label>
+            ))}
           </div>
         </div>
         <div>

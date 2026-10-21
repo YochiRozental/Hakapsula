@@ -1,13 +1,15 @@
 import type { ReactNode } from "react";
 import { ROOM_LABELS } from "@/lib/rooms";
 import { EmptyState, Icon, SectionTitle } from "@/components/ui";
-import type { AppointmentStatus, Role, RoomKey, UserStatus } from "@/generated/prisma/client";
+import type { AppointmentStatus, Gender, Role, RoomKey, UserStatus } from "@/generated/prisma/client";
 
 export const STATUS_LABELS: Record<UserStatus, string> = {
   PENDING: "ממתין לאישור",
   APPROVED: "מאושר",
   BLOCKED: "חסום",
 };
+
+const GENDER_LABELS: Record<Gender, string> = { MALE: "זכר", FEMALE: "נקבה" };
 
 const STATUS_CLASSES: Record<UserStatus, string> = {
   PENDING: "bg-gold-100 text-gold-600",
@@ -22,6 +24,7 @@ export type UserCardData = {
   email: string | null;
   phone: string | null;
   idNumber: string | null;
+  gender: Gender | null;
   cardLast4: string | null;
   cardExpiry: string | null;
   role: Role;
@@ -84,6 +87,7 @@ export function UserCard({ user, now, actions }: { user: UserCardData; now: numb
           <Detail label="מספר זהות">
             {user.idNumber && <span dir="ltr" className="tabular-nums">{user.idNumber}</span>}
           </Detail>
+          <Detail label="מגדר">{user.gender && GENDER_LABELS[user.gender]}</Detail>
           <Detail label="אימייל">{user.email && <span dir="ltr">{user.email}</span>}</Detail>
           <Detail label="פלאפון">{user.phone && <span dir="ltr" className="tabular-nums">{user.phone}</span>}</Detail>
           <Detail label="תאריך הצטרפות">{dateFmt.format(user.createdAt)}</Detail>
