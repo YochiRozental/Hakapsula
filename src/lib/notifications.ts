@@ -101,7 +101,7 @@ export const CONTACT_EMAIL = "hakapsula@gmail.com";
  * מעביר הודעה מטופס "צור קשר" לתיבת המייל של המערכת. Reply-To מוגדר לכתובת הפונה כדי שאפשר יהיה לחזור אליו ישירות.
  * משתמש באותה הגדרת SMTP כמו מייל האישור.
  */
-export async function sendContactMessage(msg: { name?: string; email?: string; phone?: string; message?: string }) {
+export async function sendContactMessage(msg: { name?: string; email?: string; phone?: string; message?: string; marketingConsent?: boolean }) {
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
 
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS || !SMTP_FROM) {
@@ -119,6 +119,7 @@ export async function sendContactMessage(msg: { name?: string; email?: string; p
     msg.name ? `שם: ${msg.name}` : null,
     msg.email ? `אימייל: ${msg.email}` : null,
     msg.phone ? `טלפון: ${msg.phone}` : null,
+    `אישור דיוור: ${msg.marketingConsent ? "כן" : "לא"}`,
     "",
     msg.message ?? null,
   ]

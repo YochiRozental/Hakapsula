@@ -133,6 +133,17 @@ export function ContactBanner() {
             aria-label="הודעה"
             className={inputClass}
           />
+          <label className="flex items-start gap-2 text-xs text-white/70 cursor-pointer">
+            <input
+              type="checkbox"
+              name="marketingConsent"
+              className="mt-0.5 accent-bronze-400"
+            />
+            <span>
+              אני מאשר/ת קבלת דיוור ועדכונים, ניתן להסיר את עצמי מרשימת הדיוור
+              בכל עת. אישור זה אינו חובה.
+            </span>
+          </label>
           <input
             name="website"
             tabIndex={-1}

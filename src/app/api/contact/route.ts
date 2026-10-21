@@ -8,6 +8,8 @@ const contactSchema = z
     email: z.union([z.literal(""), z.string().trim().email("כתובת אימייל לא תקינה").max(120)]).optional(),
     phone: z.string().trim().max(30, "מספר טלפון ארוך מדי").optional(),
     message: z.string().trim().max(2000, "ההודעה ארוכה מדי").optional(),
+    // צ'קבוקס שלא מסומן לא נשלח בכלל מהטופס; מסומן נשלח כ-"on"
+    marketingConsent: z.string().optional(),
     // שדה פיתיון נגד בוטים - משתמש אמיתי לא ימלא אותו
     website: z.string().optional(),
   })
@@ -32,6 +34,7 @@ export async function POST(request: Request) {
         email: data.email || undefined,
         phone: data.phone || undefined,
         message: data.message || undefined,
+        marketingConsent: !!data.marketingConsent,
       });
     } catch (error) {
       console.error("[contact] failed to send message:", error);
