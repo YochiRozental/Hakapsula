@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ROOM_KEYS, ROOM_LABELS } from "@/lib/rooms";
 import { buildTimeOptions, combineDateAndTime, todayIsoDate, WEB_BOOKING_DURATION_MINUTES } from "@/lib/slots";
-import { BUSINESS_HOURS } from "@/lib/business-rules";
+import { BUSINESS_HOURS, SLOT_STEP_MINUTES } from "@/lib/business-rules";
 import { MonthCalendar } from "@/components/month-calendar";
 import { TimeSlotGrid } from "@/components/time-slot-grid";
 import { Alert, BrandHeader, Icon, ROOM_ACCENTS, RoomTile, RoomVisual, SectionTitle } from "@/components/ui";
@@ -33,6 +33,9 @@ export default function BookingPage() {
   const [date, setDate] = useState(todayIsoDate());
   const [startTime, setStartTime] = useState(TIME_OPTIONS[0]);
   const [notes, setNotes] = useState("");
+  // ערכים גולמיים של הזנה ידנית; null = מציגים את הבחירה הנוכחית (מהלוח / מהרשת)
+  const [dateDraft, setDateDraft] = useState<string | null>(null);
+  const [timeDraft, setTimeDraft] = useState<string | null>(null);
 
   const [busy, setBusy] = useState<BusyInterval[]>([]);
   const [loadingBusy, setLoadingBusy] = useState(false);
@@ -93,6 +96,19 @@ export default function BookingPage() {
       endTimeLabel: `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`,
     };
   }, [busy, date, startTime]);
+
+  const dateDraftInvalid = dateDraft !== null && (!dateDraft || dateDraft < todayIsoDate());
+  const timeDraftInvalid = timeDraft !== null && !TIME_OPTIONS.includes(timeDraft);
+
+  function handleManualDate(value: string) {
+    setDateDraft(value);
+    if (value && value >= todayIsoDate()) setDate(value);
+  }
+
+  function handleManualTime(value: string) {
+    setTimeDraft(value);
+    if (TIME_OPTIONS.includes(value)) setStartTime(value);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -224,7 +240,29 @@ export default function BookingPage() {
               תאריך
             </SectionTitle>
             <div className="rounded-2xl bg-cream-50 ring-1 ring-cream-200 p-4 sm:p-5">
-              <MonthCalendar value={date} onChange={setDate} minDate={todayIsoDate()} />
+              <MonthCalendar
+                value={date}
+                onChange={(d) => {
+                  setDateDraft(null);
+                  setDate(d);
+                }}
+                minDate={todayIsoDate()}
+              />
+            </div>
+            <div className="mt-4">
+              <label htmlFor="booking-date" className="field-label">
+                או הזנה ידנית של תאריך
+              </label>
+              <input
+                id="booking-date"
+                type="date"
+                value={dateDraft ?? date}
+                min={todayIsoDate()}
+                onChange={(e) => handleManualDate(e.target.value)}
+                onBlur={() => setDateDraft(null)}
+                className="field"
+              />
+              {dateDraftInvalid && <p className="text-xs text-red-600 mt-1.5">הזינו תאריך תקין מהיום ואילך</p>}
             </div>
           </section>
 
@@ -249,9 +287,33 @@ export default function BookingPage() {
                   date={date}
                   timeOptions={TIME_OPTIONS}
                   selected={startTime}
-                  onSelect={setStartTime}
+                  onSelect={(t) => {
+                    setTimeDraft(null);
+                    setStartTime(t);
+                  }}
                   busy={busy}
                 />
+              </div>
+              <div className="mt-4">
+                <label htmlFor="booking-time" className="field-label">
+                  או הזנה ידנית של שעה
+                </label>
+                <input
+                  id="booking-time"
+                  type="time"
+                  value={timeDraft ?? startTime}
+                  min={TIME_OPTIONS[0]}
+                  max={TIME_OPTIONS[TIME_OPTIONS.length - 1]}
+                  step={SLOT_STEP_MINUTES * 60}
+                  onChange={(e) => handleManualTime(e.target.value)}
+                  onBlur={() => setTimeDraft(null)}
+                  className="field"
+                />
+                {timeDraftInvalid && (
+                  <p className="text-xs text-red-600 mt-1.5">
+                    הזינו שעה בין {TIME_OPTIONS[0]} ל-{TIME_OPTIONS[TIME_OPTIONS.length - 1]}, בקפיצות של {SLOT_STEP_MINUTES} דקות
+                  </p>
+                )}
               </div>
             </section>
           </div>
@@ -293,7 +355,7 @@ export default function BookingPage() {
               )}
             </div>
           </div>
-          <button type="submit" disabled={submitting || conflict} className="btn btn-bronze px-8! py-3! text-base!">
+          <button type="submit" disabled={submitting || conflict || dateDraftInvalid || timeDraftInvalid} className="btn btn-bronze px-8! py-3! text-base!">
             {submitting ? "קובע תור..." : "קביעת תור"}
             {!submitting && <Icon name="arrowLeft" className="w-4 h-4" />}
           </button>
