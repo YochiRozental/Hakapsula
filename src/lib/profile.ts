@@ -11,6 +11,7 @@ export const normalizeIdNumber = (value: string) => digitsOnly(value).padStart(9
 export const profileFieldSchemas = {
   firstName: z.string().trim().min(2, "יש להזין שם פרטי"),
   lastName: z.string().trim().min(2, "יש להזין שם משפחה"),
+  gender: z.enum(["MALE", "FEMALE"], { error: "יש לבחור מגדר" }),
   phone: z.string().trim().refine(isValidIsraeliPhone, "מספר פלאפון לא תקין"),
   idNumber: z.string().trim().refine(isValidIsraeliId, "מספר זהות לא תקין"),
   cardNumber: z.string().trim().refine(isValidCardNumber, "מספר כרטיס אשראי לא תקין"),
@@ -27,11 +28,12 @@ export type BookingDetails = {
   lastName: string | null;
   phone: string | null;
   idNumber: string | null;
+  gender: "MALE" | "FEMALE" | null;
   cardLast4: string | null;
   cardExpiry: string | null;
 };
 
-export type MissingField = "firstName" | "lastName" | "phone" | "idNumber" | "cardNumber" | "cardExpiry";
+export type MissingField = "firstName" | "lastName" | "phone" | "idNumber" | "gender" | "cardNumber" | "cardExpiry";
 
 /** השדות שחסרים או אינם תקינים כדי שאפשר יהיה להזמין חדר (ריק = ההזמנה מותרת) */
 export function getMissingBookingDetails(user: BookingDetails): MissingField[] {
@@ -40,6 +42,7 @@ export function getMissingBookingDetails(user: BookingDetails): MissingField[] {
   if (!user.lastName?.trim()) missing.push("lastName");
   if (!user.phone || !isValidIsraeliPhone(user.phone)) missing.push("phone");
   if (!user.idNumber || !isValidIsraeliId(user.idNumber)) missing.push("idNumber");
+  if (!user.gender) missing.push("gender");
   if (!user.cardLast4) missing.push("cardNumber");
   if (!user.cardExpiry || !isValidCardExpiry(user.cardExpiry)) missing.push("cardExpiry");
   return missing;

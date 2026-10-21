@@ -18,6 +18,7 @@ const profileSchema = z.object({
   lastName: fields.lastName,
   phone: fields.phone,
   idNumber: fields.idNumber,
+  gender: fields.gender,
   cardNumber: optionalField(fields.cardNumber),
   cardExpiry: z.string().trim().min(1, "יש להזין תוקף כרטיס").pipe(fields.cardExpiry),
   cardCvv: optionalField(fields.cardCvv),
@@ -40,7 +41,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "יש להתחבר" }, { status: 401 });
   }
 
-  const { firstName, lastName, phone, idNumber, cardNumber, cardExpiry, cardCvv } = parsed.data;
+  const { firstName, lastName, phone, idNumber, gender, cardNumber, cardExpiry, cardCvv } = parsed.data;
 
   if (!cardNumber && !user.cardLast4) {
     return NextResponse.json({ error: "יש להזין מספר כרטיס אשראי" }, { status: 400 });
@@ -70,6 +71,7 @@ export async function PUT(request: Request) {
         lastName,
         phone: normalizedPhone,
         idNumber: normalizedId,
+        gender,
         cardLast4: cardNumber ? digitsOnly(cardNumber).slice(-4) : undefined,
         cardExpiry,
       },

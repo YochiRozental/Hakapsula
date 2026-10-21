@@ -18,7 +18,7 @@ function formatExpiry(value: string) {
 type Props = {
   nextPath: string;
   isEdit?: boolean;
-  initial: { firstName: string; lastName: string; phone: string; idNumber: string; cardExpiry: string };
+  initial: { firstName: string; lastName: string; phone: string; idNumber: string; gender: string; cardExpiry: string };
   cardLast4: string | null;
 };
 
@@ -125,6 +125,28 @@ export function CompleteProfileForm({ nextPath, isEdit = false, initial, cardLas
               className="field text-right tabular-nums"
             />
           </div>
+        </div>
+        <div>
+          <span className="field-label">מגדר</span>
+          <div className="flex gap-6" role="radiogroup" aria-label="מגדר">
+            {[
+              { value: "MALE", label: "זכר" },
+              { value: "FEMALE", label: "נקבה" },
+            ].map((o) => (
+              <label key={o.value} className="inline-flex items-center gap-2 text-sm text-stone-800 cursor-pointer">
+                <input
+                  type="radio"
+                  name="gender"
+                  required
+                  value={o.value}
+                  checked={form.gender === o.value}
+                  onChange={() => setForm({ ...form, gender: o.value })}
+                />
+                {o.label}
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-stone-400 mt-1.5">נדרש לצורך התאמת שעות בנים / בנות</p>
         </div>
 
         <div className="hairline-bronze" />
