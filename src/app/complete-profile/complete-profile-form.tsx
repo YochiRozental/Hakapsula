@@ -6,23 +6,40 @@ import { Alert, AuthShell, Icon, SectionTitle } from "@/components/ui";
 
 /** מקבץ את מספר הכרטיס לרביעיות: 1234 5678 9012 3456 */
 function formatCardNumber(value: string) {
-  return value.replace(/\D/g, "").slice(0, 19).replace(/(\d{4})(?=\d)/g, "$1 ");
+  return value
+    .replace(/\D/g, "")
+    .slice(0, 19)
+    .replace(/(\d{4})(?=\d)/g, "$1 ");
 }
 
 /** מוסיף לוכסן אוטומטית לתוקף: MM/YY */
 function formatExpiry(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 4);
-  return digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
+  return digits.length > 2
+    ? `${digits.slice(0, 2)}/${digits.slice(2)}`
+    : digits;
 }
 
 type Props = {
   nextPath: string;
   isEdit?: boolean;
-  initial: { firstName: string; lastName: string; phone: string; idNumber: string; gender: string; cardExpiry: string };
+  initial: {
+    firstName: string;
+    lastName: string;
+    phone: string;
+    idNumber: string;
+    gender: string;
+    cardExpiry: string;
+  };
   cardLast4: string | null;
 };
 
-export function CompleteProfileForm({ nextPath, isEdit = false, initial, cardLast4 }: Props) {
+export function CompleteProfileForm({
+  nextPath,
+  isEdit = false,
+  initial,
+  cardLast4,
+}: Props) {
   const router = useRouter();
   const [form, setForm] = useState({ ...initial, cardNumber: "", cardCvv: "" });
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +90,9 @@ export function CompleteProfileForm({ nextPath, isEdit = false, initial, cardLas
         <SectionTitle index="1">פרטים אישיים</SectionTitle>
         <div className="grid sm:grid-cols-2 gap-5">
           <div>
-            <label htmlFor="cp-first-name" className="field-label">שם פרטי</label>
+            <label htmlFor="cp-first-name" className="field-label">
+              שם פרטי
+            </label>
             <input
               id="cp-first-name"
               required
@@ -84,7 +103,9 @@ export function CompleteProfileForm({ nextPath, isEdit = false, initial, cardLas
             />
           </div>
           <div>
-            <label htmlFor="cp-last-name" className="field-label">שם משפחה</label>
+            <label htmlFor="cp-last-name" className="field-label">
+              שם משפחה
+            </label>
             <input
               id="cp-last-name"
               required
@@ -97,7 +118,9 @@ export function CompleteProfileForm({ nextPath, isEdit = false, initial, cardLas
         </div>
         <div className="grid sm:grid-cols-2 gap-5">
           <div>
-            <label htmlFor="cp-phone" className="field-label">פלאפון</label>
+            <label htmlFor="cp-phone" className="field-label">
+              פלאפון
+            </label>
             <input
               id="cp-phone"
               required
@@ -111,7 +134,9 @@ export function CompleteProfileForm({ nextPath, isEdit = false, initial, cardLas
             />
           </div>
           <div>
-            <label htmlFor="cp-id-number" className="field-label">מספר זהות</label>
+            <label htmlFor="cp-id-number" className="field-label">
+              מספר זהות
+            </label>
             <input
               id="cp-id-number"
               required
@@ -121,7 +146,12 @@ export function CompleteProfileForm({ nextPath, isEdit = false, initial, cardLas
               pattern="\d{5,9}"
               title="מספר זהות בן 9 ספרות"
               value={form.idNumber}
-              onChange={(e) => setForm({ ...form, idNumber: e.target.value.replace(/\D/g, "") })}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  idNumber: e.target.value.replace(/\D/g, ""),
+                })
+              }
               className="field text-right tabular-nums"
             />
           </div>
@@ -133,11 +163,13 @@ export function CompleteProfileForm({ nextPath, isEdit = false, initial, cardLas
               { value: "MALE", label: "זכר" },
               { value: "FEMALE", label: "נקבה" },
             ].map((o) => (
-              <label key={o.value} className="inline-flex items-center gap-2 text-sm text-stone-800 cursor-pointer">
+              <label
+                key={o.value}
+                className="inline-flex items-center gap-2 text-sm text-stone-800 cursor-pointer"
+              >
                 <input
                   type="radio"
                   name="gender"
-                  required
                   value={o.value}
                   checked={form.gender === o.value}
                   onChange={() => setForm({ ...form, gender: o.value })}
@@ -146,16 +178,23 @@ export function CompleteProfileForm({ nextPath, isEdit = false, initial, cardLas
               </label>
             ))}
           </div>
-          <p className="text-xs text-stone-400 mt-1.5">נדרש לצורך התאמת שעות בנים / בנות</p>
+          <p className="text-xs text-stone-400 mt-1.5">
+            נדרש לצורך התאמת שעות בנים / בנות
+          </p>
         </div>
 
         <div className="hairline-bronze" />
 
-        <SectionTitle index="2" hint="מספר הכרטיס המלא וה-CVV אינם נשמרים במערכת">
+        <SectionTitle
+          index="2"
+          hint="מספר הכרטיס המלא וה-CVV אינם נשמרים במערכת"
+        >
           פרטי אשראי
         </SectionTitle>
         <div>
-          <label htmlFor="cp-card-number" className="field-label">מספר כרטיס אשראי</label>
+          <label htmlFor="cp-card-number" className="field-label">
+            מספר כרטיס אשראי
+          </label>
           <div className="relative">
             <input
               id="cp-card-number"
@@ -163,9 +202,18 @@ export function CompleteProfileForm({ nextPath, isEdit = false, initial, cardLas
               inputMode="numeric"
               dir="ltr"
               autoComplete="cc-number"
-              placeholder={hasSavedCard ? `•••• •••• •••• ${cardLast4}` : "0000 0000 0000 0000"}
+              placeholder={
+                hasSavedCard
+                  ? `•••• •••• •••• ${cardLast4}`
+                  : "0000 0000 0000 0000"
+              }
               value={form.cardNumber}
-              onChange={(e) => setForm({ ...form, cardNumber: formatCardNumber(e.target.value) })}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  cardNumber: formatCardNumber(e.target.value),
+                })
+              }
               className="field text-right tabular-nums ps-10"
             />
             <Icon
@@ -175,13 +223,16 @@ export function CompleteProfileForm({ nextPath, isEdit = false, initial, cardLas
           </div>
           {hasSavedCard && (
             <p className="text-xs text-stone-400 mt-1.5">
-              כרטיס שמסתיים ב-{cardLast4} שמור בחשבון. להחלפה — הזינו מספר כרטיס חדש.
+              כרטיס שמסתיים ב-{cardLast4} שמור בחשבון. להחלפה — הזינו מספר כרטיס
+              חדש.
             </p>
           )}
         </div>
         <div className="grid grid-cols-2 gap-5">
           <div>
-            <label htmlFor="cp-card-expiry" className="field-label">תוקף</label>
+            <label htmlFor="cp-card-expiry" className="field-label">
+              תוקף
+            </label>
             <input
               id="cp-card-expiry"
               required
@@ -192,13 +243,18 @@ export function CompleteProfileForm({ nextPath, isEdit = false, initial, cardLas
               pattern="\d{2}/\d{2}"
               title="תוקף בפורמט MM/YY"
               value={form.cardExpiry}
-              onChange={(e) => setForm({ ...form, cardExpiry: formatExpiry(e.target.value) })}
+              onChange={(e) =>
+                setForm({ ...form, cardExpiry: formatExpiry(e.target.value) })
+              }
               className="field text-right tabular-nums"
             />
           </div>
           <div>
             <label htmlFor="cp-card-cvv" className="field-label">
-              CVV <span className="font-normal text-stone-400">(3 ספרות בגב הכרטיס)</span>
+              CVV{" "}
+              <span className="font-normal text-stone-400">
+                (3 ספרות בגב הכרטיס)
+              </span>
             </label>
             <input
               id="cp-card-cvv"
@@ -211,7 +267,9 @@ export function CompleteProfileForm({ nextPath, isEdit = false, initial, cardLas
               pattern="\d{3}"
               title="3 ספרות"
               value={form.cardCvv}
-              onChange={(e) => setForm({ ...form, cardCvv: e.target.value.replace(/\D/g, "") })}
+              onChange={(e) =>
+                setForm({ ...form, cardCvv: e.target.value.replace(/\D/g, "") })
+              }
               className="field text-right tabular-nums"
             />
           </div>
@@ -219,7 +277,11 @@ export function CompleteProfileForm({ nextPath, isEdit = false, initial, cardLas
 
         {error && <Alert tone="error">{error}</Alert>}
 
-        <button type="submit" disabled={loading} className="btn btn-primary w-full py-3!">
+        <button
+          type="submit"
+          disabled={loading}
+          className="btn btn-primary w-full py-3!"
+        >
           {loading ? "שומר..." : isEdit ? "שמירה" : "שמירה והמשך להזמנה"}
         </button>
       </form>
