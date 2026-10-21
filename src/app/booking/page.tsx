@@ -3,21 +3,32 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ROOM_KEYS, ROOM_LABELS } from "@/lib/rooms";
-import { buildTimeOptions, combineDateAndTime, todayIsoDate, WEB_BOOKING_DURATION_MINUTES } from "@/lib/slots";
-import { BUSINESS_HOURS, SLOT_STEP_MINUTES } from "@/lib/business-rules";
+import { combineDateAndTime, todayIsoDate, WEB_BOOKING_DURATION_MINUTES } from "@/lib/slots";
+import { BUSINESS_HOURS } from "@/lib/business-rules";
 import { MonthCalendar } from "@/components/month-calendar";
-import { TimeSlotGrid } from "@/components/time-slot-grid";
+import { ClockTimePicker } from "@/components/clock-time-picker";
 import { Alert, BrandHeader, Icon, ROOM_ACCENTS, RoomTile, RoomVisual, SectionTitle } from "@/components/ui";
 import type { RoomKey } from "@/generated/prisma/client";
 
 type BusyInterval = { startTime: string; endTime: string; room: { key: RoomKey; name: string } };
 
 const durationMinutes = WEB_BOOKING_DURATION_MINUTES;
-// רק שעות התחלה שבהן שעה שלמה נכנסת בתוך שעות הפעילות
-const TIME_OPTIONS = buildTimeOptions().filter((t) => {
+// בשעון ניתן לבחור כל 5 דקות; רק שעות התחלה שבהן שעה שלמה נכנסת בתוך שעות הפעילות
+const CLOCK_STEP_MINUTES = 5;
+const MIN_START_MINUTES = BUSINESS_HOURS.startHour * 60;
+const MAX_START_MINUTES = BUSINESS_HOURS.endHour * 60 - durationMinutes;
+const DEFAULT_START_TIME = formatTime(MIN_START_MINUTES);
+function toMinutes(t: string) {
   const [h, m] = t.split(":").map(Number);
-  return h * 60 + m + durationMinutes <= BUSINESS_HOURS.endHour * 60;
-});
+  return h * 60 + m;
+}
+function formatTime(total: number) {
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+function isValidStart(t: string) {
+  const total = toMinutes(t);
+  return /^\d{2}:\d{2}$/.test(t) && total >= MIN_START_MINUTES && total <= MAX_START_MINUTES && total % CLOCK_STEP_MINUTES === 0;
+}
 const LAST_SELECTION_KEY = "booking:lastSelection";
 
 type StoredSelection = {
@@ -31,11 +42,10 @@ export default function BookingPage() {
   const router = useRouter();
   const [roomKey, setRoomKey] = useState<RoomKey>("ROOM1");
   const [date, setDate] = useState(todayIsoDate());
-  const [startTime, setStartTime] = useState(TIME_OPTIONS[0]);
+  const [startTime, setStartTime] = useState(DEFAULT_START_TIME);
   const [notes, setNotes] = useState("");
   // ערכים גולמיים של הזנה ידנית; null = מציגים את הבחירה הנוכחית (מהלוח / מהרשת)
   const [dateDraft, setDateDraft] = useState<string | null>(null);
-  const [timeDraft, setTimeDraft] = useState<string | null>(null);
 
   const [busy, setBusy] = useState<BusyInterval[]>([]);
   const [loadingBusy, setLoadingBusy] = useState(false);
@@ -51,7 +61,7 @@ export default function BookingPage() {
       const stored = JSON.parse(raw) as Partial<StoredSelection>;
       if (stored.date && stored.date >= todayIsoDate()) setDate(stored.date);
       if (stored.roomKey && ROOM_KEYS.includes(stored.roomKey)) setRoomKey(stored.roomKey);
-      if (stored.startTime && TIME_OPTIONS.includes(stored.startTime)) setStartTime(stored.startTime);
+      if (stored.startTime && isValidStart(stored.startTime)) setStartTime(stored.startTime);
       if (stored.notes) setNotes(stored.notes);
     } catch {
       // ignore corrupt storage
@@ -98,16 +108,10 @@ export default function BookingPage() {
   }, [busy, date, startTime]);
 
   const dateDraftInvalid = dateDraft !== null && (!dateDraft || dateDraft < todayIsoDate());
-  const timeDraftInvalid = timeDraft !== null && !TIME_OPTIONS.includes(timeDraft);
 
   function handleManualDate(value: string) {
     setDateDraft(value);
     if (value && value >= todayIsoDate()) setDate(value);
-  }
-
-  function handleManualTime(value: string) {
-    setTimeDraft(value);
-    if (TIME_OPTIONS.includes(value)) setStartTime(value);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -270,7 +274,7 @@ export default function BookingPage() {
             <section className="card p-5 sm:p-8">
               <SectionTitle
                 index="03"
-                hint="ההזמנה היא לשעה אחת · שעות תפוסות מסומנות בקו חוצה"
+                hint="ההזמנה היא לשעה אחת · התנגשות עם תור קיים תוצג בסיכום למטה"
                 aside={
                   loadingBusy && (
                     <span className="flex items-center gap-1.5 text-xs text-stone-400">
@@ -282,39 +286,16 @@ export default function BookingPage() {
               >
                 שעת התחלה
               </SectionTitle>
-              <div className="rounded-2xl bg-cream-50 ring-1 ring-cream-200">
-                <TimeSlotGrid
-                  date={date}
-                  timeOptions={TIME_OPTIONS}
-                  selected={startTime}
-                  onSelect={(t) => {
-                    setTimeDraft(null);
-                    setStartTime(t);
-                  }}
-                  busy={busy}
-                />
-              </div>
-              <div className="mt-4">
-                <label htmlFor="booking-time" className="field-label">
-                  או הזנה ידנית של שעה
-                </label>
-                <input
-                  id="booking-time"
-                  type="time"
-                  value={timeDraft ?? startTime}
-                  min={TIME_OPTIONS[0]}
-                  max={TIME_OPTIONS[TIME_OPTIONS.length - 1]}
-                  step={SLOT_STEP_MINUTES * 60}
-                  onChange={(e) => handleManualTime(e.target.value)}
-                  onBlur={() => setTimeDraft(null)}
-                  className="field"
-                />
-                {timeDraftInvalid && (
-                  <p className="text-xs text-red-600 mt-1.5">
-                    הזינו שעה בין {TIME_OPTIONS[0]} ל-{TIME_OPTIONS[TIME_OPTIONS.length - 1]}, בקפיצות של {SLOT_STEP_MINUTES} דקות
-                  </p>
-                )}
-              </div>
+              <ClockTimePicker
+                id="booking-time"
+                inline
+                label="בחירת שעת התחלה"
+                value={startTime}
+                onChange={setStartTime}
+                minMinutes={MIN_START_MINUTES}
+                maxMinutes={MAX_START_MINUTES}
+                stepMinutes={CLOCK_STEP_MINUTES}
+              />
             </section>
           </div>
         </div>
@@ -355,7 +336,7 @@ export default function BookingPage() {
               )}
             </div>
           </div>
-          <button type="submit" disabled={submitting || conflict || dateDraftInvalid || timeDraftInvalid} className="btn btn-bronze px-8! py-3! text-base!">
+          <button type="submit" disabled={submitting || conflict || dateDraftInvalid} className="btn btn-bronze px-8! py-3! text-base!">
             {submitting ? "קובע תור..." : "קביעת תור"}
             {!submitting && <Icon name="arrowLeft" className="w-4 h-4" />}
           </button>
