@@ -153,6 +153,7 @@ function RegisterForm() {
               </label>
             ))}
           </div>
+          <p className="text-xs text-stone-400 mt-1.5">נדרש לצורך התאמת שעות בנים / בנות</p>
         </div>
         <div>
           <label htmlFor="reg-email" className="field-label">אימייל</label>

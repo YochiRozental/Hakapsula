@@ -146,6 +146,7 @@ export function CompleteProfileForm({ nextPath, isEdit = false, initial, cardLas
               </label>
             ))}
           </div>
+          <p className="text-xs text-stone-400 mt-1.5">נדרש לצורך התאמת שעות בנים / בנות</p>
         </div>
 
         <div className="hairline-bronze" />
