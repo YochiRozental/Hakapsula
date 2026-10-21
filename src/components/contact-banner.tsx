@@ -3,14 +3,27 @@
 import { useState } from "react";
 import { Alert, Icon, type IconName } from "@/components/ui";
 
-const CONTACT_DETAILS: { icon: IconName; label: string; value: string; href?: string; external?: boolean }[] = [
-  { icon: "mail", label: "מייל", value: "hakapsula@gmail.com", href: "mailto:hakapsula@gmail.com" },
+const CONTACT_DETAILS: {
+  icon: IconName;
+  label: string;
+  value: string;
+  href?: string;
+  external?: boolean;
+}[] = [
+  {
+    icon: "mail",
+    label: "מייל",
+    value: "hakapsula@gmail.com",
+    href: "mailto:hakapsula@gmail.com",
+  },
   { icon: "phone", label: "טלפון", value: "083130541", href: "tel:083130541" },
   {
     icon: "pin",
     label: "כתובת",
     value: 'הריטב"א, מודיעין עילית',
-    href: "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent('הריטב"א, מודיעין עילית'),
+    href:
+      "https://www.google.com/maps/search/?api=1&query=" +
+      encodeURIComponent('הריטב"א, מודיעין עילית'),
     external: true,
   },
 ];
@@ -48,9 +61,15 @@ export function ContactBanner() {
     <section id="contact" className="panel-brand mt-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 grid gap-10 md:grid-cols-[1fr_1.3fr]">
         <div>
-          <p className="text-xs font-bold tracking-[0.14em] text-bronze-300 mb-2">צור קשר</p>
-          <h2 className="font-display text-2xl sm:text-3xl font-bold">נשמח לשמוע מכם</h2>
-          <p className="text-white/70 text-sm mt-2">השאירו הודעה ונחזור אליכם בהקדם, או פנו אלינו ישירות:</p>
+          <p className="text-xs font-bold tracking-[0.14em] text-bronze-300 mb-2">
+            צור קשר
+          </p>
+          <h2 className="font-display text-2xl sm:text-3xl font-bold">
+            נשמח לשמוע מכם
+          </h2>
+          <p className="text-white/70 text-sm mt-2">
+            השאירו הודעה ונחזור אליכם בהקדם, או פנו אלינו ישירות:
+          </p>
           <ul className="mt-6 space-y-4">
             {CONTACT_DETAILS.map(({ icon, label, value, href, external }) => (
               <li key={label} className="flex items-center gap-3">
@@ -64,7 +83,9 @@ export function ContactBanner() {
                       href={href}
                       className="text-sm hover:text-bronze-200"
                       dir={external ? undefined : "ltr"}
-                      {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                      {...(external
+                        ? { target: "_blank", rel: "noopener noreferrer" }
+                        : {})}
                     >
                       {value}
                     </a>
@@ -79,14 +100,50 @@ export function ContactBanner() {
 
         <form onSubmit={onSubmit} className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
-            <input name="name" required maxLength={80} placeholder="שם מלא" aria-label="שם מלא" className={inputClass} />
-            <input name="phone" type="tel" maxLength={30} placeholder="טלפון (לא חובה)" aria-label="טלפון" className={inputClass} />
+            <input
+              name="name"
+              maxLength={80}
+              placeholder="שם מלא"
+              aria-label="שם מלא"
+              className={inputClass}
+            />
+            <input
+              name="phone"
+              type="tel"
+              maxLength={30}
+              placeholder="טלפון *"
+              aria-label="טלפון"
+              className={inputClass}
+            />
           </div>
-          <input name="email" type="email" required maxLength={120} placeholder="אימייל" aria-label="אימייל" className={inputClass} dir="ltr" />
-          <textarea name="message" required minLength={5} maxLength={2000} rows={4} placeholder="הודעה" aria-label="הודעה" className={inputClass} />
-          <input name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" className="hidden" />
+          <input
+            name="email"
+            type="email"
+            maxLength={120}
+            placeholder="אימייל *"
+            aria-label="אימייל"
+            className={inputClass}
+            dir="ltr"
+          />
+          <textarea
+            name="message"
+            maxLength={2000}
+            rows={4}
+            placeholder="הודעה"
+            aria-label="הודעה"
+            className={inputClass}
+          />
+          <input
+            name="website"
+            tabIndex={-1}
+            autoComplete="off"
+            aria-hidden="true"
+            className="hidden"
+          />
           {error && <Alert tone="error">{error}</Alert>}
-          {status === "sent" && <Alert tone="success">ההודעה נשלחה, נחזור אליכם בהקדם.</Alert>}
+          {status === "sent" && (
+            <Alert tone="success">ההודעה נשלחה, נחזור אליכם בהקדם.</Alert>
+          )}
           <button
             type="submit"
             disabled={status === "sending"}
