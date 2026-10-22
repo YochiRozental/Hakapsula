@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { Icon, Loading, PageHeader } from "@/components/ui";
+import { EmptyState, Loading, PageHeader } from "@/components/ui";
+import { Pager, TableFilterBar, useTableFilters } from "@/components/table-filter";
+import { buildListParams, clampPage, type FilterField } from "@/lib/table-filters";
 
 type UserRow = {
   id: string;
@@ -36,6 +38,31 @@ const joinDateFmt = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Asia/Jerusalem",
 });
 
+const PAGE_SIZE = 50;
+
+const FILTER_FIELDS: FilterField[] = [
+  { key: "name", label: "שם", type: "text" },
+  { key: "email", label: "אימייל", type: "text", nullable: true },
+  { key: "phone", label: "טלפון", type: "text", nullable: true },
+  { key: "createdAt", label: "תאריך הצטרפות", type: "date" },
+  { key: "appointments", label: "מספר תורים", type: "number" },
+  {
+    key: "role",
+    label: "תפקיד",
+    type: "select",
+    options: [
+      { value: "CLIENT", label: "לקוח" },
+      { value: "ADMIN", label: "מנהל" },
+    ],
+  },
+  {
+    key: "status",
+    label: "סטטוס",
+    type: "select",
+    options: (Object.keys(STATUS_LABELS) as UserRow["status"][]).map((value) => ({ value, label: STATUS_LABELS[value] })),
+  },
+];
+
 const EMPTY_FORM = {
   firstName: "",
   lastName: "",
@@ -49,8 +76,10 @@ const EMPTY_FORM = {
 
 export default function AdminUsersPage() {
   const { data: session } = useSession();
-  const [search, setSearch] = useState("");
+  const filterState = useTableFilters();
+  const { applied, appliedKey, page, setPage } = filterState;
   const [users, setUsers] = useState<UserRow[] | null>(null);
+  const [total, setTotal] = useState<number | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -58,18 +87,21 @@ export default function AdminUsersPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [createdInfo, setCreatedInfo] = useState<{ name: string; email: string | null; password: string } | null>(null);
 
+  // הסינון מתבצע בשרת על כל המשתמשים, לא רק על העמוד הנוכחי
   function load() {
-    const params = search ? `?search=${encodeURIComponent(search)}` : "";
-    fetch(`/api/admin/users${params}`)
+    const params = buildListParams({ search: applied.search, filters: applied.filters, page, pageSize: PAGE_SIZE });
+    fetch(`/api/admin/users?${params}`)
       .then((res) => res.json())
-      .then((data) => setUsers(Array.isArray(data) ? data : []));
+      .then((data) => {
+        setUsers(Array.isArray(data?.users) ? data.users : []);
+        const nextTotal = typeof data?.total === "number" ? data.total : 0;
+        setTotal(nextTotal);
+        // אחרי מחיקה/סינון העמוד עלול לא להתקיים — חוזרים לעמוד התקין האחרון
+        if (clampPage(page, nextTotal, PAGE_SIZE) !== page) setPage(clampPage(page, nextTotal, PAGE_SIZE));
+      });
   }
 
-  useEffect(() => {
-    const handle = setTimeout(load, 300);
-    return () => clearTimeout(handle);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+  useEffect(load, [appliedKey, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function createUser(e: React.FormEvent) {
     e.preventDefault();
@@ -126,20 +158,19 @@ export default function AdminUsersPage() {
     <div>
       <PageHeader eyebrow="לקוחות ומנהלים" title="ניהול משתמשים" subtitle="אישור, חסימה ומחיקה של משתמשי המערכת" />
 
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <div className="relative max-w-sm flex-1 min-w-56">
-          <Icon name="search" className="w-4 h-4 text-stone-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="חיפוש לפי שם או אימייל..."
-            aria-label="חיפוש משתמשים"
-            className="field bg-white! pr-10!"
-          />
-        </div>
-        <button onClick={() => setShowForm((v) => !v)} className="btn btn-primary">
-          {showForm ? "ביטול" : "+ הוספת משתמש"}
-        </button>
+      <div className="mb-4">
+        <TableFilterBar
+          state={filterState}
+          fields={FILTER_FIELDS}
+          searchPlaceholder="חיפוש לפי שם, אימייל או טלפון..."
+          searchLabel="חיפוש משתמשים"
+          total={total}
+          actions={
+            <button onClick={() => setShowForm((v) => !v)} className="btn btn-primary">
+              {showForm ? "ביטול" : "+ הוספת משתמש"}
+            </button>
+          }
+        />
       </div>
 
       {createdInfo && (
@@ -258,6 +289,10 @@ export default function AdminUsersPage() {
 
       {users === null ? (
         <Loading />
+      ) : users.length === 0 ? (
+        <EmptyState icon="users">
+          {filterState.active.length > 0 || applied.search ? "לא נמצאו משתמשים התואמים לחיפוש ולמסננים." : "אין משתמשים עדיין."}
+        </EmptyState>
       ) : (
         <div className="card overflow-x-auto">
           <table className="table-base">
@@ -358,6 +393,7 @@ export default function AdminUsersPage() {
           </table>
         </div>
       )}
+      {total !== null && <Pager page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} />}
     </div>
   );
 }

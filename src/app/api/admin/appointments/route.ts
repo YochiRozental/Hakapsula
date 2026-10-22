@@ -2,13 +2,51 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/require-admin";
 import { prisma } from "@/lib/prisma";
 import { createAppointment, BookingError } from "@/lib/booking";
-import type { RoomKey } from "@/generated/prisma/client";
+import type { Prisma, RoomKey } from "@/generated/prisma/client";
+import { buildWhere, parseListQuery, type ServerField } from "@/lib/table-filters-server";
+
+// שדות שמותר לסנן לפיהם בטבלת התורים
+const APPOINTMENT_FILTER_FIELDS: Record<string, ServerField> = {
+  startTime: { type: "date", path: ["startTime"] },
+  room: { type: "select", path: ["room", "key"] },
+  status: { type: "select", path: ["status"] },
+  source: { type: "select", path: ["source"] },
+  userName: { type: "text", path: ["user", "name"] },
+  userEmail: { type: "text", path: ["user", "email"] },
+  userPhone: { type: "text", path: ["user", "phone"] },
+  notes: { type: "text", path: ["notes"] },
+  createdAt: { type: "date", path: ["createdAt"] },
+};
+
+const APPOINTMENT_SEARCH_PATHS = [["user", "name"], ["user", "email"], ["user", "phone"], ["notes"], ["room", "name"]];
 
 export async function GET(request: Request) {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: "אין הרשאה" }, { status: 403 });
 
   const { searchParams } = new URL(request.url);
+
+  if (searchParams.has("page")) {
+    const query = parseListQuery(searchParams);
+    const filtered = (await buildWhere(query, {
+      searchPaths: APPOINTMENT_SEARCH_PATHS,
+      fields: APPOINTMENT_FILTER_FIELDS,
+    })) as Prisma.AppointmentWhereInput;
+    // בסינון לפי תאריך התורים מוצגים בסדר כרונולוגי; בלעדיו — החדשים קודם
+    const byDate = query.filters.some((f) => f.key === "startTime");
+    const [appointments, total] = await Promise.all([
+      prisma.appointment.findMany({
+        where: filtered,
+        include: { room: true, user: { select: { id: true, name: true, email: true, phone: true } } },
+        orderBy: [{ startTime: byDate ? "asc" : "desc" }, { id: "asc" }],
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
+      }),
+      prisma.appointment.count({ where: filtered }),
+    ]);
+    return NextResponse.json({ appointments, total });
+  }
+
   const date = searchParams.get("date");
   const roomKey = searchParams.get("roomKey") as RoomKey | null;
 

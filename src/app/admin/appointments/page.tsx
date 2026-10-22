@@ -8,6 +8,9 @@ import { useDayHours } from "@/lib/use-day-hours";
 import { DayHours } from "@/components/hours-summary";
 import type { RoomKey } from "@/generated/prisma/client";
 import { Alert, EmptyState, Icon, Loading, PageHeader, ROOM_ACCENTS, SectionTitle } from "@/components/ui";
+import { Pager, TableFilterBar, useTableFilters } from "@/components/table-filter";
+import { buildListParams, clampPage, type Filter, type FilterField } from "@/lib/table-filters";
+import { jerusalemTodayIso } from "@/lib/jerusalem-time";
 
 type Appointment = {
   id: string;
@@ -23,11 +26,53 @@ type Appointment = {
 type UserOption = { id: string; name: string; email: string | null; phone: string | null };
 
 const TIME_OPTIONS = buildTimeOptions();
+const PAGE_SIZE = 50;
+
+const FILTER_FIELDS: FilterField[] = [
+  { key: "startTime", label: "תאריך התור", type: "date" },
+  {
+    key: "room",
+    label: "חדר",
+    type: "select",
+    options: ROOM_KEYS.map((key) => ({ value: key, label: ROOM_LABELS[key] })),
+  },
+  {
+    key: "status",
+    label: "סטטוס",
+    type: "select",
+    options: [
+      { value: "CONFIRMED", label: "מאושר" },
+      { value: "CANCELLED", label: "מבוטל" },
+    ],
+  },
+  {
+    key: "source",
+    label: "מקור",
+    type: "select",
+    options: [
+      { value: "WEB", label: "אתר" },
+      { value: "ADMIN", label: "ניהול" },
+      { value: "IVR", label: "IVR" },
+    ],
+  },
+  { key: "userName", label: "שם לקוח", type: "text" },
+  { key: "userEmail", label: "אימייל לקוח", type: "text", nullable: true },
+  { key: "userPhone", label: "טלפון לקוח", type: "text", nullable: true },
+  { key: "notes", label: "הערות", type: "text", nullable: true },
+  { key: "createdAt", label: "תאריך יצירה", type: "date" },
+];
+
+/** ברירת המחדל כמו קודם: תורי היום. אפשר להסיר את התגית כדי לראות את כל התורים */
+function defaultFilters(): Record<string, Filter> {
+  const today = jerusalemTodayIso();
+  return { startTime: { key: "startTime", op: "between", value: today, value2: today } };
+}
 
 export default function AdminAppointmentsPage() {
-  const [date, setDate] = useState(todayIsoDate());
-  const [roomFilter, setRoomFilter] = useState<RoomKey | "">("");
+  const filterState = useTableFilters(defaultFilters());
+  const { applied, appliedKey, page, setPage } = filterState;
   const [appointments, setAppointments] = useState<Appointment[] | null>(null);
+  const [total, setTotal] = useState<number | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState(false);
@@ -56,15 +101,21 @@ export default function AdminAppointmentsPage() {
   const time = timeTouched ? newTime : (openOptions[0] ?? newTime);
   const selectedOutside = !!newDayHours && !dayClosed && !insideHours(time);
 
+  // הסינון מתבצע בשרת על כל התורים, לא רק על העמוד הנוכחי
   function loadAppointments() {
-    const params = new URLSearchParams({ date });
-    if (roomFilter) params.set("roomKey", roomFilter);
+    const params = buildListParams({ search: applied.search, filters: applied.filters, page, pageSize: PAGE_SIZE });
     fetch(`/api/admin/appointments?${params}`)
       .then((res) => res.json())
-      .then((data) => setAppointments(Array.isArray(data) ? data : []));
+      .then((data) => {
+        setAppointments(Array.isArray(data?.appointments) ? data.appointments : []);
+        const nextTotal = typeof data?.total === "number" ? data.total : 0;
+        setTotal(nextTotal);
+        // אחרי מחיקה/ביטול/סינון העמוד עלול לא להתקיים — חוזרים לעמוד התקין האחרון
+        if (clampPage(page, nextTotal, PAGE_SIZE) !== page) setPage(clampPage(page, nextTotal, PAGE_SIZE));
+      });
   }
 
-  useEffect(loadAppointments, [date, roomFilter]);
+  useEffect(loadAppointments, [appliedKey, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -142,34 +193,13 @@ export default function AdminAppointmentsPage() {
         }
       />
 
-      <div className="card p-4 flex flex-wrap items-end gap-4">
-        <div className="w-full sm:w-auto">
-          <label htmlFor="filter-date" className="field-label">תאריך</label>
-          <input
-            id="filter-date"
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="field"
-          />
-        </div>
-        <div className="w-full sm:w-auto sm:min-w-48">
-          <label htmlFor="filter-room" className="field-label">חדר</label>
-          <select
-            id="filter-room"
-            value={roomFilter}
-            onChange={(e) => setRoomFilter(e.target.value as RoomKey | "")}
-            className="field"
-          >
-            <option value="">כל החדרים</option>
-            {ROOM_KEYS.map((key) => (
-              <option key={key} value={key}>
-                {ROOM_LABELS[key]}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+      <TableFilterBar
+        state={filterState}
+        fields={FILTER_FIELDS}
+        searchPlaceholder="חיפוש לפי לקוח, טלפון, חדר או הערות..."
+        searchLabel="חיפוש תורים"
+        total={total}
+      />
 
       {showForm && (
         <form onSubmit={handleCreate} className="card p-5 sm:p-6 space-y-5">
@@ -336,12 +366,15 @@ export default function AdminAppointmentsPage() {
         {appointments === null ? (
           <Loading />
         ) : appointments.length === 0 ? (
-          <EmptyState>אין תורים בטווח הנבחר</EmptyState>
+          <EmptyState>
+            {filterState.active.length > 0 || applied.search ? "לא נמצאו תורים התואמים לחיפוש ולמסננים." : "אין תורים עדיין."}
+          </EmptyState>
         ) : (
           <div className="card overflow-x-auto">
             <table className="table-base">
               <thead>
                 <tr>
+                  <th>תאריך</th>
                   <th>שעה</th>
                   <th>חדר</th>
                   <th>לקוח</th>
@@ -354,6 +387,9 @@ export default function AdminAppointmentsPage() {
               <tbody>
                 {appointments.map((a) => (
                   <tr key={a.id} className={a.status === "CANCELLED" ? "opacity-55" : ""}>
+                    <td className="whitespace-nowrap tabular-nums text-stone-600">
+                      {new Date(a.startTime).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                    </td>
                     <td className="whitespace-nowrap font-semibold text-stone-800 tabular-nums">
                       {new Date(a.startTime).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
                       {" – "}
@@ -399,6 +435,7 @@ export default function AdminAppointmentsPage() {
             </table>
           </div>
         )}
+        {total !== null && <Pager page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} />}
       </div>
     </div>
   );

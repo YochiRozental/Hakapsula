@@ -3,6 +3,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/require-admin";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/generated/prisma/client";
+import { buildWhere, parseListQuery, type ServerField } from "@/lib/table-filters-server";
+import type { Filter } from "@/lib/table-filters";
 import { hashPassword } from "@/lib/password";
 import {
   findIdentityConflict,
@@ -84,36 +87,81 @@ export async function POST(request: Request) {
   }
 }
 
+// שדות שמותר לסנן לפיהם. תעודת זהות וכרטיס אשראי אינם ברשימה, ולכן אי אפשר לסנן או לחפש לפיהם
+const USER_FILTER_FIELDS: Record<string, ServerField> = {
+  name: { type: "text", path: ["name"] },
+  email: { type: "text", path: ["email"] },
+  phone: { type: "text", path: ["phone"] },
+  createdAt: { type: "date", path: ["createdAt"] },
+  role: { type: "select", path: ["role"] },
+  status: { type: "select", path: ["status"] },
+  appointments: { type: "number", build: appointmentCountCondition },
+};
+
+const USER_SEARCH_PATHS = [["name"], ["email"], ["phone"]];
+
+// ספירת תורים אינה ניתנת לסינון ישיר ב-where, ולכן מחשבים את מזהי המשתמשים המתאימים לפי groupBy
+async function appointmentCountCondition(f: Filter) {
+  const a = f.value?.trim() ? Number(f.value) : NaN;
+  const b = f.value2?.trim() ? Number(f.value2) : NaN;
+  let matches: (count: number) => boolean;
+  if (f.op === "eq" && !Number.isNaN(a)) matches = (c) => c === a;
+  else if (f.op === "gt" && !Number.isNaN(a)) matches = (c) => c > a;
+  else if (f.op === "lt" && !Number.isNaN(a)) matches = (c) => c < a;
+  else if (f.op === "between" && !(Number.isNaN(a) && Number.isNaN(b))) {
+    matches = (c) => (Number.isNaN(a) || c >= a) && (Number.isNaN(b) || c <= b);
+  } else return {};
+
+  const grouped = await prisma.appointment.groupBy({ by: ["userId"], _count: { _all: true } });
+  // משתמש ללא תורים לא מופיע ב-groupBy (ספירה 0)
+  if (matches(0)) {
+    return { id: { notIn: grouped.filter((g) => !matches(g._count._all)).map((g) => g.userId) } };
+  }
+  return { id: { in: grouped.filter((g) => matches(g._count._all)).map((g) => g.userId) } };
+}
+
 export async function GET(request: Request) {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: "אין הרשאה" }, { status: 403 });
 
   const { searchParams } = new URL(request.url);
-  const search = searchParams.get("search")?.trim();
+  const query = parseListQuery(searchParams);
+  const where = (await buildWhere(query, {
+    searchPaths: USER_SEARCH_PATHS,
+    fields: USER_FILTER_FIELDS,
+  })) as Prisma.UserWhereInput;
 
-  const users = await prisma.user.findMany({
-    where: search
-      ? {
-          OR: [
-            { email: { contains: search, mode: "insensitive" } },
-            { name: { contains: search, mode: "insensitive" } },
-            { phone: { contains: search, mode: "insensitive" } },
-          ],
-        }
-      : undefined,
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      phone: true,
-      role: true,
-      status: true,
-      createdAt: true,
-      _count: { select: { appointments: true } },
-    },
-    orderBy: { createdAt: "desc" },
-    take: search ? 20 : 100,
-  });
+  const select = {
+    id: true,
+    name: true,
+    email: true,
+    phone: true,
+    role: true,
+    status: true,
+    createdAt: true,
+    _count: { select: { appointments: true } },
+  } satisfies Prisma.UserSelect;
 
-  return NextResponse.json(users);
+  if (!searchParams.has("page")) {
+    // תאימות לאחור (חיפוש לקוח בטופס קביעת תור ידנית): מערך פשוט עם תקרה
+    const users = await prisma.user.findMany({
+      where,
+      select,
+      orderBy: { createdAt: "desc" },
+      take: query.search ? 20 : 100,
+    });
+    return NextResponse.json(users);
+  }
+
+  const [users, total] = await Promise.all([
+    prisma.user.findMany({
+      where,
+      select,
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+    }),
+    prisma.user.count({ where }),
+  ]);
+  return NextResponse.json({ users, total });
 }
