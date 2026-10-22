@@ -28,6 +28,14 @@ const STATUS_CLASSES: Record<UserRow["status"], string> = {
   BLOCKED: "bg-red-50 text-red-700",
 };
 
+/** DD/MM/YYYY לפי שעון ירושלים */
+const joinDateFmt = new Intl.DateTimeFormat("en-GB", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  timeZone: "Asia/Jerusalem",
+});
+
 const EMPTY_FORM = {
   firstName: "",
   lastName: "",
@@ -258,6 +266,7 @@ export default function AdminUsersPage() {
                 <th>שם</th>
                 <th>אימייל</th>
                 <th>טלפון</th>
+                <th>תאריך הצטרפות</th>
                 <th>תורים</th>
                 <th>תפקיד</th>
                 <th>סטטוס</th>
@@ -282,6 +291,7 @@ export default function AdminUsersPage() {
                   </td>
                   <td className="text-stone-500">{u.email ?? "נרשם/ה דרך הטלפון"}</td>
                   <td className="text-stone-500 tabular-nums whitespace-nowrap">{u.phone ?? "—"}</td>
+                  <td className="text-stone-500 tabular-nums whitespace-nowrap">{joinDateFmt.format(new Date(u.createdAt))}</td>
                   <td className="tabular-nums">{u._count.appointments}</td>
                   <td>
                     <span
