@@ -1,18 +1,18 @@
 import { prisma } from "@/lib/prisma";
 import { BookingError } from "@/lib/booking-error";
-import { BUSINESS_HOURS } from "@/lib/business-rules";
 import {
   closedDayViolation,
-  DEFAULT_WEEKDAY_ACTIVITY,
+  DEFAULT_DAY_WINDOW,
   hoursRejection,
   trackForGender,
   fitsOpening,
+  isActivityType,
   isClosedDate,
   isClosedWeekday,
   jerusalemParts,
-  OPEN_WEEKDAYS,
   resolveDay,
   validateWindows,
+  type ActivityType,
   type BookingTrack,
   type DayInterval,
   type HoursWindow,
@@ -21,36 +21,17 @@ import {
 
 /** מקור הנתונים היחיד לשעות הפעילות (לוח אחד לכל החדרים): הדף הציבורי, הניהול וההזמנות (אתר, IVR, API) קוראים מכאן */
 
-let defaultsEnsured = false;
+/** סימון בעמודת note של שורה שבועית שהיא "מסלול היום" (08:00–21:00) ולא חלון מפורש — כך אין צורך בשינוי סכמה */
+const DAY_DEFAULT_NOTE = "__DAY_DEFAULT__";
 
-/**
- * בפעם הראשונה (טבלה ריקה לגמרי) נוצרת ברירת המחדל: ימי ראשון–שישי, BUSINESS_HOURS, ומסלול לפי DEFAULT_WEEKDAY_ACTIVITY.
- * נעילה ברמת המסד מונעת יצירה כפולה כששתי בקשות ראשונות רצות במקביל.
- */
-async function ensureDefaults() {
-  if (defaultsEnsured) return;
-  await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(7301)`;
-    if ((await tx.openingWindow.count()) > 0) return;
-    await tx.openingWindow.createMany({
-      data: OPEN_WEEKDAYS.map((weekday) => ({
-        weekday,
-        activity: DEFAULT_WEEKDAY_ACTIVITY[weekday],
-        startMinutes: BUSINESS_HOURS.startHour * 60,
-        endMinutes: BUSINESS_HOURS.endHour * 60,
-      })),
-    });
-  });
-  defaultsEnsured = true;
-}
-
+/** כל החלונות הפעילים. יום בלי חלונות מפורשים נפתר ל-DEFAULT_DAY_WINDOW במסלול היום (ראו weeklyDay) */
 export async function loadWindows(): Promise<HoursWindow[]> {
-  await ensureDefaults();
   const rows = await prisma.openingWindow.findMany({
     where: { active: true },
     orderBy: [{ startMinutes: "asc" }],
   });
   return rows.map((r) => ({
+    dayDefault: r.note === DAY_DEFAULT_NOTE,
     id: r.id,
     weekday: r.weekday,
     date: r.date,
@@ -58,7 +39,7 @@ export async function loadWindows(): Promise<HoursWindow[]> {
     endMinutes: r.endMinutes,
     closed: r.closed,
     activity: r.activity,
-    note: r.note,
+    note: r.note === DAY_DEFAULT_NOTE ? null : r.note,
   }));
 }
 
@@ -74,28 +55,35 @@ export async function trackForUser(userId: string): Promise<BookingTrack | undef
 
 /**
  * אימות צד שרת לכל יצירת הזמנה (אתר, API, IVR, מנהל). קודם יום סגור (שבת) — לכולם, ללא גישה למסד;
- * אחר כך שעות הפעילות והמסלול של המשתמש (לפי המגדר שלו), שמנהל פטור מהם ולכן לא נטענים עבורו.
+ * אחר כך יום סגור (לכולם), ושעות הפעילות והמסלול של המשתמש (לפי המגדר שלו) שמנהל פטור מהם.
  */
 export async function assertBookable(startTime: Date, endTime: Date, source: string, userId: string) {
   const closed = closedDayViolation(startTime, endTime);
   if (closed) throw new BookingError(`הזמן שנבחר אינו זמין: ${closed}`);
-  if (source === "ADMIN") return;
-  const track = await trackForUser(userId);
-  if (!track) throw new BookingError("יש להשלים מגדר בפרופיל כדי לקבוע תור");
+  // מנהל פטור מהמסלול ומשעות הפעילות, אך לא מיום סגור — לכן הלוח נטען גם עבורו
+  const track = source === "ADMIN" ? undefined : await trackForUser(userId);
+  if (source !== "ADMIN" && !track) throw new BookingError("יש להשלים מגדר בפרופיל כדי לקבוע תור");
   const reason = hoursRejection(await loadWindows(), startTime, endTime, source, track);
   if (reason) throw new BookingError(`הזמן שנבחר אינו זמין: ${reason}`);
 }
 
-/** מחליף את חלונות יום בשבוע. הישנים עוברים לארכיון (active=false), לא נמחקים */
-export async function replaceWeekday(weekday: number, windows: DayInterval[]) {
+/**
+ * מחליף את הגדרת יום בשבוע: מסלול היום (נשמר גם בלי חלונות), האם היום סגור, והחלונות המפורשים. הישנים עוברים
+ * לארכיון (active=false), לא נמחקים. חלונות מפורשים גוברים על מסלול היום בזמן הפתרון (weeklyDay), אך יום סגור
+ * גובר עליהם. מסלול היום נשמר גם כשהיום סגור, כדי שמעבר חזרה לפעילות יחזיר את המסלול הקודם.
+ */
+export async function replaceWeekday(weekday: number, windows: DayInterval[], dayActivity: ActivityType, closed: boolean) {
   if (isClosedWeekday(weekday)) throw new BookingError("יום שבת סגור ולא ניתן להגדיר בו שעות פעילות");
   const err = validateWindows(windows);
   if (err) throw new BookingError(err);
-  await ensureDefaults();
+  if (!isActivityType(dayActivity)) throw new BookingError("מסלול פעילות לא תקין");
   await prisma.$transaction([
     prisma.openingWindow.updateMany({ where: { active: true, date: null, weekday }, data: { active: false } }),
     prisma.openingWindow.createMany({
-      data: windows.map((w) => ({ weekday, startMinutes: w.startMinutes, endMinutes: w.endMinutes, activity: w.activity })),
+      data: [
+        { weekday, ...DEFAULT_DAY_WINDOW, activity: dayActivity, closed, note: DAY_DEFAULT_NOTE },
+        ...windows.map((w) => ({ weekday, startMinutes: w.startMinutes, endMinutes: w.endMinutes, activity: w.activity })),
+      ],
     }),
   ]);
 }
@@ -113,7 +101,6 @@ export async function replaceDate(
     if (err) throw new BookingError(err);
     if (input.windows.length === 0) throw new BookingError("יש להגדיר חלון אחד לפחות, או לסמן יום סגור");
   }
-  await ensureDefaults();
   const create = input.closed
     ? [{ date, closed: true, startMinutes: 0, endMinutes: 24 * 60, note }]
     : input.windows.map((w) => ({ date, startMinutes: w.startMinutes, endMinutes: w.endMinutes, activity: w.activity, note }));

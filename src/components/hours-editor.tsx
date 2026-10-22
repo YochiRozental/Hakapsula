@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
 import {
   ACTIVITY_LABELS,
   ACTIVITY_TYPES,
+  DEFAULT_DAY_WINDOW,
   formatMinutes,
+  formatWindow,
   parseTimeOption,
   STEP_MINUTES,
   type ActivityType,
@@ -13,6 +14,17 @@ import {
 import { Icon } from "@/components/ui";
 
 export type EditRow = { start: string; end: string; activity: ActivityType };
+
+/**
+ * עריכת יום: מסלול היום (חל גם בלי חלונות: היום המלא 08:00–21:00), האם היום סגור, והחלונות המפורשים.
+ * כשהיום סגור החלונות נשמרים (לא נמחקים) אך אינם פעילים.
+ */
+export type DayEdit = { dayActivity: ActivityType; closed: boolean; rows: EditRow[] };
+
+/** מסלול היום בפועל: כשכל החלונות מאותו מסלול — הוא; אחרת (או בלי חלונות) — מה שנבחר ליום */
+export function effectiveDayActivity({ dayActivity, rows }: Pick<DayEdit, "dayActivity" | "rows">): ActivityType {
+  return rows.length > 0 && rows.every((r) => r.activity === rows[0].activity) ? rows[0].activity : dayActivity;
+}
 
 export function toEditRows(list: DayInterval[]): EditRow[] {
   return list.map((w) => ({
@@ -35,26 +47,32 @@ export function fromEditRows(rows: EditRow[]): DayInterval[] {
 }
 
 const MIXED = "MIXED";
+const CLOSED = "CLOSED"; // ערך תצוגה בלבד בבורר; ביום סגור נשמר closed=true ולא מסלול
 
 function ActivitySelect({
   value,
   onChange,
   disabled,
   mixed,
+  closable,
+  closed,
   id,
 }: {
   value: ActivityType;
-  onChange: (a: ActivityType) => void;
+  onChange: (a: ActivityType | typeof CLOSED) => void;
   disabled?: boolean;
   mixed?: boolean;
+  /** מוסיף את האפשרות "סגור" (ברמת היום בלבד) */
+  closable?: boolean;
+  closed?: boolean;
   id?: string;
 }) {
   return (
     <select
       id={id}
-      value={mixed ? MIXED : value}
+      value={closed ? CLOSED : mixed ? MIXED : value}
       disabled={disabled}
-      onChange={(e) => onChange(e.target.value as ActivityType)}
+      onChange={(e) => onChange(e.target.value as ActivityType | typeof CLOSED)}
       className="field"
     >
       {mixed && (
@@ -67,36 +85,33 @@ function ActivitySelect({
           {ACTIVITY_LABELS[a]}
         </option>
       ))}
+      {closable && <option value={CLOSED}>סגור</option>}
     </select>
   );
 }
 
 /**
- * עורך רשימת חלונות של יום אחד: התחלה, סיום וסוג פעילות לכל חלון.
- * בחירת סוג ברמת היום קובעת את הסוג לכל החלונות (וכברירת מחדל לחלונות חדשים); אפשר לשנות כל חלון בנפרד.
+ * עורך יום אחד: מסלול ליום, ובנוסף חלונות מפורשים (התחלה, סיום ומסלול לכל חלון) שגוברים על ברירת המחדל של היום.
+ * בחירת מסלול ברמת היום קובעת אותו לכל החלונות ולחלון חדש; אפשר לשנות כל חלון בנפרד.
  */
 export function HoursEditor({
-  rows,
+  value,
   onChange,
   disabled,
   idPrefix,
-  defaultActivity,
 }: {
-  rows: EditRow[];
-  onChange: (rows: EditRow[]) => void;
+  value: DayEdit;
+  onChange: (value: DayEdit) => void;
   disabled?: boolean;
   idPrefix: string;
-  /** מסלול ברירת המחדל של היום (לחלון חדש כשאין עדיין חלונות) */
-  defaultActivity: ActivityType;
 }) {
-  const [dayDefault, setDayDefault] = useState<ActivityType>(defaultActivity);
-  const uniform = rows.length > 0 && rows.every((r) => r.activity === rows[0].activity);
-  const mixed = rows.length > 0 && !uniform;
-  // ברירת המחדל לחלון חדש: סוג היום כשאחיד, אחרת מה שנבחר לאחרונה
-  const dayActivity = uniform ? rows[0].activity : dayDefault;
+  const { rows } = value;
+  const dayActivity = effectiveDayActivity(value);
+  const mixed = rows.length > 0 && !rows.every((r) => r.activity === rows[0].activity);
 
+  const setRows = (next: EditRow[]) => onChange({ ...value, dayActivity, rows: next });
   function patch(i: number, change: Partial<EditRow>) {
-    onChange(rows.map((r, idx) => (idx === i ? { ...r, ...change } : r)));
+    setRows(rows.map((r, idx) => (idx === i ? { ...r, ...change } : r)));
   }
   return (
     <div className="space-y-3">
@@ -108,66 +123,80 @@ export function HoursEditor({
           id={`${idPrefix}-day-activity`}
           value={dayActivity}
           mixed={mixed}
+          closable
+          closed={value.closed}
           disabled={disabled}
-          onChange={(a) => {
-            setDayDefault(a);
-            onChange(rows.map((r) => ({ ...r, activity: a })));
-          }}
+          onChange={(a) =>
+            a === CLOSED
+              ? onChange({ ...value, closed: true })
+              : onChange({ dayActivity: a, closed: false, rows: rows.map((r) => ({ ...r, activity: a })) })
+          }
         />
         <p className="text-xs text-stone-500 mt-1">חל על כל חלונות היום; אפשר לשנות כל חלון בנפרד.</p>
       </div>
 
-      {rows.length === 0 && <p className="text-sm text-stone-400">אין פעילות ביום זה</p>}
-      {rows.map((r, i) => (
-        <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end rounded-xl bg-cream-50 ring-1 ring-cream-200 p-3">
-          <label className="block">
-            <span className="field-label">התחלה</span>
-            <input
-              type="time"
-              step={STEP_MINUTES * 60}
-              value={r.start}
-              disabled={disabled}
-              onChange={(e) => patch(i, { start: e.target.value })}
-              className="field tabular-nums"
-              dir="ltr"
-            />
-          </label>
-          <label className="block">
-            <span className="field-label">סיום</span>
-            <input
-              type="time"
-              step={STEP_MINUTES * 60}
-              value={r.end}
-              disabled={disabled}
-              onChange={(e) => patch(i, { end: e.target.value })}
-              className="field tabular-nums"
-              dir="ltr"
-            />
-          </label>
+      {value.closed ? (
+        <p className="text-sm font-semibold text-red-700">היום סגור — לא ניתן להזמין בו תורים. חלונות שהוגדרו נשמרים ויחזרו לפעול כשהיום ייפתח.</p>
+      ) : (
+        <>
+          {rows.length === 0 && (
+            <p className="text-sm text-stone-500">
+              ללא חלונות מוגדרים — פתוח <span className="tabular-nums" dir="ltr">{formatWindow({ ...DEFAULT_DAY_WINDOW, activity: dayActivity })}</span>{" "}
+              במסלול {ACTIVITY_LABELS[dayActivity]}.
+            </p>
+          )}
+          {rows.map((r, i) => (
+            <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end rounded-xl bg-cream-50 ring-1 ring-cream-200 p-3">
+              <label className="block">
+                <span className="field-label">התחלה</span>
+                <input
+                  type="time"
+                  step={STEP_MINUTES * 60}
+                  value={r.start}
+                  disabled={disabled}
+                  onChange={(e) => patch(i, { start: e.target.value })}
+                  className="field tabular-nums"
+                  dir="ltr"
+                />
+              </label>
+              <label className="block">
+                <span className="field-label">סיום</span>
+                <input
+                  type="time"
+                  step={STEP_MINUTES * 60}
+                  value={r.end}
+                  disabled={disabled}
+                  onChange={(e) => patch(i, { end: e.target.value })}
+                  className="field tabular-nums"
+                  dir="ltr"
+                />
+              </label>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => setRows(rows.filter((_, idx) => idx !== i))}
+                aria-label="הסרת חלון"
+                className="btn btn-ghost px-3! py-2.5!"
+              >
+                <Icon name="x" className="w-4 h-4" />
+              </button>
+              <label className="block col-span-3">
+                <span className="field-label">מסלול פעילות בחלון</span>
+                <ActivitySelect value={r.activity} disabled={disabled} onChange={(a) => patch(i, { activity: a as ActivityType })} />
+              </label>
+            </div>
+          ))}
           <button
             type="button"
             disabled={disabled}
-            onClick={() => onChange(rows.filter((_, idx) => idx !== i))}
-            aria-label="הסרת חלון"
-            className="btn btn-ghost px-3! py-2.5!"
+            onClick={() => setRows([...rows, { start: "09:00", end: "17:00", activity: dayActivity }])}
+            className="btn btn-secondary btn-sm"
           >
-            <Icon name="x" className="w-4 h-4" />
+            <Icon name="plus" className="w-4 h-4" />
+            הוספת חלון
           </button>
-          <label className="block col-span-3">
-            <span className="field-label">מסלול פעילות בחלון</span>
-            <ActivitySelect value={r.activity} disabled={disabled} onChange={(a) => patch(i, { activity: a })} />
-          </label>
-        </div>
-      ))}
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => onChange([...rows, { start: "09:00", end: "17:00", activity: dayActivity }])}
-        className="btn btn-secondary btn-sm"
-      >
-        <Icon name="plus" className="w-4 h-4" />
-        הוספת חלון
-      </button>
+        </>
+      )}
     </div>
   );
 }

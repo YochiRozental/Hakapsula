@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/require-admin";
 import { BookingError } from "@/lib/booking-error";
 import { loadSaveResult, replaceWeekday } from "@/lib/opening-hours-db";
+import { isActivityType } from "@/lib/opening-hours";
 import { parseWindowsBody } from "../parse";
 
 export async function PUT(request: Request) {
@@ -15,9 +16,12 @@ export async function PUT(request: Request) {
   }
   const windows = parseWindowsBody(body?.windows);
   if (!windows) return NextResponse.json({ error: "חלונות לא תקינים" }, { status: 400 });
+  if (!isActivityType(body?.dayActivity) || typeof body?.closed !== "boolean") {
+    return NextResponse.json({ error: "מסלול פעילות לא תקין" }, { status: 400 });
+  }
 
   try {
-    await replaceWeekday(weekday, windows);
+    await replaceWeekday(weekday, windows, body.dayActivity, body.closed);
   } catch (err) {
     if (err instanceof BookingError) return NextResponse.json({ error: err.message }, { status: 400 });
     throw err;

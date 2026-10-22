@@ -35,6 +35,9 @@ export function activityMatches(activity: ActivityType, track?: BookingTrack): b
   return !track || activity === track;
 }
 
+/** שעות היום המלא כשלא הוגדרו חלונות מפורשים: 08:00–21:00, במסלול ברירת המחדל של היום */
+export const DEFAULT_DAY_WINDOW = { startMinutes: 8 * 60, endMinutes: 21 * 60 };
+
 export type HoursWindow = {
   id?: string;
   /** 0 = ראשון ... 6 = שבת; null בחריגים לתאריך */
@@ -46,6 +49,8 @@ export type HoursWindow = {
   closed: boolean;
   activity: ActivityType;
   note?: string | null;
+  /** שורת "מסלול היום" של יום שבועי (ברירת מחדל 08:00–21:00): נשמרת כדי לזכור את בחירת המסלול ליום גם בלי חלונות מפורשים */
+  dayDefault?: boolean;
 };
 
 export type DayInterval = { startMinutes: number; endMinutes: number; activity: ActivityType };
@@ -127,9 +132,20 @@ function mergeIntervals(list: DayInterval[], sameActivityOnly = true): DayInterv
   return out;
 }
 
-/** חלונות ברירת המחדל השבועית ליום בשבוע (ללא חריגים) */
+/** החלונות המפורשים של יום בשבוע (ללא חריגים וללא שורת "מסלול היום") */
 export function weeklyWindows(all: HoursWindow[], weekday: number): HoursWindow[] {
-  return all.filter((w) => w.date === null && w.weekday === weekday && !w.closed);
+  return all.filter((w) => w.date === null && w.weekday === weekday && !w.closed && !w.dayDefault);
+}
+
+/** האם יום בשבוע הוגדר כסגור קבוע (שורת "מסלול היום" עם closed). חלונות מפורשים אינם פותחים יום כזה */
+export function weeklyDayClosed(all: HoursWindow[], weekday: number): boolean {
+  return all.some((w) => w.date === null && w.weekday === weekday && w.dayDefault && w.closed);
+}
+
+/** מסלול היום השבועי: מה שנשמר בניהול, ואם לא נשמר — ברירת המחדל לפי היום בשבוע */
+export function weeklyDefaultActivity(all: HoursWindow[], weekday: number): ActivityType {
+  const saved = all.find((w) => w.date === null && w.weekday === weekday && w.dayDefault);
+  return saved?.activity ?? DEFAULT_WEEKDAY_ACTIVITY[weekday] ?? "BOYS";
 }
 
 export function isClosedWeekday(weekday: number): boolean {
@@ -143,7 +159,14 @@ export function isClosedDate(dateStr: string): boolean {
 
 /** שעות ברירת המחדל השבועית של יום בשבוע, בפורמט של יום מפוענח */
 export function weeklyDay(all: HoursWindow[], weekday: number): ResolvedDay {
-  return { source: "weekly", closed: false, note: null, windows: mergeIntervals(weeklyWindows(all, weekday)) };
+  if (weeklyDayClosed(all, weekday)) return { source: "weekly", closed: true, note: null, windows: [] };
+  const explicit = weeklyWindows(all, weekday);
+  // חלונות מפורשים גוברים על ברירת המחדל (אין פעילות כפולה); בלעדיהם — היום המלא במסלול היום
+  const windows =
+    explicit.length > 0
+      ? mergeIntervals(explicit)
+      : [{ ...DEFAULT_DAY_WINDOW, activity: weeklyDefaultActivity(all, weekday) }];
+  return { source: "weekly", closed: false, note: null, windows };
 }
 
 /** חריג לתאריך (אם קיים) דורס לגמרי את ברירת המחדל השבועית של אותו יום. יום סגור קבוע (שבת) גובר על הכול */
@@ -223,7 +246,19 @@ export function closedDayViolation(start: Date, end: Date): string | null {
   return null;
 }
 
-/** שעות הפעילות נאכפות על כולם מלבד מנהל (source ADMIN), שרשאי לחרוג מהן בימי חול. יום סגור נבדק בנפרד ותמיד קודם (closedDayViolation) */
+/** יום שהוגדר כסגור (קבוע בשבוע או חריג לתאריך) חוסם הזמנה לכולם, כולל מנהל */
+function closedDayRejection(all: HoursWindow[], start: Date, end: Date): string | null {
+  for (const date of new Set([jerusalemParts(start).date, jerusalemParts(end).date])) {
+    const day = resolveDay(all, date);
+    if (day.closed) return `סגור בתאריך זה${day.note ? ` (${day.note})` : ""}`;
+  }
+  return null;
+}
+
+/**
+ * יום סגור חוסם את כולם (גם מנהל); שעות הפעילות והמסלול נאכפים על כולם מלבד מנהל (source ADMIN),
+ * שרשאי לחרוג מהן בימי פעילות. שבת נבדקת בנפרד ותמיד קודם (closedDayViolation).
+ */
 export function hoursRejection(
   all: HoursWindow[],
   start: Date,
@@ -231,7 +266,7 @@ export function hoursRejection(
   source: string,
   track?: BookingTrack
 ): string | null {
-  return source === "ADMIN" ? null : bookingViolation(all, start, end, track);
+  return closedDayRejection(all, start, end) ?? (source === "ADMIN" ? null : bookingViolation(all, start, end, track));
 }
 
 /** טווח ברירת המחדל של יומן ביום ללא חלונות פתוחים ובלי תורים (8:00–20:00). אינו שעות פעילות — רק תצוגה */

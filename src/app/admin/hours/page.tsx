@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Icon, Loading, PageHeader } from "@/components/ui";
 import { DayHours } from "@/components/hours-summary";
-import { fromEditRows, HoursEditor, toEditRows, type EditRow } from "@/components/hours-editor";
+import { effectiveDayActivity, fromEditRows, HoursEditor, toEditRows, type DayEdit } from "@/components/hours-editor";
 import {
   dateKey,
   DEFAULT_WEEKDAY_ACTIVITY,
@@ -11,23 +11,32 @@ import {
   OPEN_WEEKDAYS,
   parseDateKey,
   resolveDay,
+  weeklyDayClosed,
+  weeklyDefaultActivity,
   weeklyWindows,
   WEEKDAY_LABELS,
   type HoursWindow,
 } from "@/lib/opening-hours";
 
 type SaveResult = { windows: HoursWindow[]; outsideAppointments: number; error?: string };
-type ExceptionDraft = { date: string; closed: boolean; note: string; rows: EditRow[] };
+type ExceptionDraft = { date: string; closed: boolean; note: string; edit: DayEdit };
 
 const jsonHeaders = { "Content-Type": "application/json" };
 
-function weeklyRows(list: HoursWindow[], weekday: number): EditRow[] {
-  return toEditRows(weeklyWindows(list, weekday));
+function weeklyEdit(list: HoursWindow[], weekday: number): DayEdit {
+  return {
+    dayActivity: weeklyDefaultActivity(list, weekday),
+    closed: weeklyDayClosed(list, weekday),
+    rows: toEditRows(weeklyWindows(list, weekday)),
+  };
 }
+
+/** צורת השוואה לזיהוי שינויים שלא נשמרו (מסלול היום בפועל, סגירה, והחלונות) */
+const snapshot = (v: DayEdit) => JSON.stringify({ day: effectiveDayActivity(v), closed: v.closed, rows: v.rows });
 
 export default function AdminHoursPage() {
   const [windows, setWindows] = useState<HoursWindow[] | null>(null);
-  const [drafts, setDrafts] = useState<Record<number, EditRow[]>>({});
+  const [drafts, setDrafts] = useState<Record<number, DayEdit>>({});
   const [exception, setException] = useState<ExceptionDraft | null>(null);
   const [newDate, setNewDate] = useState("");
   const [busy, setBusy] = useState(false);
@@ -36,7 +45,7 @@ export default function AdminHoursPage() {
   // הטיוטות נבנות מחדש מהשרת אחרי כל טעינה/שמירה — השרת הוא מקור האמת היחיד
   const apply = useCallback((list: HoursWindow[]) => {
     setWindows(list);
-    setDrafts(Object.fromEntries(OPEN_WEEKDAYS.map((d) => [d, weeklyRows(list, d)])));
+    setDrafts(Object.fromEntries(OPEN_WEEKDAYS.map((d) => [d, weeklyEdit(list, d)])));
   }, []);
 
   useEffect(() => {
@@ -86,7 +95,13 @@ export default function AdminHoursPage() {
     // נקודת התחלה: מה שחל כרגע בתאריך (ברירת המחדל השבועית או חריג קיים), כדי לערוך רק את ההבדל
     const day = resolveDay(windows, date);
     setMessage(null);
-    setException({ date, closed: day.closed, note: day.note ?? "", rows: toEditRows(day.windows) });
+    const rows = toEditRows(day.windows);
+    setException({
+      date,
+      closed: day.closed,
+      note: day.note ?? "",
+      edit: { dayActivity: DEFAULT_WEEKDAY_ACTIVITY[parseDateKey(date)?.getDay() ?? 0] ?? "BOYS", closed: false, rows },
+    });
   }
 
   if (windows === null) return <Loading />;
@@ -113,7 +128,8 @@ export default function AdminHoursPage() {
         <div className="grid xl:grid-cols-2 gap-4">
           {OPEN_WEEKDAYS.map((d) => {
             const label = WEEKDAY_LABELS[d];
-            const dirty = JSON.stringify(drafts[d]) !== JSON.stringify(weeklyRows(windows, d));
+            const draft = drafts[d] ?? weeklyEdit(windows, d);
+            const dirty = snapshot(draft) !== snapshot(weeklyEdit(windows, d));
             return (
               <div key={label} className="card p-5">
                 <div className="flex items-center justify-between mb-3">
@@ -122,7 +138,17 @@ export default function AdminHoursPage() {
                     type="button"
                     disabled={busy || !dirty}
                     onClick={() =>
-                      save("/api/admin/hours/weekday", "PUT", { weekday: d, windows: fromEditRows(drafts[d]) }, `יום ${label} נשמר`)
+                      save(
+                        "/api/admin/hours/weekday",
+                        "PUT",
+                        {
+                          weekday: d,
+                          windows: fromEditRows(draft.rows),
+                          dayActivity: effectiveDayActivity(draft),
+                          closed: draft.closed,
+                        },
+                        `יום ${label} נשמר`
+                      )
                     }
                     className="btn btn-primary btn-sm"
                   >
@@ -131,10 +157,9 @@ export default function AdminHoursPage() {
                 </div>
                 <HoursEditor
                   idPrefix={`weekday-${d}`}
-                  defaultActivity={DEFAULT_WEEKDAY_ACTIVITY[d]}
-                  rows={drafts[d] ?? []}
+                  value={draft}
                   disabled={busy}
-                  onChange={(rows) => setDrafts((prev) => ({ ...prev, [d]: rows }))}
+                  onChange={(next) => setDrafts((prev) => ({ ...prev, [d]: next }))}
                 />
               </div>
             );
@@ -179,10 +204,9 @@ export default function AdminHoursPage() {
             {!exception.closed && (
               <HoursEditor
                 idPrefix="exception"
-                defaultActivity={DEFAULT_WEEKDAY_ACTIVITY[parseDateKey(exception.date)?.getDay() ?? 0] ?? "BOYS"}
-                rows={exception.rows}
+                value={exception.edit}
                 disabled={busy}
-                onChange={(rows) => setException({ ...exception, rows })}
+                onChange={(next) => setException({ ...exception, edit: next })}
               />
             )}
             <label className="block mt-3">
@@ -207,7 +231,7 @@ export default function AdminHoursPage() {
                     "PUT",
                     exception.closed
                       ? { date: exception.date, closed: true, note: exception.note }
-                      : { date: exception.date, windows: fromEditRows(exception.rows), note: exception.note },
+                      : { date: exception.date, windows: fromEditRows(exception.edit.rows), note: exception.note },
                     "החריג נשמר"
                   );
                   if (ok) setException(null);

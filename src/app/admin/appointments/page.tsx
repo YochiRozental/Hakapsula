@@ -46,13 +46,15 @@ export default function AdminAppointmentsPage() {
   // שעות הפעילות של התאריך הנבחר (מקור מרכזי). שבת סגורה לכולם; מחוץ לשעות בימי חול המנהל רשאי לקבוע (חריג)
   const { day: newDayHours } = useDayHours(newDate);
   const saturdayClosed = isClosedDate(newDate);
+  // יום סגור (שבת, או יום שהוגדר כסגור בשעות הפעילות) חוסם גם מנהל; שעות מחוץ לפעילות בימי פעילות — מותר למנהל
+  const dayClosed = saturdayClosed || !!newDayHours?.closed;
   const insideHours = (t: string) =>
     !!newDayHours && fitsOpening(newDayHours, parseTimeOption(t), parseTimeOption(t) + newDuration);
   const openOptions = TIME_OPTIONS.filter(insideHours);
   const outsideOptions = TIME_OPTIONS.filter((t) => !insideHours(t));
   // כל עוד המנהל לא בחר שעה בעצמו — ברירת המחדל היא תחילת החלון הפתוח הראשון (כשיש)
   const time = timeTouched ? newTime : (openOptions[0] ?? newTime);
-  const selectedOutside = !!newDayHours && !saturdayClosed && !insideHours(time);
+  const selectedOutside = !!newDayHours && !dayClosed && !insideHours(time);
 
   function loadAppointments() {
     const params = new URLSearchParams({ date });
@@ -263,10 +265,10 @@ export default function AdminAppointmentsPage() {
                   setNewTime(e.target.value);
                   setTimeTouched(true);
                 }}
-                disabled={saturdayClosed}
+                disabled={dayClosed}
                 className="field"
               >
-                {saturdayClosed ? (
+                {dayClosed ? (
                   <option value={time}>{time}</option>
                 ) : (
                   <>
@@ -294,8 +296,10 @@ export default function AdminAppointmentsPage() {
 
           <div className="rounded-xl bg-cream-50 ring-1 ring-cream-200 px-4 py-3 space-y-2" aria-live="polite">
             <p className="text-sm font-semibold text-stone-600">שעות הפעילות בתאריך הנבחר:</p>
-            {saturdayClosed ? (
-              <p className="text-sm font-semibold text-red-700">יום שבת סגור — לא ניתן לקבוע תור, גם למנהל.</p>
+            {dayClosed ? (
+              <p className="text-sm font-semibold text-red-700">
+                {saturdayClosed ? "יום שבת סגור" : "היום הוגדר כסגור"} — לא ניתן לקבוע בו תור, גם למנהל.
+              </p>
             ) : newDayHours ? (
               <>
                 <DayHours day={newDayHours} />
@@ -322,7 +326,7 @@ export default function AdminAppointmentsPage() {
 
           {formError && <Alert tone="error">{formError}</Alert>}
 
-          <button type="submit" disabled={formSubmitting || saturdayClosed} className="btn btn-primary">
+          <button type="submit" disabled={formSubmitting || dayClosed} className="btn btn-primary">
             {formSubmitting ? "קובע..." : "קביעת תור"}
           </button>
         </form>
