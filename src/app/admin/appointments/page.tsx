@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import { ROOM_KEYS, ROOM_LABELS } from "@/lib/rooms";
 import { buildTimeOptions, combineDateAndTime, todayIsoDate, DURATION_OPTIONS } from "@/lib/slots";
+import { fitsOpening, isClosedDate, parseTimeOption } from "@/lib/opening-hours";
+import { useDayHours } from "@/lib/use-day-hours";
+import { DayHours } from "@/components/hours-summary";
 import type { RoomKey } from "@/generated/prisma/client";
 import { Alert, EmptyState, Icon, Loading, PageHeader, ROOM_ACCENTS, SectionTitle } from "@/components/ui";
 
@@ -33,11 +36,23 @@ export default function AdminAppointmentsPage() {
   const [selectedUserId, setSelectedUserId] = useState("");
   const [newRoomKey, setNewRoomKey] = useState<RoomKey>("ROOM1");
   const [newDate, setNewDate] = useState(todayIsoDate());
-  const [newTime, setNewTime] = useState(TIME_OPTIONS[0]);
+  const [newTime, setNewTime] = useState("08:00");
+  const [timeTouched, setTimeTouched] = useState(false);
   const [newDuration, setNewDuration] = useState(30);
   const [newNotes, setNewNotes] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [formSubmitting, setFormSubmitting] = useState(false);
+
+  // שעות הפעילות של התאריך הנבחר (מקור מרכזי). שבת סגורה לכולם; מחוץ לשעות בימי חול המנהל רשאי לקבוע (חריג)
+  const { day: newDayHours } = useDayHours(newDate);
+  const saturdayClosed = isClosedDate(newDate);
+  const insideHours = (t: string) =>
+    !!newDayHours && fitsOpening(newDayHours, parseTimeOption(t), parseTimeOption(t) + newDuration);
+  const openOptions = TIME_OPTIONS.filter(insideHours);
+  const outsideOptions = TIME_OPTIONS.filter((t) => !insideHours(t));
+  // כל עוד המנהל לא בחר שעה בעצמו — ברירת המחדל היא תחילת החלון הפתוח הראשון (כשיש)
+  const time = timeTouched ? newTime : (openOptions[0] ?? newTime);
+  const selectedOutside = !!newDayHours && !saturdayClosed && !insideHours(time);
 
   function loadAppointments() {
     const params = new URLSearchParams({ date });
@@ -78,7 +93,7 @@ export default function AdminAppointmentsPage() {
     }
     setFormSubmitting(true);
 
-    const start = combineDateAndTime(newDate, newTime);
+    const start = combineDateAndTime(newDate, time);
     const end = new Date(start.getTime() + newDuration * 60000);
 
     try {
@@ -232,7 +247,10 @@ export default function AdminAppointmentsPage() {
                 id="new-date"
                 type="date"
                 value={newDate}
-                onChange={(e) => setNewDate(e.target.value)}
+                onChange={(e) => {
+                  setNewDate(e.target.value);
+                  setTimeTouched(false);
+                }}
                 className="field"
               />
             </div>
@@ -240,17 +258,56 @@ export default function AdminAppointmentsPage() {
               <label htmlFor="new-time" className="field-label">שעה</label>
               <select
                 id="new-time"
-                value={newTime}
-                onChange={(e) => setNewTime(e.target.value)}
+                value={time}
+                onChange={(e) => {
+                  setNewTime(e.target.value);
+                  setTimeTouched(true);
+                }}
+                disabled={saturdayClosed}
                 className="field"
               >
-                {TIME_OPTIONS.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
+                {saturdayClosed ? (
+                  <option value={time}>{time}</option>
+                ) : (
+                  <>
+                    {openOptions.length > 0 && (
+                      <optgroup label="בשעות הפעילות">
+                        {openOptions.map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    <optgroup label="מחוץ לשעות הפעילות (חריג מנהל)">
+                      {outsideOptions.map((t) => (
+                        <option key={t} value={t}>
+                          {t} · מחוץ לפעילות
+                        </option>
+                      ))}
+                    </optgroup>
+                  </>
+                )}
               </select>
             </div>
+          </div>
+
+          <div className="rounded-xl bg-cream-50 ring-1 ring-cream-200 px-4 py-3 space-y-2" aria-live="polite">
+            <p className="text-sm font-semibold text-stone-600">שעות הפעילות בתאריך הנבחר:</p>
+            {saturdayClosed ? (
+              <p className="text-sm font-semibold text-red-700">יום שבת סגור — לא ניתן לקבוע תור, גם למנהל.</p>
+            ) : newDayHours ? (
+              <>
+                <DayHours day={newDayHours} />
+                {selectedOutside && (
+                  <p className="text-sm font-semibold text-amber-800">
+                    השעה שנבחרה מחוץ לשעות הפעילות. כמנהל אפשר לקבוע בה תור (חריג).
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-stone-500">טוען...</p>
+            )}
           </div>
 
           <div>
@@ -265,7 +322,7 @@ export default function AdminAppointmentsPage() {
 
           {formError && <Alert tone="error">{formError}</Alert>}
 
-          <button type="submit" disabled={formSubmitting} className="btn btn-primary">
+          <button type="submit" disabled={formSubmitting || saturdayClosed} className="btn btn-primary">
             {formSubmitting ? "קובע..." : "קביעת תור"}
           </button>
         </form>

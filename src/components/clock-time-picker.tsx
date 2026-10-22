@@ -25,6 +25,8 @@ type ClockTimePickerProps = {
   label?: string;
   /** הצגה קבועה בתוך הטופס (ללא חלון קופץ); כל שינוי מעדכן מיד את הערך */
   inline?: boolean;
+  /** שעות התחלה (בדקות מחצות) שאינן זמינות: מוצגות מוחלשות ואינן ניתנות לבחירה */
+  unavailable?: (minutes: number) => boolean;
 };
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -54,6 +56,7 @@ export function ClockTimePicker({
   id,
   label = "בחירת שעה",
   inline = false,
+  unavailable,
 }: ClockTimePickerProps) {
   const [open, setOpen] = useState(false);
   const autoId = useId();
@@ -69,6 +72,7 @@ export function ClockTimePicker({
         minMinutes={minMinutes}
         maxMinutes={maxMinutes}
         stepMinutes={stepMinutes}
+        unavailable={unavailable}
         onConfirm={onChange}
       />
     );
@@ -96,6 +100,7 @@ export function ClockTimePicker({
             minMinutes={minMinutes}
             maxMinutes={maxMinutes}
             stepMinutes={stepMinutes}
+            unavailable={unavailable}
             onCancel={() => setOpen(false)}
             onConfirm={(v) => {
               onChange(v);
@@ -114,11 +119,13 @@ function ClockDialog({
   minMinutes,
   maxMinutes,
   stepMinutes,
+  unavailable,
   inline = false,
   inputId,
   onCancel,
   onConfirm,
 }: {
+  unavailable?: (minutes: number) => boolean;
   inline?: boolean;
   inputId?: string;
   value: string;
@@ -135,17 +142,17 @@ function ClockDialog({
   // במצב קבוע הערך שייך להורה (מקור אמת יחיד); בחלון — טיוטה עד אישור
   const h = inline ? initial.h : stateH;
   const m = inline ? initial.m : stateM;
-  const [draft, setDraft] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("hours");
-  const [dialogText, setText] = useState(format(initial.h, initial.m));
-  const text = inline ? (draft ?? value) : dialogText;
+  // מה שהמשתמש מקליד כרגע בשדה (עד שהוא תקין ומוחל); null = מציגים את הערך הנבחר
+  const [typed, setTyped] = useState<Record<Mode, string | null>>({ hours: null, minutes: null });
+  const fieldRefs = { hours: useRef<HTMLInputElement>(null), minutes: useRef<HTMLInputElement>(null) };
   const dragging = useRef(false);
   const dialRef = useRef<SVGSVGElement>(null);
   const titleId = useId();
 
   const isValid = (hh: number, mm: number) => {
     const t = hh * 60 + mm;
-    return t >= minMinutes && t <= maxMinutes && t % stepMinutes === 0;
+    return t >= minMinutes && t <= maxMinutes && t % stepMinutes === 0 && !unavailable?.(t);
   };
   const hourHasOption = (hh: number) => {
     for (let mm = 0; mm < 60; mm++) if (isValid(hh, mm)) return true;
@@ -167,14 +174,10 @@ function ClockDialog({
   }, [inline, onCancel]);
 
   function apply(hh: number, mm: number) {
-    if (inline) {
-      setDraft(null);
-      onConfirm(format(hh, mm));
-      return;
-    }
+    setTyped({ hours: null, minutes: null });
+    if (inline) return onConfirm(format(hh, mm));
     setH(hh);
     setM(mm);
-    setText(format(hh, mm));
   }
 
   function selectHour(hh: number) {
@@ -186,26 +189,37 @@ function ClockDialog({
     if (isValid(h, mm)) apply(h, mm);
   }
 
-  function handleText(next: string) {
-    if (inline) setDraft(next);
-    else setText(next);
-    const parsed = parse(next);
-    if (parsed && isValid(parsed.h, parsed.m)) {
-      if (inline) {
-        onConfirm(format(parsed.h, parsed.m));
-        return;
-      }
-      setH(parsed.h);
-      setM(parsed.m);
+  /** האם ערך שהוקלד בשדה תקין וזמין (טווח, קפיצות וזמינות — אותם כללים כמו בשעון) */
+  function typedValid(key: Mode, raw: string): boolean {
+    const n = Number(raw);
+    if (raw === "" || n > (key === "hours" ? 23 : 59)) return false;
+    return key === "hours" ? hourHasOption(n) : isValid(h, n);
+  }
+
+  /** מחיל ערך שהוקלד אם הוא תקין (אחרת השעה הנבחרת לא משתנה). מחזיר אם הוחל */
+  function commitTyped(key: Mode, raw: string): boolean {
+    if (!typedValid(key, raw)) return false;
+    if (key === "hours") selectHour(Number(raw));
+    else selectMinute(Number(raw));
+    return true;
+  }
+
+  function handleTyping(key: Mode, input: string) {
+    const raw = input.replace(/\D/g, "").slice(0, 2);
+    setTyped((t) => ({ ...t, [key]: raw }));
+    // הקלדה שלמה: שתי ספרות, או ספרה ראשונה שאי אפשר להשלים (שעה 3–9, דקות 6–9)
+    const complete = raw.length === 2 || Number(raw) > (key === "hours" ? 2 : 5);
+    if (complete && commitTyped(key, raw) && key === "hours") {
+      setMode("minutes");
+      fieldRefs.minutes.current?.focus();
     }
   }
 
-  const parsedText = parse(text);
-  const textValid = parsedText !== null && isValid(parsedText.h, parsedText.m);
-  const rangeLabel = `${format(Math.floor(minMinutes / 60), minMinutes % 60)}–${format(
-    Math.floor(maxMinutes / 60),
-    maxMinutes % 60,
-  )}`;
+  function finishTyping(key: Mode) {
+    const raw = typed[key];
+    if (raw) commitTyped(key, raw);
+    setTyped((t) => ({ ...t, [key]: null }));
+  }
 
   function pointFromEvent(e: React.PointerEvent) {
     const rect = dialRef.current!.getBoundingClientRect();
@@ -243,23 +257,47 @@ function ClockDialog({
   const content = (
     <>
         <div className="flex items-center justify-center gap-1 mb-4" dir="ltr">
-          {(["hours", "minutes"] as const).map((key, i) => (
-            <span key={key} className="flex items-center gap-1">
-              {i === 1 && <span className="font-display text-4xl font-bold text-stone-400">:</span>}
-              <button
-                type="button"
-                onClick={() => setMode(key)}
-                aria-pressed={mode === key}
-                className={`font-display text-4xl font-bold tabular-nums rounded-2xl px-3 py-1 cursor-pointer transition-colors ${
-                  mode === key
-                    ? "bg-brand-50 text-brand-700 ring-1 ring-brand-200"
-                    : "text-stone-700 hover:bg-cream-100"
-                }`}
-              >
-                {pad(key === "hours" ? h : m)}
-              </button>
-            </span>
-          ))}
+          {(["hours", "minutes"] as const).map((key, i) => {
+            const raw = typed[key];
+            const invalid = raw !== null && raw.length > 0 && !typedValid(key, raw);
+            return (
+              <span key={key} className="flex items-center gap-1">
+                {i === 1 && <span className="font-display text-4xl font-bold text-stone-400">:</span>}
+                <input
+                  ref={fieldRefs[key]}
+                  id={key === "hours" ? inputId : undefined}
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={2}
+                  aria-label={key === "hours" ? "שעות (00–23)" : "דקות (00–59)"}
+                  aria-invalid={invalid}
+                  value={raw ?? pad(key === "hours" ? h : m)}
+                  onChange={(e) => handleTyping(key, e.target.value)}
+                  onFocus={(e) => {
+                    setMode(key);
+                    e.currentTarget.select();
+                  }}
+                  onClick={(e) => e.currentTarget.select()}
+                  onMouseUp={(e) => e.preventDefault()}
+                  onBlur={() => finishTyping(key)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  className={`w-20 text-center font-display text-4xl font-bold tabular-nums rounded-2xl px-1 py-1 cursor-text transition-colors outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                    invalid
+                      ? "text-red-600 ring-1 ring-red-300"
+                      : mode === key
+                        ? "bg-brand-50 text-brand-700 ring-1 ring-brand-200"
+                        : "text-stone-700 hover:bg-cream-100"
+                  }`}
+                />
+              </span>
+            );
+          })}
         </div>
 
         <div className="rounded-2xl bg-cream-50 ring-1 ring-cream-200 p-3 mx-auto w-fit max-w-full" dir="ltr">
@@ -355,38 +393,6 @@ function ClockDialog({
                 })}
           </svg>
         </div>
-
-        <div className="mt-4">
-          <label htmlFor={inputId ?? `${titleId}-text`} className="field-label">
-            או הזנה ידנית (HH:mm)
-          </label>
-          <input
-            id={inputId ?? `${titleId}-text`}
-            type="text"
-            inputMode="numeric"
-            dir="ltr"
-            autoComplete="off"
-            placeholder="14:30"
-            maxLength={5}
-            value={text}
-            onChange={(e) => handleText(e.target.value)}
-            onBlur={() => setDraft(null)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                if (textValid) onConfirm(format(parsedText!.h, parsedText!.m));
-              }
-            }}
-            aria-invalid={!textValid}
-            className="field text-center tabular-nums"
-          />
-          {!textValid && (
-            <p className="text-xs text-red-600 mt-1.5">
-              הזינו שעה בין {rangeLabel}, בקפיצות של {stepMinutes} דקות
-            </p>
-          )}
-        </div>
-
     </>
   );
 
@@ -423,8 +429,8 @@ function ClockDialog({
           </button>
           <button
             type="button"
-            disabled={!textValid}
-            onClick={() => onConfirm(format(parsedText!.h, parsedText!.m))}
+            disabled={!isValid(h, m)}
+            onClick={() => onConfirm(format(h, m))}
             className="btn btn-primary px-6!"
           >
             אישור

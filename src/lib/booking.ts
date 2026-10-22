@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { CONFLICTING_ROOM_KEYS } from "@/lib/rooms";
 import { ensureRooms } from "@/lib/rooms-db";
-import { BUSINESS_HOURS, MIN_DURATION_MINUTES, MAX_DURATION_MINUTES } from "@/lib/business-rules";
+import { assertBookable } from "@/lib/opening-hours-db";
+import { MIN_DURATION_MINUTES, MAX_DURATION_MINUTES } from "@/lib/business-rules";
 import { BookingError } from "@/lib/booking-error";
 import type { BookingSource, RoomKey } from "@/generated/prisma/client";
 
@@ -23,15 +24,6 @@ function validateTimeRange(startTime: Date, endTime: Date) {
   }
   if (startTime.getTime() < Date.now()) {
     throw new BookingError("לא ניתן לקבוע תור בזמן שכבר עבר");
-  }
-  if (
-    startTime.getHours() < BUSINESS_HOURS.startHour ||
-    endTime.getHours() > BUSINESS_HOURS.endHour ||
-    (endTime.getHours() === BUSINESS_HOURS.endHour && endTime.getMinutes() > 0)
-  ) {
-    throw new BookingError(
-      `ניתן לקבוע תורים בין השעות ${BUSINESS_HOURS.startHour}:00 ל-${BUSINESS_HOURS.endHour}:00 בלבד`
-    );
   }
 }
 
@@ -65,6 +57,8 @@ export async function createAppointment(params: {
   const { userId, roomKey, startTime, endTime, notes, source = "WEB" } = params;
 
   validateTimeRange(startTime, endTime);
+  // שבת סגורה לכולם (כולל מנהל) ושעות הפעילות נאכפות — לפני כל גישה למסד
+  await assertBookable(startTime, endTime, source, userId);
 
   await ensureRooms();
   const room = await prisma.room.findUnique({ where: { key: roomKey } });

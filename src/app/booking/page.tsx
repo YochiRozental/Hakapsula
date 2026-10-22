@@ -3,30 +3,35 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ROOM_KEYS, ROOM_LABELS } from "@/lib/rooms";
+import {
+  activityMatches,
+  ACTIVITY_LABELS,
+  ACTIVITY_TYPES,
+  explainUnavailable,
+  formatMinutes,
+  formatWindow,
+  parseTimeOption,
+  isActivityType,
+  type BookingTrack,
+} from "@/lib/opening-hours";
 import { combineDateAndTime, todayIsoDate, WEB_BOOKING_DURATION_MINUTES } from "@/lib/slots";
-import { BUSINESS_HOURS } from "@/lib/business-rules";
 import { MonthCalendar } from "@/components/month-calendar";
 import { ClockTimePicker } from "@/components/clock-time-picker";
+import { ActivityBadge } from "@/components/hours-summary";
+import { useDayHours } from "@/lib/use-day-hours";
 import { Alert, BrandHeader, Icon, ROOM_ACCENTS, RoomTile, RoomVisual, SectionTitle } from "@/components/ui";
 import type { RoomKey } from "@/generated/prisma/client";
 
 type BusyInterval = { startTime: string; endTime: string; room: { key: RoomKey; name: string } };
 
 const durationMinutes = WEB_BOOKING_DURATION_MINUTES;
-// בשעון ניתן לבחור כל 5 דקות; רק שעות התחלה שבהן שעה שלמה נכנסת בתוך שעות הפעילות
+// בשעון מוצגות כל השעות (כל 5 דקות); אלו שאינן זמינות לפי שעות הפעילות של המסלול מוצגות מוחלשות
 const CLOCK_STEP_MINUTES = 5;
-const MIN_START_MINUTES = BUSINESS_HOURS.startHour * 60;
-const MAX_START_MINUTES = BUSINESS_HOURS.endHour * 60 - durationMinutes;
-const DEFAULT_START_TIME = formatTime(MIN_START_MINUTES);
-function toMinutes(t: string) {
-  const [h, m] = t.split(":").map(Number);
-  return h * 60 + m;
-}
-function formatTime(total: number) {
-  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
-}
+const MIN_START_MINUTES = 0;
+const MAX_START_MINUTES = 24 * 60 - durationMinutes;
+const DEFAULT_START_TIME = formatMinutes(8 * 60);
 function isValidStart(t: string) {
-  const total = toMinutes(t);
+  const total = parseTimeOption(t);
   return /^\d{2}:\d{2}$/.test(t) && total >= MIN_START_MINUTES && total <= MAX_START_MINUTES && total % CLOCK_STEP_MINUTES === 0;
 }
 const LAST_SELECTION_KEY = "booking:lastSelection";
@@ -36,6 +41,7 @@ type StoredSelection = {
   roomKey: RoomKey;
   startTime: string;
   notes?: string;
+  track?: BookingTrack | null;
 };
 
 export default function BookingPage() {
@@ -43,6 +49,8 @@ export default function BookingPage() {
   const [roomKey, setRoomKey] = useState<RoomKey>("ROOM1");
   const [date, setDate] = useState(todayIsoDate());
   const [startTime, setStartTime] = useState(DEFAULT_START_TIME);
+  // מסלול הצפייה של אורח (null = כל המסלולים). משתמש מחובר עם מגדר מוגבל למסלול שלו (userTrack) — השרת קובע ואוכף
+  const [browseTrack, setBrowseTrack] = useState<BookingTrack | null>(null);
   const [notes, setNotes] = useState("");
   // ערכים גולמיים של הזנה ידנית; null = מציגים את הבחירה הנוכחית (מהלוח / מהרשת)
   const [dateDraft, setDateDraft] = useState<string | null>(null);
@@ -63,6 +71,7 @@ export default function BookingPage() {
       if (stored.roomKey && ROOM_KEYS.includes(stored.roomKey)) setRoomKey(stored.roomKey);
       if (stored.startTime && isValidStart(stored.startTime)) setStartTime(stored.startTime);
       if (stored.notes) setNotes(stored.notes);
+      if (stored.track === null || isActivityType(stored.track)) setBrowseTrack(stored.track);
     } catch {
       // ignore corrupt storage
     }
@@ -78,9 +87,9 @@ export default function BookingPage() {
       hasMountedRef.current = true;
       return;
     }
-    const selection: StoredSelection = { date, roomKey, startTime, notes };
+    const selection: StoredSelection = { date, roomKey, startTime, notes, track: browseTrack };
     window.localStorage.setItem(LAST_SELECTION_KEY, JSON.stringify(selection));
-  }, [date, roomKey, startTime, notes]);
+  }, [date, roomKey, startTime, notes, browseTrack]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- loading flag for a client-side fetch triggered by date/room changes
@@ -93,18 +102,27 @@ export default function BookingPage() {
       .finally(() => setLoadingBusy(false));
   }, [date, roomKey]);
 
-  const { conflict, endTimeLabel } = useMemo(() => {
+  // שעות הפעילות ליום הנבחר — אותו מקור נתונים שבו משתמש השרת לאימות
+  const { day: dayHours, userTrack } = useDayHours(date);
+
+  const track = userTrack ?? browseTrack; // המסלול שלפיו מוצגת ההתאמה
+  const isToday = date === todayIsoDate();
+  const unavailableReason = (startMinutes: number): string | null => {
+    if (!dayHours) return "טוען שעות פעילות...";
+    if (isToday) {
+      const now = new Date();
+      if (startMinutes < now.getHours() * 60 + now.getMinutes()) return "השעה כבר עברה";
+    }
+    return explainUnavailable(dayHours, startMinutes, startMinutes + durationMinutes, track ?? undefined);
+  };
+  const selectedReason = unavailableReason(parseTimeOption(startTime));
+  const dayWindows = dayHours?.windows ?? [];
+
+  const endTimeLabel = formatMinutes(parseTimeOption(startTime) + durationMinutes);
+  const conflict = useMemo(() => {
     const start = combineDateAndTime(date, startTime);
     const end = new Date(start.getTime() + durationMinutes * 60000);
-    const hasConflict = busy.some((b) => {
-      const bStart = new Date(b.startTime);
-      const bEnd = new Date(b.endTime);
-      return start < bEnd && end > bStart;
-    });
-    return {
-      conflict: hasConflict,
-      endTimeLabel: `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`,
-    };
+    return busy.some((b) => start < new Date(b.endTime) && end > new Date(b.startTime));
   }, [busy, date, startTime]);
 
   const dateDraftInvalid = dateDraft !== null && (!dateDraft || dateDraft < todayIsoDate());
@@ -286,6 +304,32 @@ export default function BookingPage() {
               >
                 שעת התחלה
               </SectionTitle>
+              {userTrack ? (
+                <p className="mb-5 flex items-center gap-2 text-sm rounded-xl bg-cream-50 ring-1 ring-cream-200 px-3.5 py-2.5">
+                  <ActivityBadge activity={userTrack} />
+                  <span className="text-stone-600">מוצגות לך השעות המתאימות למסלול {ACTIVITY_LABELS[userTrack]}.</span>
+                </p>
+              ) : (
+                userTrack === null && (
+                  <div className="mb-5" role="group" aria-label="מסלול צפייה">
+                    <p className="field-label">צפייה לפי מסלול</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {([null, ...ACTIVITY_TYPES] as (BookingTrack | null)[]).map((t) => (
+                        <button
+                          type="button"
+                          key={t ?? "ALL"}
+                          onClick={() => setBrowseTrack(t)}
+                          aria-pressed={browseTrack === t}
+                          className={`btn ${browseTrack === t ? "btn-primary" : "btn-secondary"}`}
+                        >
+                          {t ? ACTIVITY_LABELS[t] : "הכול"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                )
+              )}
               <ClockTimePicker
                 id="booking-time"
                 inline
@@ -295,7 +339,37 @@ export default function BookingPage() {
                 minMinutes={MIN_START_MINUTES}
                 maxMinutes={MAX_START_MINUTES}
                 stepMinutes={CLOCK_STEP_MINUTES}
+                unavailable={(m) => unavailableReason(m) !== null}
               />
+              <div className="mt-4 text-sm rounded-xl bg-cream-50 ring-1 ring-cream-200 px-3.5 py-3 space-y-2" aria-live="polite">
+                <p className="font-semibold text-stone-600">שעות פעילות ביום זה:</p>
+                {!dayHours ? (
+                  <p className="text-stone-500">טוען...</p>
+                ) : dayWindows.length === 0 ? (
+                  <p className="text-red-600">{explainUnavailable(dayHours, 0, 1, track ?? undefined)}</p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {dayWindows.map((w, i) => {
+                      const fits = activityMatches(w.activity, track ?? undefined);
+                      return (
+                        <li key={i} className={`flex flex-wrap items-baseline justify-between gap-x-3 ${fits ? "text-stone-800" : "text-stone-400"}`}>
+                          <span className="tabular-nums font-semibold" dir="ltr">
+                            {formatWindow(w)}
+                          </span>
+                          <span className="flex items-center gap-2 text-xs">
+                            <ActivityBadge activity={w.activity} />
+                            {!fits && track && <span>לא מתאים למסלול {ACTIVITY_LABELS[track]}</span>}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                <p className="text-xs text-stone-500">
+                  שעות וחלונות באפור אינם מתאימים למסלול שנבחר (או שכבר עברו).{userTrack === null && " התחברו כדי להזמין — ההזמנה תתאים אוטומטית למסלול שלכם."}
+                </p>
+                {selectedReason && dayHours && <p className="text-red-600 font-semibold">{selectedReason}</p>}
+              </div>
             </section>
           </div>
         </div>
@@ -336,7 +410,7 @@ export default function BookingPage() {
               )}
             </div>
           </div>
-          <button type="submit" disabled={submitting || conflict || dateDraftInvalid} className="btn btn-bronze px-8! py-3! text-base!">
+          <button type="submit" disabled={submitting || conflict || dateDraftInvalid || selectedReason !== null} className="btn btn-bronze px-8! py-3! text-base!">
             {submitting ? "קובע תור..." : "קביעת תור"}
             {!submitting && <Icon name="arrowLeft" className="w-4 h-4" />}
           </button>

@@ -1,12 +1,11 @@
-import { BUSINESS_HOURS, SLOT_STEP_MINUTES } from "@/lib/business-rules";
+import { SLOT_STEP_MINUTES } from "@/lib/business-rules";
+import { formatMinutes } from "@/lib/opening-hours";
 
-/** בונה רשימת שעות התחלה אפשריות (HH:mm) בטווח שעות הפעילות, בקפיצות של SLOT_STEP_MINUTES */
+/** כל שעות ההתחלה האפשריות ביממה (HH:mm), בקפיצות של SLOT_STEP_MINUTES. הסינון לפי שעות הפעילות נעשה מול הלוח המרכזי (opening-hours) */
 export function buildTimeOptions(): string[] {
   const options: string[] = [];
-  for (let h = BUSINESS_HOURS.startHour; h < BUSINESS_HOURS.endHour; h++) {
-    for (let m = 0; m < 60; m += SLOT_STEP_MINUTES) {
-      options.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
-    }
+  for (let minutes = 0; minutes < 24 * 60; minutes += SLOT_STEP_MINUTES) {
+    options.push(formatMinutes(minutes));
   }
   return options;
 }

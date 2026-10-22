@@ -40,6 +40,12 @@ enum AppointmentStatus {
   CANCELLED
 }
 
+/// מסלול הפעילות של חלון שעות (לוח שעות משותף לכל החדרים)
+enum ActivityType {
+  BOYS
+  GIRLS
+}
+
 enum BookingSource {
   WEB
   IVR
@@ -96,4 +102,23 @@ model Appointment {
 
   @@index([roomId, startTime, endTime])
   @@index([userId])
+}
+
+/// חלון שעות פעילות. שורה עם weekday = ברירת מחדל שבועית; שורה עם date (YYYY-MM-DD) = חריג שדורס את
+/// כל ברירת המחדל של אותו תאריך. closed = יום סגור. השעות משותפות לכל החדרים; activity = מסלול הפעילות בחלון.
+model OpeningWindow {
+  id           String       @id @default(cuid())
+  weekday      Int?
+  date         String?
+  startMinutes Int
+  endMinutes   Int
+  closed       Boolean      @default(false)
+  activity     ActivityType @default(GIRLS) // לא רלוונטי ליום סגור (closed)
+  note         String?
+  active       Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([active, weekday])
+  @@index([active, date])
 }

@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react";
 import { MonthCalendar } from "@/components/month-calendar";
 import { PageHeader, ROOM_ACCENTS } from "@/components/ui";
+import { ActivityBadge, DayHours } from "@/components/hours-summary";
 import { ROOM_KEYS, ROOM_LABELS } from "@/lib/rooms";
-import { BUSINESS_HOURS } from "@/lib/business-rules";
+import { calendarRange, fitsOpening, type ActivityType } from "@/lib/opening-hours";
 import { todayIsoDate } from "@/lib/slots";
+import { useDayHours } from "@/lib/use-day-hours";
 import type { RoomKey } from "@/generated/prisma/client";
 
 type Appointment = {
@@ -19,14 +21,14 @@ type Appointment = {
 };
 
 const PX_PER_MINUTE = 0.9;
-const DAY_START_MIN = BUSINESS_HOURS.startHour * 60;
-const DAY_END_MIN = BUSINESS_HOURS.endHour * 60;
-const DAY_HEIGHT = (DAY_END_MIN - DAY_START_MIN) * PX_PER_MINUTE;
 
-const HOUR_MARKS = Array.from(
-  { length: BUSINESS_HOURS.endHour - BUSINESS_HOURS.startHour + 1 },
-  (_, i) => BUSINESS_HOURS.startHour + i
-);
+/** רקע חלון פתוח לפי מסלול; שעות מחוץ לחלונות מוצגות באפור מקווקו */
+const OPEN_BAND: Record<ActivityType, string> = {
+  BOYS: "bg-sky-50 border-sky-200",
+  GIRLS: "bg-rose-50 border-rose-200",
+};
+const CLOSED_BG =
+  "bg-stone-100 [background-image:repeating-linear-gradient(135deg,transparent_0_6px,rgb(0_0_0/0.04)_6px_12px)]";
 
 function parseIsoDate(iso: string) {
   const [y, m, d] = iso.split("-").map(Number);
@@ -38,6 +40,7 @@ export default function AdminCalendarPage() {
   const [markedDates, setMarkedDates] = useState<Set<string>>(new Set());
   const [appointments, setAppointments] = useState<Appointment[] | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [showAllHours, setShowAllHours] = useState(false);
 
   function loadMonth(year: number, month: number) {
     fetch(`/api/admin/appointments/month?year=${year}&month=${month + 1}`)
@@ -59,6 +62,9 @@ export default function AdminCalendarPage() {
 
   useEffect(loadDay, [date]);
 
+  // שעות הפעילות ליום — אותו מקור מרכזי כמו הדף הציבורי, ההזמנות והניהול
+  const { day: dayHours } = useDayHours(date);
+
   async function handleCancel(id: string) {
     if (!confirm("לבטל את התור?")) return;
     setCancellingId(id);
@@ -68,6 +74,26 @@ export default function AdminCalendarPage() {
   }
 
   const confirmed = appointments?.filter((a) => a.status === "CONFIRMED") ?? [];
+
+  // דקות מתחילת היום של כל תור (שעון הדפדפן, כמו שאר היומן) ובדיקה אם הוא מחוץ לשעות הפעילות
+  const timed = confirmed.map((a) => {
+    const start = new Date(a.startTime);
+    const end = new Date(a.endTime);
+    const startMinutes = start.getHours() * 60 + start.getMinutes();
+    const endMinutes = end.getHours() * 60 + end.getMinutes();
+    return { a, start, end, startMinutes, endMinutes, outside: !!dayHours && !fitsOpening(dayHours, startMinutes, endMinutes) };
+  });
+  const outsideCount = timed.filter((t) => t.outside).length;
+
+  const { startMinutes: DAY_START_MIN, endMinutes: DAY_END_MIN } = calendarRange(
+    dayHours ?? { source: "weekly", closed: false, note: null, windows: [] },
+    timed,
+    showAllHours
+  );
+  const DAY_HEIGHT = (DAY_END_MIN - DAY_START_MIN) * PX_PER_MINUTE;
+  const HOUR_MARKS = Array.from({ length: (DAY_END_MIN - DAY_START_MIN) / 60 + 1 }, (_, i) => DAY_START_MIN / 60 + i);
+  const topOf = (minutes: number) => (minutes - DAY_START_MIN) * PX_PER_MINUTE;
+  const dayClosed = !!dayHours && dayHours.windows.length === 0;
 
   return (
     <div>
@@ -83,8 +109,30 @@ export default function AdminCalendarPage() {
                 year: "numeric",
               })}
             </p>
-            <span className="badge bg-brand-50 text-brand-700">{confirmed.length} תורים</span>
+            <div className="flex flex-wrap items-center gap-2">
+              {outsideCount > 0 && (
+                <span className="badge bg-amber-50 text-amber-800 ring-1 ring-amber-300">{outsideCount} מחוץ לשעות הפעילות</span>
+              )}
+              <span className="badge bg-brand-50 text-brand-700">{confirmed.length} תורים</span>
+            </div>
           </div>
+
+          {dayHours && (
+            <div className="px-5 py-3 border-b border-cream-200 bg-cream-50 flex flex-wrap items-center justify-between gap-3">
+              {dayClosed ? (
+                <p className="text-sm font-semibold text-red-700">
+                  {dayHours.closed ? "יום סגור" : "אין פעילות ביום זה"}
+                  {dayHours.note ? ` · ${dayHours.note}` : ""}. תורים קיימים מוצגים בכל זאת.
+                </p>
+              ) : (
+                <DayHours day={dayHours} />
+              )}
+              <label className="flex items-center gap-2 text-xs text-stone-600 cursor-pointer">
+                <input type="checkbox" checked={showAllHours} onChange={(e) => setShowAllHours(e.target.checked)} />
+                הצג את כל שעות היממה
+              </label>
+            </div>
+          )}
 
           <div className="overflow-x-auto">
             <div className="flex min-w-[640px]">
@@ -95,7 +143,7 @@ export default function AdminCalendarPage() {
                     <div
                       key={h}
                       className="absolute right-2 text-xs text-stone-400 tabular-nums -translate-y-1/2"
-                      style={{ top: (h * 60 - DAY_START_MIN) * PX_PER_MINUTE }}
+                      style={{ top: topOf(h * 60) }}
                     >
                       {String(h).padStart(2, "0")}:00
                     </div>
@@ -109,32 +157,32 @@ export default function AdminCalendarPage() {
                     <span className={`w-2 h-2 rounded-full ${ROOM_ACCENTS[roomKey].dot}`} />
                     {ROOM_LABELS[roomKey]}
                   </div>
-                  <div className="relative" style={{ height: DAY_HEIGHT }}>
-                    {HOUR_MARKS.map((h) => (
+                  <div className={`relative ${dayHours ? CLOSED_BG : ""}`} style={{ height: DAY_HEIGHT }}>
+                    {dayHours?.windows.map((w, i) => (
                       <div
-                        key={h}
-                        className="absolute w-full border-t border-cream-100"
-                        style={{ top: (h * 60 - DAY_START_MIN) * PX_PER_MINUTE }}
+                        key={i}
+                        aria-hidden="true"
+                        className={`absolute w-full border-y ${OPEN_BAND[w.activity]}`}
+                        style={{ top: topOf(w.startMinutes), height: (w.endMinutes - w.startMinutes) * PX_PER_MINUTE }}
                       />
                     ))}
+                    {HOUR_MARKS.map((h) => (
+                      <div key={h} className="absolute w-full border-t border-black/5" style={{ top: topOf(h * 60) }} />
+                    ))}
 
-                    {confirmed
-                      .filter((a) => a.room.key === roomKey)
-                      .map((a) => {
-                        const start = new Date(a.startTime);
-                        const end = new Date(a.endTime);
-                        const startMin = start.getHours() * 60 + start.getMinutes();
-                        const endMin = end.getHours() * 60 + end.getMinutes();
-                        const top = (startMin - DAY_START_MIN) * PX_PER_MINUTE;
-                        const height = Math.max((endMin - startMin) * PX_PER_MINUTE, 20);
+                    {timed
+                      .filter((t) => t.a.room.key === roomKey)
+                      .map(({ a, start, end, startMinutes, endMinutes, outside }) => {
+                        const top = topOf(startMinutes);
+                        const height = Math.max((endMinutes - startMinutes) * PX_PER_MINUTE, 20);
 
                         return (
                           <button
                             key={a.id}
                             onClick={() => handleCancel(a.id)}
                             disabled={cancellingId === a.id}
-                            title="לחץ לביטול התור"
-                            className={`absolute right-1.5 left-1.5 rounded-lg border text-right px-2 py-1 overflow-hidden shadow-sm transition-colors hover:bg-red-50 hover:border-red-300 hover:text-red-800 disabled:opacity-50 cursor-pointer ${ROOM_ACCENTS[roomKey].block}`}
+                            title={outside ? "מחוץ לשעות הפעילות · לחץ לביטול התור" : "לחץ לביטול התור"}
+                            className={`absolute right-1.5 left-1.5 rounded-lg border text-right px-2 py-1 overflow-hidden shadow-sm transition-colors hover:bg-red-50 hover:border-red-300 hover:text-red-800 disabled:opacity-50 cursor-pointer ${ROOM_ACCENTS[roomKey].block} ${outside ? "border-dashed border-amber-500 ring-2 ring-amber-300" : ""}`}
                             style={{ top, height }}
                           >
                             <p className="text-xs font-bold truncate">{a.user.name}</p>
@@ -164,6 +212,23 @@ export default function AdminCalendarPage() {
             <p className="text-xs text-stone-400 mt-3 text-center">
               נקודה מתחת לתאריך מציינת יום עם תורים
             </p>
+          </div>
+          <div className="card p-4">
+            <p className="font-display text-base font-bold text-stone-900 mb-3">מקרא שעות</p>
+            <ul className="space-y-2 text-sm text-stone-600">
+              <li className="flex items-center gap-2">
+                <ActivityBadge activity="GIRLS" /> שעות פתוחות למסלול בנות
+              </li>
+              <li className="flex items-center gap-2">
+                <ActivityBadge activity="BOYS" /> שעות פתוחות למסלול בנים
+              </li>
+              <li className="flex items-center gap-2">
+                <span className={`w-5 h-5 rounded border border-stone-300 ${CLOSED_BG}`} /> שעות סגורות
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded border border-dashed border-amber-500 ring-2 ring-amber-300" /> תור מחוץ לשעות הפעילות
+              </li>
+            </ul>
           </div>
           <div className="card p-4">
             <p className="font-display text-base font-bold text-stone-900 mb-3">חדרים</p>

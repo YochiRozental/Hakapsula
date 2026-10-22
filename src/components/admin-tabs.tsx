@@ -9,6 +9,7 @@ const TABS: { href: string; label: string; icon: IconName }[] = [
   { href: "/admin/calendar", label: "יומן חדרים", icon: "calendar" },
   { href: "/admin/appointments", label: "ניהול תורים", icon: "list" },
   { href: "/admin/rooms", label: "חדרים", icon: "door" },
+  { href: "/admin/hours", label: "שעות פעילות", icon: "clock" },
   { href: "/admin/users", label: "משתמשים", icon: "users" },
 ];
 

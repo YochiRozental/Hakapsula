@@ -62,6 +62,12 @@ export function Navbar() {
       active: pathname === "/booking" && !contactActive,
     });
     links.push({
+      href: "/hours",
+      label: "שעות פעילות",
+      icon: "clock",
+      active: pathname === "/hours" && !contactActive,
+    });
+    links.push({
       href: "#contact",
       label: "צור קשר",
       icon: "phone",
