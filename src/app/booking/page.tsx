@@ -6,13 +6,10 @@ import { ROOM_KEYS, ROOM_LABELS } from "@/lib/rooms";
 import {
   activityMatches,
   ACTIVITY_LABELS,
-  ACTIVITY_TYPES,
   explainUnavailable,
   formatMinutes,
   formatWindow,
   parseTimeOption,
-  isActivityType,
-  type BookingTrack,
 } from "@/lib/opening-hours";
 import { combineDateAndTime, todayIsoDate, WEB_BOOKING_DURATION_MINUTES } from "@/lib/slots";
 import { MonthCalendar } from "@/components/month-calendar";
@@ -41,7 +38,6 @@ type StoredSelection = {
   roomKey: RoomKey;
   startTime: string;
   notes?: string;
-  track?: BookingTrack | null;
 };
 
 export default function BookingPage() {
@@ -49,8 +45,6 @@ export default function BookingPage() {
   const [roomKey, setRoomKey] = useState<RoomKey>("ROOM1");
   const [date, setDate] = useState(todayIsoDate());
   const [startTime, setStartTime] = useState(DEFAULT_START_TIME);
-  // מסלול הצפייה של אורח (null = כל המסלולים). משתמש מחובר עם מגדר מוגבל למסלול שלו (userTrack) — השרת קובע ואוכף
-  const [browseTrack, setBrowseTrack] = useState<BookingTrack | null>(null);
   const [notes, setNotes] = useState("");
   // ערכים גולמיים של הזנה ידנית; null = מציגים את הבחירה הנוכחית (מהלוח / מהרשת)
   const [dateDraft, setDateDraft] = useState<string | null>(null);
@@ -71,7 +65,6 @@ export default function BookingPage() {
       if (stored.roomKey && ROOM_KEYS.includes(stored.roomKey)) setRoomKey(stored.roomKey);
       if (stored.startTime && isValidStart(stored.startTime)) setStartTime(stored.startTime);
       if (stored.notes) setNotes(stored.notes);
-      if (stored.track === null || isActivityType(stored.track)) setBrowseTrack(stored.track);
     } catch {
       // ignore corrupt storage
     }
@@ -87,9 +80,9 @@ export default function BookingPage() {
       hasMountedRef.current = true;
       return;
     }
-    const selection: StoredSelection = { date, roomKey, startTime, notes, track: browseTrack };
+    const selection: StoredSelection = { date, roomKey, startTime, notes };
     window.localStorage.setItem(LAST_SELECTION_KEY, JSON.stringify(selection));
-  }, [date, roomKey, startTime, notes, browseTrack]);
+  }, [date, roomKey, startTime, notes]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- loading flag for a client-side fetch triggered by date/room changes
@@ -105,7 +98,7 @@ export default function BookingPage() {
   // שעות הפעילות ליום הנבחר — אותו מקור נתונים שבו משתמש השרת לאימות
   const { day: dayHours, userTrack } = useDayHours(date);
 
-  const track = userTrack ?? browseTrack; // המסלול שלפיו מוצגת ההתאמה
+  const track = userTrack; // מסלול המשתמש המחובר (לפי המגדר שלו); בלעדיו מוצגים כל החלונות
   const isToday = date === todayIsoDate();
   const unavailableReason = (startMinutes: number): string | null => {
     if (!dayHours) return "טוען שעות פעילות...";
@@ -304,31 +297,11 @@ export default function BookingPage() {
               >
                 שעת התחלה
               </SectionTitle>
-              {userTrack ? (
+              {userTrack && (
                 <p className="mb-5 flex items-center gap-2 text-sm rounded-xl bg-cream-50 ring-1 ring-cream-200 px-3.5 py-2.5">
                   <ActivityBadge activity={userTrack} />
                   <span className="text-stone-600">מוצגות לך השעות המתאימות למסלול {ACTIVITY_LABELS[userTrack]}.</span>
                 </p>
-              ) : (
-                userTrack === null && (
-                  <div className="mb-5" role="group" aria-label="מסלול צפייה">
-                    <p className="field-label">צפייה לפי מסלול</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {([null, ...ACTIVITY_TYPES] as (BookingTrack | null)[]).map((t) => (
-                        <button
-                          type="button"
-                          key={t ?? "ALL"}
-                          onClick={() => setBrowseTrack(t)}
-                          aria-pressed={browseTrack === t}
-                          className={`btn ${browseTrack === t ? "btn-primary" : "btn-secondary"}`}
-                        >
-                          {t ? ACTIVITY_LABELS[t] : "הכול"}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                )
               )}
               <ClockTimePicker
                 id="booking-time"
