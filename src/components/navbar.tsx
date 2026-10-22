@@ -38,6 +38,9 @@ export function Navbar() {
     return () => observer.disconnect();
   }, [pathname]);
 
+  const isAdmin = session?.user?.role === "ADMIN";
+  const isAuthenticated = status === "authenticated";
+
   const links: {
     href: string;
     label: string;
@@ -45,57 +48,57 @@ export function Navbar() {
     active: boolean;
   }[] = [];
 
-  const isAdmin = session?.user?.role === "ADMIN";
-
-  links.push({
-    href: "/",
-    label: "דף הבית",
-    icon: "home",
-    active: pathname === "/" && !contactActive,
-  });
-
-  if (status !== "loading" && !isAdmin) {
-    links.push({
-      href: "/booking",
-      label: "קביעת תור",
-      icon: "calendar",
-      active: pathname === "/booking" && !contactActive,
-    });
-    links.push({
-      href: "/hours",
-      label: "שעות פעילות",
-      icon: "clock",
-      active: pathname === "/hours" && !contactActive,
-    });
-    links.push({
-      href: "#contact",
-      label: "צור קשר",
-      icon: "phone",
-      active: contactActive,
-    });
-  }
-
-  if (status === "authenticated" && !isAdmin) {
-    links.push({
-      href: "/booking/my",
-      label: "התורים שלי",
-      icon: "calendarCheck",
-      active: pathname === "/booking/my",
-    });
-    links.push({
-      href: "/profile",
-      label: "הכרטיס שלי",
-      icon: "user",
-      active: pathname === "/profile" && !contactActive,
-    });
-  }
-
   if (isAdmin) {
     links.push({
       href: "/admin",
       label: "ניהול",
       icon: "chart",
       active: pathname?.startsWith("/admin") ?? false,
+    });
+  } else if (status !== "loading") {
+    links.push(
+      {
+        href: "/",
+        label: "דף הבית",
+        icon: "home",
+        active: pathname === "/" && !contactActive,
+      },
+      {
+        href: "/hours",
+        label: "שעות פעילות",
+        icon: "clock",
+        active: pathname === "/hours" && !contactActive,
+      },
+      {
+        href: "/booking",
+        label: "קביעת תור",
+        icon: "calendar",
+        active: pathname === "/booking" && !contactActive,
+      },
+    );
+
+    if (isAuthenticated) {
+      links.push(
+        {
+          href: "/booking/my",
+          label: "התורים שלי",
+          icon: "calendarCheck",
+          active: pathname === "/booking/my" && !contactActive,
+        },
+        {
+          href: "/profile",
+          label: "הכרטיס שלי",
+          icon: "user",
+          active: pathname === "/profile" && !contactActive,
+        },
+      );
+    }
+
+    links.push({
+      href: "#contact",
+      label: "צור קשר",
+      icon: "phone",
+      active: contactActive,
     });
   }
 
