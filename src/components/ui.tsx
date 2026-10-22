@@ -31,6 +31,9 @@ const ICON_PATHS = {
   sparkle: "M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6",
   chart: "M4 20V10M10 20V4M16 20v-7M22 20H2",
   filter: "M4 5h16l-6 8v6l-4-2v-5L4 5Z",
+  arrowUp: "M12 19V5M6 11l6-6 6 6",
+  arrowDown: "M12 5v14M6 13l6 6 6-6",
+  chevronsUpDown: "M8 9l4-4 4 4M16 15l-4 4-4-4",
   card: "M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1ZM3 10h18M7 15h4",
 };
 

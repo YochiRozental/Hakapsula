@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { EmptyState, Loading, PageHeader } from "@/components/ui";
-import { Pager, TableFilterBar, useTableFilters } from "@/components/table-filter";
+import { Pager, SortableTh, TableFilterBar, useTableFilters } from "@/components/table-filter";
 import { buildListParams, clampPage, type FilterField } from "@/lib/table-filters";
 
 type UserRow = {
@@ -77,7 +77,7 @@ const EMPTY_FORM = {
 export default function AdminUsersPage() {
   const { data: session } = useSession();
   const filterState = useTableFilters();
-  const { applied, appliedKey, page, setPage } = filterState;
+  const { applied, sort, appliedKey, page, setPage } = filterState;
   const [users, setUsers] = useState<UserRow[] | null>(null);
   const [total, setTotal] = useState<number | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -89,7 +89,7 @@ export default function AdminUsersPage() {
 
   // הסינון מתבצע בשרת על כל המשתמשים, לא רק על העמוד הנוכחי
   function load() {
-    const params = buildListParams({ search: applied.search, filters: applied.filters, page, pageSize: PAGE_SIZE });
+    const params = buildListParams({ search: applied.search, filters: applied.filters, sort, page, pageSize: PAGE_SIZE });
     fetch(`/api/admin/users?${params}`)
       .then((res) => res.json())
       .then((data) => {
@@ -298,13 +298,13 @@ export default function AdminUsersPage() {
           <table className="table-base">
             <thead>
               <tr>
-                <th>שם</th>
-                <th>אימייל</th>
-                <th>טלפון</th>
-                <th>תאריך הצטרפות</th>
-                <th>תורים</th>
-                <th>תפקיד</th>
-                <th>סטטוס</th>
+                <SortableTh label="שם" sortKey="name" state={filterState} />
+                <SortableTh label="אימייל" sortKey="email" state={filterState} />
+                <SortableTh label="טלפון" sortKey="phone" state={filterState} />
+                <SortableTh label="תאריך הצטרפות" sortKey="createdAt" state={filterState} />
+                <SortableTh label="תורים" sortKey="appointments" state={filterState} />
+                <SortableTh label="תפקיד" sortKey="role" state={filterState} />
+                <SortableTh label="סטטוס" sortKey="status" state={filterState} />
                 <th>פעולות</th>
                 <th></th>
               </tr>

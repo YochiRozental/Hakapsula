@@ -4,7 +4,16 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/require-admin";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
-import { buildWhere, parseListQuery, type ServerField } from "@/lib/table-filters-server";
+import {
+  buildWhere,
+  orderByIds,
+  parseListQuery,
+  resolveSort,
+  textSortPage,
+  textSortSelect,
+  type ServerField,
+  type SortField,
+} from "@/lib/table-filters-server";
 import type { Filter } from "@/lib/table-filters";
 import { hashPassword } from "@/lib/password";
 import {
@@ -98,6 +107,17 @@ const USER_FILTER_FIELDS: Record<string, ServerField> = {
   appointments: { type: "number", build: appointmentCountCondition },
 };
 
+// עמודות הניתנות למיון. טקסט: מיון עברית/אנגלית בזיכרון; שאר העמודות: במסד
+const USER_SORT_FIELDS: Record<string, SortField> = {
+  name: { text: ["name"] },
+  email: { text: ["email"] },
+  phone: { text: ["phone"] },
+  createdAt: { orderBy: (dir) => ({ createdAt: dir }) },
+  appointments: { orderBy: (dir) => ({ appointments: { _count: dir } }) },
+  role: { orderBy: (dir) => ({ role: dir }) },
+  status: { orderBy: (dir) => ({ status: dir }) },
+};
+
 const USER_SEARCH_PATHS = [["name"], ["email"], ["phone"]];
 
 // ספירת תורים אינה ניתנת לסינון ישיר ב-where, ולכן מחשבים את מזהי המשתמשים המתאימים לפי groupBy
@@ -153,12 +173,22 @@ export async function GET(request: Request) {
     return NextResponse.json(users);
   }
 
+  const skip = (query.page - 1) * query.pageSize;
+  const plan = resolveSort(query.sort, USER_SORT_FIELDS, [{ createdAt: "desc" }]);
+
+  if (plan.kind === "text") {
+    const all = await prisma.user.findMany({ where, select: textSortSelect(plan.path) as { id: true } });
+    const { ids, total } = textSortPage(all, plan, skip, query.pageSize);
+    const rows = await prisma.user.findMany({ where: { id: { in: ids } }, select });
+    return NextResponse.json({ users: orderByIds(rows, ids), total });
+  }
+
   const [users, total] = await Promise.all([
     prisma.user.findMany({
       where,
       select,
-      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-      skip: (query.page - 1) * query.pageSize,
+      orderBy: plan.orderBy as Prisma.UserOrderByWithRelationInput[],
+      skip,
       take: query.pageSize,
     }),
     prisma.user.count({ where }),

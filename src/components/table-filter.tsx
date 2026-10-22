@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   OP_LABELS,
   activeFilters,
+  nextSort,
   defaultOp,
   describeFilter,
   opsForField,
   type Filter,
   type FilterField,
   type FilterOp,
+  type Sort,
 } from "@/lib/table-filters";
 import { Icon } from "@/components/ui";
 
@@ -23,9 +25,12 @@ export function useTableFilters(initial: Record<string, Filter> = {}) {
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState(initial);
   const active = useMemo(() => activeFilters(filters), [filters]);
+  // מיון לפי כותרת (null = ברירת מחדל). מוחל מיד, בלי debounce
+  const [sort, setSort] = useState<Sort | null>(null);
+  const toggleSort = (key: string) => setSort((cur) => nextSort(cur, key));
 
   const [applied, setApplied] = useState({ search: "", filters: activeFilters(initial) });
-  const appliedKey = JSON.stringify(applied);
+  const appliedKey = JSON.stringify({ applied, sort });
   useEffect(() => {
     const handle = setTimeout(() => {
       setApplied((prev) => {
@@ -36,12 +41,12 @@ export function useTableFilters(initial: Record<string, Filter> = {}) {
     return () => clearTimeout(handle);
   }, [search, active]);
 
-  // חזרה לעמוד 1 בכל שינוי בחיפוש/סינון, בלי אפקט נוסף ובלי בקשה כפולה
+  // חזרה לעמוד 1 בכל שינוי בחיפוש/סינון/מיון, בלי אפקט נוסף ובלי בקשה כפולה
   const [pageState, setPageState] = useState({ key: appliedKey, page: 1 });
   const page = pageState.key === appliedKey ? pageState.page : 1;
   const setPage = (p: number) => setPageState({ key: appliedKey, page: p });
 
-  return { search, setSearch, filters, setFilters, active, applied, appliedKey, page, setPage };
+  return { search, setSearch, filters, setFilters, active, applied, sort, toggleSort, appliedKey, page, setPage };
 }
 
 export type TableFilterState = ReturnType<typeof useTableFilters>;
@@ -153,6 +158,35 @@ export function TableFilterBar({
         )}
       </div>
     </div>
+  );
+}
+
+/** כותרת עמודה הניתנת למיון: כפתור (נגיש במקלדת), aria-sort וחץ בכיוון המיון */
+export function SortableTh({
+  label,
+  sortKey,
+  state,
+}: {
+  label: string;
+  sortKey: string;
+  state: Pick<TableFilterState, "sort" | "toggleSort">;
+}) {
+  const dir = state.sort?.key === sortKey ? state.sort.dir : null;
+  return (
+    <th aria-sort={dir === "asc" ? "ascending" : dir === "desc" ? "descending" : "none"}>
+      <button
+        type="button"
+        onClick={() => state.toggleSort(sortKey)}
+        title={`מיון לפי ${label}`}
+        className="inline-flex items-center gap-1 font-semibold rounded hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-brand-400 cursor-pointer"
+      >
+        {label}
+        <Icon
+          name={dir === "asc" ? "arrowUp" : dir === "desc" ? "arrowDown" : "chevronsUpDown"}
+          className={`w-3.5 h-3.5 ${dir ? "text-brand-700" : "opacity-40"}`}
+        />
+      </button>
+    </th>
   );
 }
 

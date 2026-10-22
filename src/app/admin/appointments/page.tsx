@@ -8,7 +8,7 @@ import { useDayHours } from "@/lib/use-day-hours";
 import { DayHours } from "@/components/hours-summary";
 import type { RoomKey } from "@/generated/prisma/client";
 import { Alert, EmptyState, Icon, Loading, PageHeader, ROOM_ACCENTS, SectionTitle } from "@/components/ui";
-import { Pager, TableFilterBar, useTableFilters } from "@/components/table-filter";
+import { Pager, SortableTh, TableFilterBar, useTableFilters } from "@/components/table-filter";
 import { buildListParams, clampPage, type Filter, type FilterField } from "@/lib/table-filters";
 import { jerusalemTodayIso } from "@/lib/jerusalem-time";
 
@@ -70,7 +70,7 @@ function defaultFilters(): Record<string, Filter> {
 
 export default function AdminAppointmentsPage() {
   const filterState = useTableFilters(defaultFilters());
-  const { applied, appliedKey, page, setPage } = filterState;
+  const { applied, sort, appliedKey, page, setPage } = filterState;
   const [appointments, setAppointments] = useState<Appointment[] | null>(null);
   const [total, setTotal] = useState<number | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
@@ -103,7 +103,7 @@ export default function AdminAppointmentsPage() {
 
   // הסינון מתבצע בשרת על כל התורים, לא רק על העמוד הנוכחי
   function loadAppointments() {
-    const params = buildListParams({ search: applied.search, filters: applied.filters, page, pageSize: PAGE_SIZE });
+    const params = buildListParams({ search: applied.search, filters: applied.filters, sort, page, pageSize: PAGE_SIZE });
     fetch(`/api/admin/appointments?${params}`)
       .then((res) => res.json())
       .then((data) => {
@@ -374,13 +374,13 @@ export default function AdminAppointmentsPage() {
             <table className="table-base">
               <thead>
                 <tr>
-                  <th>תאריך</th>
+                  <SortableTh label="תאריך" sortKey="startTime" state={filterState} />
                   <th>שעה</th>
-                  <th>חדר</th>
-                  <th>לקוח</th>
-                  <th>טלפון</th>
-                  <th>מקור</th>
-                  <th>סטטוס</th>
+                  <SortableTh label="חדר" sortKey="room" state={filterState} />
+                  <SortableTh label="לקוח" sortKey="userName" state={filterState} />
+                  <SortableTh label="טלפון" sortKey="userPhone" state={filterState} />
+                  <SortableTh label="מקור" sortKey="source" state={filterState} />
+                  <SortableTh label="סטטוס" sortKey="status" state={filterState} />
                   <th></th>
                 </tr>
               </thead>

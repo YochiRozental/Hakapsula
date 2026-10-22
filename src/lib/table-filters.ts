@@ -140,10 +140,20 @@ function formatValue(field: FilterField, value: string): string {
   return `${d}/${m}/${y}`;
 }
 
+export type SortDir = "asc" | "desc";
+export type Sort = { key: string; dir: SortDir };
+
+/** מחזור המיון בלחיצה על כותרת: עולה ← יורד ← ברירת מחדל (null) */
+export function nextSort(current: Sort | null, key: string): Sort | null {
+  if (!current || current.key !== key) return { key, dir: "asc" };
+  return current.dir === "asc" ? { key, dir: "desc" } : null;
+}
+
 /** פרמטרים של בקשת רשימה לשרת: חיפוש חופשי, פילטרים פעילים ודפדוף */
 export function buildListParams(opts: {
   search: string;
   filters: Filter[];
+  sort?: Sort | null;
   page: number;
   pageSize: number;
 }): URLSearchParams {
@@ -151,6 +161,10 @@ export function buildListParams(opts: {
   const q = opts.search.trim();
   if (q) params.set("q", q);
   if (opts.filters.length > 0) params.set("filters", JSON.stringify(opts.filters));
+  if (opts.sort) {
+    params.set("sort", opts.sort.key);
+    params.set("dir", opts.sort.dir);
+  }
   params.set("page", String(opts.page));
   params.set("pageSize", String(opts.pageSize));
   return params;

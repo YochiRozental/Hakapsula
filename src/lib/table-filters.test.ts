@@ -74,7 +74,7 @@ test("מספר, בוליאני וריק/לא ריק", async () => {
 test("ערכים לא תקינים מתעלמים, ו-JSON פגום לא שובר", async () => {
   assert.deepEqual(await buildWhere({ search: "", filters: [{ key: "when", op: "before", value: "not-a-date" }] }, config), {});
   const q = parseListQuery(new URLSearchParams({ filters: "{bad", page: "-3", pageSize: "9999" }));
-  assert.deepEqual(q, { search: "", filters: [], page: 1, pageSize: 100 });
+  assert.deepEqual(q, { search: "", filters: [], sort: null, page: 1, pageSize: 100 });
 });
 
 test("פילטר פעיל רק כשהוא מלא; תיאור התגית", () => {

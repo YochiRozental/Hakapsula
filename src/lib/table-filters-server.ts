@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Filter, FieldType } from "@/lib/table-filters";
+import type { Filter, FieldType, Sort, SortDir } from "@/lib/table-filters";
 import { isValidIsoDate } from "@/lib/table-filters";
 import { jerusalemDayEnd, jerusalemDayStart } from "@/lib/jerusalem-time";
 
@@ -31,6 +31,7 @@ const MAX_FILTERS = 20;
 export type ListQuery = {
   search: string;
   filters: Filter[];
+  sort: Sort | null;
   page: number;
   pageSize: number;
 };
@@ -49,9 +50,14 @@ export function parseListQuery(searchParams: URLSearchParams): ListQuery {
     }
   }
 
+  const sortKey = searchParams.get("sort");
+  const sortDir = searchParams.get("dir");
+  const sort: Sort | null =
+    sortKey && sortKey.length <= 40 && (sortDir === "asc" || sortDir === "desc") ? { key: sortKey, dir: sortDir } : null;
+
   const page = Math.max(1, Number.parseInt(searchParams.get("page") ?? "1", 10) || 1);
   const pageSize = Math.min(100, Math.max(1, Number.parseInt(searchParams.get("pageSize") ?? "50", 10) || 50));
-  return { search, filters, page, pageSize };
+  return { search, filters, sort, page, pageSize };
 }
 
 function nest(path: string[], leaf: unknown): Where {
@@ -149,7 +155,7 @@ export async function buildWhere(
   // פילטר אחד לכל שדה; כפילויות מתעלמות מהאחרון
   const seen = new Set<string>();
   for (const f of query.filters) {
-    const field = config.fields[f.key];
+    const field = Object.hasOwn(config.fields, f.key) ? config.fields[f.key] : undefined;
     if (!field || seen.has(f.key)) continue;
     seen.add(f.key);
     const condition = await fieldCondition(field, f);
@@ -157,4 +163,62 @@ export async function buildWhere(
   }
 
   return and.length > 0 ? { AND: and } : {};
+}
+
+// ---------- מיון ----------
+// רק מפתחות שהוגדרו במפורש ב-SortField מתקבלים (Object.hasOwn) — אי אפשר להזריק שמות שדות שרירותיים.
+// מיון טקסט נעשה בזיכרון עם Intl.Collator (עברית/אנגלית, ללא תלות באותיות, ערכים ריקים בסוף), כי ה-collation של המסד הוא C
+// ומיין לפי ערכי בתים. מיון תאריכים, מספרים ו-enum נעשה במסד. בשני המקרים המיון מתבצע על כל התוצאות לפני הדפדוף,
+// ותמיד נוסף id כמפתח משני כדי שהסדר יהיה יציב בין עמודים.
+
+export type SortField = { orderBy: (dir: SortDir) => Where } | { text: string[] };
+
+export type SortPlan =
+  | { kind: "db"; orderBy: Where[] }
+  | { kind: "text"; path: string[]; dir: SortDir };
+
+export function resolveSort(sort: Sort | null, fields: Record<string, SortField>, defaultOrder: Where[]): SortPlan {
+  const field = sort && Object.hasOwn(fields, sort.key) ? fields[sort.key] : undefined;
+  if (!sort || !field) return { kind: "db", orderBy: [...defaultOrder, { id: "asc" }] };
+  if ("text" in field) return { kind: "text", path: field.text, dir: sort.dir };
+  return { kind: "db", orderBy: [field.orderBy(sort.dir), { id: "asc" }] };
+}
+
+/** select של id והשדה למיון (נתיב מקונן) — מיון טקסט טוען רק את אלה לכל התוצאות */
+export function textSortSelect(path: string[]): Where {
+  // בקשר (relation) ה-select חייב להיות מקונן: { user: { select: { name: true } } }
+  const leaf = path.reduceRight<unknown>((acc, key, i) => (i === path.length - 1 ? { [key]: true } : { [key]: { select: acc } }), true);
+  return { id: true, ...(leaf as Where) };
+}
+
+const collator = new Intl.Collator(["he", "en"], { sensitivity: "base", numeric: true });
+
+function valueAt(row: unknown, path: string[]): string {
+  const v = path.reduce<unknown>((o, k) => (o && typeof o === "object" ? (o as Record<string, unknown>)[k] : undefined), row);
+  return typeof v === "string" ? v.trim() : "";
+}
+
+/** מיין את כל השורות (id + שדה) ומחזיר את מזהי העמוד המבוקש ואת סך התוצאות */
+export function textSortPage(
+  rows: { id: string }[],
+  plan: { path: string[]; dir: SortDir },
+  skip: number,
+  take: number,
+): { ids: string[]; total: number } {
+  const sign = plan.dir === "asc" ? 1 : -1;
+  const sorted = rows
+    .map((row) => ({ id: row.id, value: valueAt(row, plan.path) }))
+    .sort((a, b) => {
+      // ערכים ריקים תמיד בסוף, בשני כיווני המיון
+      if (!a.value !== !b.value) return a.value ? -1 : 1;
+      const c = a.value && b.value ? collator.compare(a.value, b.value) * sign : 0;
+      return c !== 0 ? c : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
+  return { ids: sorted.slice(skip, skip + take).map((r) => r.id), total: sorted.length };
+}
+
+/** מחזיר את השורות לפי סדר המזהים */
+export function orderByIds<T extends { id: string }>(rows: T[], ids: string[]): T[] {
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  return ids.flatMap((id) => byId.get(id) ?? []);
 }

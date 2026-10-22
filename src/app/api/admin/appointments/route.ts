@@ -3,7 +3,16 @@ import { requireAdmin } from "@/lib/require-admin";
 import { prisma } from "@/lib/prisma";
 import { createAppointment, BookingError } from "@/lib/booking";
 import type { Prisma, RoomKey } from "@/generated/prisma/client";
-import { buildWhere, parseListQuery, type ServerField } from "@/lib/table-filters-server";
+import {
+  buildWhere,
+  orderByIds,
+  parseListQuery,
+  resolveSort,
+  textSortPage,
+  textSortSelect,
+  type ServerField,
+  type SortField,
+} from "@/lib/table-filters-server";
 
 // שדות שמותר לסנן לפיהם בטבלת התורים
 const APPOINTMENT_FILTER_FIELDS: Record<string, ServerField> = {
@@ -16,6 +25,16 @@ const APPOINTMENT_FILTER_FIELDS: Record<string, ServerField> = {
   userPhone: { type: "text", path: ["user", "phone"] },
   notes: { type: "text", path: ["notes"] },
   createdAt: { type: "date", path: ["createdAt"] },
+};
+
+// עמודות הניתנות למיון. טקסט: מיון עברית/אנגלית בזיכרון; שאר העמודות: במסד
+const APPOINTMENT_SORT_FIELDS: Record<string, SortField> = {
+  startTime: { orderBy: (dir) => ({ startTime: dir }) },
+  room: { orderBy: (dir) => ({ room: { key: dir } }) },
+  userName: { text: ["user", "name"] },
+  userPhone: { text: ["user", "phone"] },
+  source: { orderBy: (dir) => ({ source: dir }) },
+  status: { orderBy: (dir) => ({ status: dir }) },
 };
 
 const APPOINTMENT_SEARCH_PATHS = [["user", "name"], ["user", "email"], ["user", "phone"], ["notes"], ["room", "name"]];
@@ -34,12 +53,23 @@ export async function GET(request: Request) {
     })) as Prisma.AppointmentWhereInput;
     // בסינון לפי תאריך התורים מוצגים בסדר כרונולוגי; בלעדיו — החדשים קודם
     const byDate = query.filters.some((f) => f.key === "startTime");
+    const include = { room: true, user: { select: { id: true, name: true, email: true, phone: true } } };
+    const skip = (query.page - 1) * query.pageSize;
+    const plan = resolveSort(query.sort, APPOINTMENT_SORT_FIELDS, [{ startTime: byDate ? "asc" : "desc" }]);
+
+    if (plan.kind === "text") {
+      const all = await prisma.appointment.findMany({ where: filtered, select: textSortSelect(plan.path) as { id: true } });
+      const { ids, total } = textSortPage(all, plan, skip, query.pageSize);
+      const rows = await prisma.appointment.findMany({ where: { id: { in: ids } }, include });
+      return NextResponse.json({ appointments: orderByIds(rows, ids), total });
+    }
+
     const [appointments, total] = await Promise.all([
       prisma.appointment.findMany({
         where: filtered,
-        include: { room: true, user: { select: { id: true, name: true, email: true, phone: true } } },
-        orderBy: [{ startTime: byDate ? "asc" : "desc" }, { id: "asc" }],
-        skip: (query.page - 1) * query.pageSize,
+        include,
+        orderBy: plan.orderBy as Prisma.AppointmentOrderByWithRelationInput[],
+        skip,
         take: query.pageSize,
       }),
       prisma.appointment.count({ where: filtered }),
