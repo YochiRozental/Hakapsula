@@ -90,7 +90,8 @@ export async function createAppointment(params: {
         notes,
         source,
       },
-      include: { room: true, user: true },
+      // התגובה מוחזרת ללקוח — רק שדות לא רגישים (לעולם לא passwordHash, ת"ז, פרטי כרטיס)
+      include: { room: true, user: { select: { id: true, name: true } } },
     });
   });
 }
