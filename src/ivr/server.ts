@@ -51,8 +51,9 @@ const port =
   3001;
 app.listen(port, () => {
   console.log(`[ivr] Yemot IVR server listening on port ${port}`);
-  console.log(`[ivr] שלוחת הבדיקה (הכניסה לשיחה) -> http://<your-domain>:${port}${checkPath}`);
-  console.log(`[ivr] שלוחה 9/1, "מחוברים" -> http://<your-domain>:${port}${membersPath}`);
-  console.log(`[ivr] שלוחה 9/2, "לא רשום" -> http://<your-domain>:${port}${notRegisteredPath}`);
+  // הנתיבים כוללים את IVR_SHARED_SECRET, ולכן לא מודפסים ללוג. מציגים רק את התבנית
+  console.log(`[ivr] שלוחת הבדיקה (הכניסה לשיחה) -> http://<your-domain>:${port}/check-<IVR_SHARED_SECRET>`);
+  console.log(`[ivr] שלוחה 9/1, "מחוברים" -> http://<your-domain>:${port}/booking-<IVR_SHARED_SECRET>`);
+  console.log(`[ivr] שלוחה 9/2, "לא רשום" -> http://<your-domain>:${port}/not-registered-<IVR_SHARED_SECRET>`);
   console.log(`[ivr] שלוחה 9/3, "הסבר על המערכת" -> קיימת כבר בפאנל, אין צורך ב-URL`);
 });
