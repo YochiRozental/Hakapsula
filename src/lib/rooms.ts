@@ -49,3 +49,17 @@ export const CONFLICTING_ROOM_KEYS: Record<RoomKey, RoomKey[]> = {
   ROOM1_2: ["ROOM1", "ROOM2", "ROOM1_2"],
   WORKSHOP: ["WORKSHOP"],
 };
+
+/**
+ * אזור נעילה לכל חדר, ליצירת הזמנות: חדרים שיכולים להתנגש זה בזה (לפי CONFLICTING_ROOM_KEYS) חולקים אזור,
+ * כך ש-createAppointment מסדרת אותם בטור. חדר 1, חדר 2 וחדר 1+2 באזור אחד; כל חדר עצמאי באזור משלו.
+ * התאמה לחוקי ההתנגשות נבדקת בבדיקות.
+ */
+export const ROOM_LOCK_ZONE: Record<RoomKey, number> = {
+  ROOM1: 1,
+  ROOM2: 1,
+  ROOM1_2: 1,
+  ROOM3: 2,
+  ROOM4: 3,
+  WORKSHOP: 4,
+};

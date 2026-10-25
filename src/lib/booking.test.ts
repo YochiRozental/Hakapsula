@@ -46,6 +46,7 @@ function stubDatabase() {
   db.openingWindow.findMany = async () => [];
   db.$transaction = async (fn: (tx: unknown) => unknown) =>
     fn({
+      $executeRaw: async () => 0,
       appointment: {
         findMany: async () => [],
         create: async ({ data, include }: { data: Record<string, unknown>; include: Include }) => {

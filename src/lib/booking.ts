@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { CONFLICTING_ROOM_KEYS } from "@/lib/rooms";
+import { CONFLICTING_ROOM_KEYS, ROOM_LOCK_ZONE } from "@/lib/rooms";
 import { ensureRooms } from "@/lib/rooms-db";
 import { assertBookable } from "@/lib/opening-hours-db";
 import { MIN_DURATION_MINUTES, MAX_DURATION_MINUTES } from "@/lib/business-rules";
@@ -46,6 +46,9 @@ export async function findConflictingAppointments(
   });
 }
 
+/** מרחב השמות של נעילות ה-advisory של יצירת הזמנות (הנעילה היא לפי זוג מספרים: מרחב, אזור) */
+const APPOINTMENT_LOCK_NAMESPACE = 7301;
+
 export async function createAppointment(params: {
   userId: string;
   roomKey: RoomKey;
@@ -67,6 +70,8 @@ export async function createAppointment(params: {
   }
 
   return prisma.$transaction(async (tx) => {
+    // בלי נעילה שתי בקשות מקבילות יעברו שתיהן את בדיקת החפיפה. הנעילה משתחררת אוטומטית בסיום הטרנזקציה
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${APPOINTMENT_LOCK_NAMESPACE}::int, ${ROOM_LOCK_ZONE[roomKey]}::int)`;
     const conflictingKeys = CONFLICTING_ROOM_KEYS[roomKey];
     const conflicts = await tx.appointment.findMany({
       where: {
