@@ -43,8 +43,10 @@ export function MonthCalendar({ value, onChange, minDate, markedDates, onMonthCh
 
   // keep the displayed month in sync when `value` changes from outside (e.g. a restored selection)
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- syncs the visible month to an externally changed `value` (props -> state) */
     setViewYear(selected.year);
     setViewMonth(selected.month);
+    /* eslint-enable react-hooks/set-state-in-effect */
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 

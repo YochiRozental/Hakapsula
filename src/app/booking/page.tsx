@@ -16,6 +16,7 @@ import { MonthCalendar } from "@/components/month-calendar";
 import { ClockTimePicker } from "@/components/clock-time-picker";
 import { ActivityBadge } from "@/components/hours-summary";
 import { useDayHours } from "@/lib/use-day-hours";
+import { probeGate, usePaymentsGate } from "@/lib/payments/client";
 import { Alert, BrandHeader, Icon, ROOM_ACCENTS, RoomTile, RoomVisual, SectionTitle } from "@/components/ui";
 import type { RoomKey } from "@/generated/prisma/client";
 
@@ -42,6 +43,8 @@ type StoredSelection = {
 
 export default function BookingPage() {
   const router = useRouter();
+  // שער זרימת התשלום: סגור כברירת מחדל (באתר החי תמיד סגור); כשסגור ההזמנה פועלת בדיוק כמו קודם
+  const paymentsGate = usePaymentsGate();
   const [roomKey, setRoomKey] = useState<RoomKey>("ROOM1");
   const [date, setDate] = useState(todayIsoDate());
   const [startTime, setStartTime] = useState(DEFAULT_START_TIME);
@@ -61,14 +64,15 @@ export default function BookingPage() {
     if (!raw) return;
     try {
       const stored = JSON.parse(raw) as Partial<StoredSelection>;
+      /* eslint-disable react-hooks/set-state-in-effect -- one-time restore from localStorage after mount; reading storage during render would break SSR hydration */
       if (stored.date && stored.date >= todayIsoDate()) setDate(stored.date);
       if (stored.roomKey && ROOM_KEYS.includes(stored.roomKey)) setRoomKey(stored.roomKey);
       if (stored.startTime && isValidStart(stored.startTime)) setStartTime(stored.startTime);
       if (stored.notes) setNotes(stored.notes);
+      /* eslint-enable react-hooks/set-state-in-effect */
     } catch {
       // ignore corrupt storage
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // skip the very first commit: at that point state still holds the pre-restore defaults
@@ -134,7 +138,9 @@ export default function BookingPage() {
     const end = new Date(start.getTime() + durationMinutes * 60000);
 
     try {
-      const res = await fetch("/api/appointments", {
+      // כשהשער פתוח (סביבת פיתוח): יוצרים החזקה ל-10 דקות ועוברים לתשלום. ההזמנה מאושרת רק אחרי אימות בשרת
+      const paymentsOn = paymentsGate.loaded ? paymentsGate.enabled : await probeGate();
+      const res = await fetch(paymentsOn ? "/api/payments/holds" : "/api/appointments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -163,6 +169,11 @@ export default function BookingPage() {
       if (!res.ok) {
         setError(data.error ?? "שגיאה בקביעת התור");
         setSubmitting(false);
+        return;
+      }
+
+      if (paymentsOn) {
+        router.push(`/booking/checkout/${data.appointmentId}`);
         return;
       }
 
@@ -384,7 +395,7 @@ export default function BookingPage() {
             </div>
           </div>
           <button type="submit" disabled={submitting || conflict || dateDraftInvalid || selectedReason !== null} className="btn btn-bronze px-8! py-3! text-base!">
-            {submitting ? "קובע תור..." : "קביעת תור"}
+            {submitting ? (paymentsGate.enabled ? "שומר את החדר..." : "קובע תור...") : paymentsGate.enabled ? "המשך לתשלום" : "קביעת תור"}
             {!submitting && <Icon name="arrowLeft" className="w-4 h-4" />}
           </button>
         </div>

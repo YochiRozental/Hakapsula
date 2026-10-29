@@ -41,6 +41,17 @@ export function jerusalemDayStart(iso: string): Date {
   return new Date(wallTimeToInstant(y, m, d));
 }
 
+/**
+ * הרגע (UTC) ששעון הקיר בירושלים מראה בו את התאריך YYYY-MM-DD ואת מספר הדקות מחצות. נכון גם בימי מעבר שעון קיץ/חורף
+ * (שעה שלא קיימת מתקדמת; שעה כפולה בוחרת את המופע הראשון), כך ש-12:15 הוא תמיד 12:15 בירושלים.
+ */
+export function jerusalemWallInstant(iso: string, minutesOfDay: number): Date {
+  const [y, m, d] = parseIso(iso);
+  const guess = Date.UTC(y, m - 1, d, 0, minutesOfDay, 0);
+  const first = guess - zoneOffsetMs(guess);
+  return new Date(guess - zoneOffsetMs(first));
+}
+
 /** סוף היום: אלפית שנייה לפני תחילת היום הבא (נכון גם ליום של 23 או 25 שעות) */
 export function jerusalemDayEnd(iso: string): Date {
   const [y, m, d] = parseIso(iso);

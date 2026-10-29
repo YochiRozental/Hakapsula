@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { CONFLICTING_ROOM_KEYS } from "@/lib/rooms";
+import { blockingAppointmentWhere } from "@/lib/booking";
 import type { RoomKey } from "@/generated/prisma/client";
 
 export async function GET(request: Request) {
@@ -18,7 +19,7 @@ export async function GET(request: Request) {
 
   const appointments = await prisma.appointment.findMany({
     where: {
-      status: "CONFIRMED",
+      ...blockingAppointmentWhere(new Date()),
       room: { key: { in: CONFLICTING_ROOM_KEYS[roomKey] } },
       startTime: { lte: dayEnd },
       endTime: { gte: dayStart },

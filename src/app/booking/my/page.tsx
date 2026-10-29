@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ROOM_LABELS } from "@/lib/rooms";
+import { api, durationText, usePaymentsGate } from "@/lib/payments/client";
 import { Alert, EmptyState, Icon, Loading, PageHeader, RoomTile, RoomVisual, SectionTitle } from "@/components/ui";
 import type { RoomKey } from "@/generated/prisma/client";
 
@@ -16,6 +17,8 @@ type Appointment = {
 };
 
 export default function MyAppointmentsPage() {
+  const paymentsGate = usePaymentsGate();
+  const [notice, setNotice] = useState<string | null>(null);
   const [appointments, setAppointments] = useState<Appointment[] | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +39,26 @@ export default function MyAppointmentsPage() {
   async function handleCancel(id: string) {
     setCancellingId(id);
     setError(null);
+    setNotice(null);
     try {
+      if (paymentsGate.enabled) {
+        // זרימת התשלום פעילה: הביטול עובר דרך המסלול שמטפל בהחזר כספי ובהחזרת דקות לפי כלל 24 השעות
+        const r = await api<{ outcome?: string; minutesRestored?: number; creditedMinutes?: number }>(`/api/payments/bookings/${id}/cancel`, { body: {} });
+        if (!r.ok) {
+          setError(r.data.error ?? "שגיאה בביטול התור");
+          return;
+        }
+        const d = r.data;
+        const parts: string[] = [];
+        if (d.outcome === "REFUNDED") parts.push("התשלום בכסף הוחזר.");
+        if (d.minutesRestored) parts.push(`${durationText(d.minutesRestored)} הוחזרו ליתרה.`);
+        if (d.creditedMinutes) parts.push(`${durationText(d.creditedMinutes)} הומרו לזיכוי תקף 30 יום (החבילה המקורית פגה).`);
+        if (d.outcome === "CANCELLED_NO_REFUND") parts.push("הביטול בוצע פחות מ-24 שעות לפני ההתחלה, ולכן אין החזר אוטומטי. ניתן לפנות למנהל בבקשת חריג.");
+        if (d.outcome === "CANCELLED_REFUND_PENDING") parts.push("ההחזר הכספי בטיפול.");
+        setNotice(["התור בוטל.", ...parts].join(" "));
+        load();
+        return;
+      }
       const res = await fetch(`/api/appointments/${id}`, { method: "DELETE" });
       const data = await res.json();
       if (!res.ok) {
@@ -78,6 +100,11 @@ export default function MyAppointmentsPage() {
       {error && (
         <div className="mb-4">
           <Alert tone="error">{error}</Alert>
+        </div>
+      )}
+      {notice && (
+        <div className="mb-4">
+          <Alert tone="success">{notice}</Alert>
         </div>
       )}
 

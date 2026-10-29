@@ -4,6 +4,8 @@ import { BookingError } from "@/lib/booking-error";
 import { clearDate, loadSaveResult, replaceDate } from "@/lib/opening-hours-db";
 import { jerusalemParts, parseDateKey } from "@/lib/opening-hours";
 import { parseWindowsBody } from "../parse";
+import { getShiftsProvider } from "@/lib/shifts/gate";
+import { applyDayClosure } from "@/lib/shifts/lifecycle";
 
 export async function PUT(request: Request) {
   const session = await requireAdmin();
@@ -22,6 +24,15 @@ export async function PUT(request: Request) {
   try {
     if (body?.closed === true) {
       await replaceDate(date, { closed: true, note });
+      // סגירה מפורשת של יום משפיעה על מופעי משמרות באותו יום (דילוג, ללא חיוב, החזר אם שולם). פעיל רק כשהשער פתוח
+      const shiftsProvider = getShiftsProvider();
+      if (shiftsProvider) {
+        try {
+          await applyDayClosure({ date, adminId: session.user.id, provider: shiftsProvider });
+        } catch (closureError) {
+          console.error("[shifts] day closure effects failed", closureError instanceof Error ? closureError.name : "unknown");
+        }
+      }
     } else {
       const windows = parseWindowsBody(body?.windows);
       if (!windows) return NextResponse.json({ error: "חלונות לא תקינים" }, { status: 400 });

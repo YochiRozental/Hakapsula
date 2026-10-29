@@ -7,12 +7,15 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --import tsx --test src/lib/*.test.ts src/ivr/*.test.ts",
+    "test": "node --import tsx --test src/lib/*.test.ts src/lib/payments/*.test.ts src/lib/ivr-pin/*.test.ts src/lib/shifts/*.test.ts src/lib/finance/*.test.ts src/ivr/*.test.ts",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
+    "demo": "node scripts/demo/start.mjs",
+    "demo:reset": "node scripts/demo/start.mjs --reset",
     "ivr": "tsx src/ivr/server.ts",
-    "ivr:dev": "tsx watch src/ivr/server.ts"
+    "ivr:dev": "tsx watch src/ivr/server.ts",
+    "ivr:migrate-legacy-pins": "tsx scripts/migrate-legacy-ivr-pins.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",

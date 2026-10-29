@@ -13,7 +13,7 @@ export async function GET() {
   }
 
   const appointments = await prisma.appointment.findMany({
-    where: { userId: session.user.id },
+    where: { userId: session.user.id, status: { not: "PENDING_PAYMENT" } },
     include: { room: true },
     orderBy: { startTime: "desc" },
   });

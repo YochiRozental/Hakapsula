@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/require-admin";
 import { prisma } from "@/lib/prisma";
 import { sendApprovalNotification } from "@/lib/notifications";
+import { writeAudit } from "@/lib/finance/audit";
 
 export async function PATCH(
   request: Request,
@@ -34,10 +35,29 @@ export async function PATCH(
   });
   if (!existing) return NextResponse.json({ error: "משתמש לא נמצא" }, { status: 404 });
 
-  const user = await prisma.user.update({
-    where: { id },
-    data: { ...(role !== undefined && { role }), ...(status !== undefined && { status }) },
-    select: { id: true, name: true, email: true, phone: true, role: true, status: true },
+  // שינוי סטטוס שנוגע בחסימה (כניסה ל-BLOCKED או יציאה ממנה) נרשם ביומן הביקורת הכספי באותה טרנזקציה, בדיוק כמו בחסימה
+  // דרך הניהול הכספי. אין כתיבה כשהסטטוס לא השתנה בפועל, ולכן שליחה חוזרת של אותה בקשה לא יוצרת רשומה כפולה
+  const blockChange = status !== undefined && status !== existing.status && (status === "BLOCKED" || existing.status === "BLOCKED");
+  const user = await prisma.$transaction(async (tx) => {
+    const updated = await tx.user.update({
+      where: { id },
+      data: { ...(role !== undefined && { role }), ...(status !== undefined && { status }) },
+      select: { id: true, name: true, email: true, phone: true, role: true, status: true },
+    });
+    if (blockChange) {
+      await writeAudit(tx, {
+        action: status === "BLOCKED" ? "CUSTOMER_BLOCKED" : "CUSTOMER_UNBLOCKED",
+        adminId: session.user.id,
+        userId: id,
+        entityType: "User",
+        entityId: id,
+        outcome: "ok",
+        reason: "admin_users_screen",
+        before: { status: existing.status },
+        after: { status },
+      });
+    }
+    return updated;
   });
 
   if (status === "APPROVED" && existing.status !== "APPROVED") {

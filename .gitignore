@@ -41,3 +41,9 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# תבנית משתני סביבה ללא ערכים אמיתיים נשמרת בריפו
+!.env.example
+
+# סביבת הדגמה מקומית: סודות וסיסמאות אקראיות. לעולם לא נכנסים ל-Git
+/.demo/

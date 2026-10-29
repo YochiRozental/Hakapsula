@@ -38,6 +38,18 @@ enum RoomKey {
 enum AppointmentStatus {
   CONFIRMED
   CANCELLED
+  /// החזקה זמנית (holdExpiresAt) עד השלמת תשלום. חוסמת חדר רק כל עוד holdExpiresAt בעתיד
+  PENDING_PAYMENT
+}
+
+enum AppointmentPaymentStatus {
+  /// הזמנות שנוצרו בזרימה הרגילה (ללא תשלום מקוון)
+  NOT_REQUIRED
+  UNPAID
+  PAID
+  REFUNDED
+  /// אושרה ע"י מנהל ללא תשלום; קיים חוב פתוח
+  DEBT
 }
 
 /// מסלול הפעילות של חלון שעות (לוח שעות משותף לכל החדרים)
@@ -50,6 +62,8 @@ enum BookingSource {
   WEB
   IVR
   ADMIN
+  /// מופע של משמרת קבועה. נאכף כהזמנה רגילה (שעות פעילות ומסלול), בניגוד ל-ADMIN
+  SHIFT
 }
 
 model User {
@@ -65,11 +79,28 @@ model User {
   cardLast4    String?
   cardExpiry   String?
   passwordHash String
+  /// קוד זיהוי טלפוני בן 4 ספרות (bcrypt), נפרד לחלוטין מסיסמת האתר. null = לא הוגדר. לעולם לא מוחזר ב-API
+  ivrPinHash   String?
+  ivrPinUpdatedAt DateTime?
   /// סיסמה זמנית שהוגדרה ע"י מנהל — המשתמש חייב להחליף אותה בכניסה הראשונה
   mustChangePassword Boolean   @default(false)
   role        Role          @default(CLIENT)
   status       UserStatus    @default(PENDING)
   appointments Appointment[]
+  payments       Payment[]
+  paymentMethods PaymentMethod[]
+  hoursPackages  HoursPackage[]
+  credits        Credit[]
+  debts          Debt[]
+  packageCancellationRequests PackageCancellationRequest[]
+  ivrPinEvents   IvrPinEvent[]
+  paymentAuthorizations PaymentAuthorization[]
+  /// אישור מפורש של מנהל להזמנת משמרות קבועות. ברירת מחדל: אין הרשאה
+  canBookShifts Boolean @default(false)
+  shiftEligibilityUpdatedAt DateTime?
+  shiftEligibilityUpdatedById String?
+  shifts       Shift[]
+  shiftChangeRequests ShiftChangeRequest[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 }
@@ -82,6 +113,7 @@ model Room {
   isCombo      Boolean       @default(false)
   active       Boolean       @default(true)
   appointments Appointment[]
+  shifts       Shift[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 }
@@ -97,11 +129,22 @@ model Appointment {
   status    AppointmentStatus @default(CONFIRMED)
   source    BookingSource     @default(WEB)
   notes     String?
+  /// רלוונטי רק ל-PENDING_PAYMENT: עד מתי ההחזקה פעילה
+  holdExpiresAt DateTime?
+  paymentStatus AppointmentPaymentStatus @default(NOT_REQUIRED)
+  /// כמה דקות שולמו מיתרת חבילות/זיכויים, וכמה שולם בכסף (אגורות). נקבעים באישור ההזמנה
+  paidFromBalanceMinutes Int @default(0)
+  paidCashAgorot         Int @default(0)
+  payments  Payment[]
+  paymentAuthorizations PaymentAuthorization[]
+  shiftOccurrence ShiftOccurrence?
+  debt      Debt?
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
 
   @@index([roomId, startTime, endTime])
   @@index([userId])
+  @@index([status, holdExpiresAt])
 }
 
 /// חלון שעות פעילות. שורה עם weekday = ברירת מחדל שבועית; שורה עם date (YYYY-MM-DD) = חריג שדורס את
@@ -121,4 +164,601 @@ model OpeningWindow {
 
   @@index([active, weekday])
   @@index([active, date])
+}
+
+// ───────────────────────── תשלומים (שלב B: תשתית בלבד, עדיין לא מחוברת לזרימת ההזמנות) ─────────────────────────
+// כל הסכומים באגורות (Int). לעולם לא נשמרים מספר כרטיס מלא או CVV: רק טוקן של הספק.
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum PaymentPurpose {
+  BOOKING
+  PACKAGE
+  SHIFT_MONTH
+  DEBT
+}
+
+/// sandbox = בדיקות (Mock); live = סליקה אמיתית. נשמר על כל שורה כדי ששורת בדיקות לא תיחשב אמיתית
+enum PaymentEnvironment {
+  SANDBOX
+  LIVE
+}
+
+enum RefundStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum PackageUsageKind {
+  CONSUME
+  RESTORE
+}
+
+model Payment {
+  id                String             @id @default(cuid())
+  userId            String
+  user              User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  purpose           PaymentPurpose
+  amountAgorot      Int
+  currency          String             @default("ILS")
+  status            PaymentStatus      @default(PENDING)
+  environment       PaymentEnvironment
+  provider          String
+  providerPaymentId String?
+  /// מפתח למניעת חיוב כפול; ייחודי לכל תשלום
+  idempotencyKey    String             @unique
+  appointmentId     String?
+  appointment       Appointment?       @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  /// רכישת חבילה (purpose = PACKAGE): כמה שעות נרכשות. המחיר נקבע בשרת מטבלת המחירים
+  packageHours      Int?
+  /// תשלום הזמנה (purpose = BOOKING): כמה דקות מתוכננות לניכוי מיתרה בעת האישור. הסכום בכסף הוא ההפרש בלבד
+  packageMinutes    Int                @default(0)
+  hoursPackage      HoursPackage?
+  shiftCharge       ShiftCharge?
+  debtSettlement    DebtSettlement?
+  paymentMethodId   String?
+  paymentMethod     PaymentMethod?     @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  failureCode       String?
+  paidAt            DateTime?
+  attempts          PaymentAttempt[]
+  refunds           Refund[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@unique([provider, providerPaymentId])
+  @@index([userId, createdAt])
+  @@index([appointmentId])
+  @@index([status, createdAt])
+}
+
+/// יומן ביקורת של פעולות מול הספק. לא נשמרים כאן סודות, טוקנים או פרטי כרטיס
+model PaymentAttempt {
+  id        String   @id @default(cuid())
+  paymentId String
+  payment   Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  action    String // create | status | cancel | refund | charge | webhook
+  outcome   String // ok | error
+  errorCode String?
+  detail    String?
+  createdAt DateTime @default(now())
+
+  @@index([paymentId, createdAt])
+}
+
+model PaymentMethod {
+  id          String             @id @default(cuid())
+  userId      String
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider    String
+  environment PaymentEnvironment
+  /// טוקן של הספק בלבד
+  token       String
+  last4       String?
+  brand       String?
+  /// MM/YY
+  expiry      String?
+  active      Boolean            @default(true)
+  payments    Payment[]
+  shifts      Shift[]
+  createdAt   DateTime           @default(now())
+
+  @@unique([provider, token])
+  @@index([userId])
+}
+
+model Refund {
+  id               String       @id @default(cuid())
+  paymentId        String
+  payment          Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  amountAgorot     Int
+  status           RefundStatus @default(PENDING)
+  reason           String?
+  providerRefundId String?
+  idempotencyKey   String       @unique
+  /// מזהה המנהל שיזם (אם רלוונטי)
+  createdById      String?
+  createdAt        DateTime     @default(now())
+
+  @@index([paymentId])
+}
+
+/// התראות webhook שעובדו; מונע עיבוד כפול של אותו אירוע
+model WebhookEvent {
+  id          String    @id @default(cuid())
+  provider    String
+  eventId     String
+  type        String
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([provider, eventId])
+}
+
+model HoursPackage {
+  id               String         @id @default(cuid())
+  userId           String
+  user             User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  hours            Int
+  pricePaidAgorot  Int
+  minutesTotal     Int
+  minutesRemaining Int
+  purchasedAt      DateTime       @default(now())
+  expiresAt        DateTime
+  /// ביטול חבילה ע"י מנהל (שלב H): היתרה אופסה ואין ניצול נוסף. דקות שיוחזרו אליה בעתיד הופכות לזיכוי כמו בחבילה שפגה
+  cancelledAt      DateTime?
+  cancelledById    String?
+  /// התשלום שרכש את החבילה
+  paymentId        String?        @unique
+  payment          Payment?       @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  usages           PackageUsage[]
+  cancellationRequests PackageCancellationRequest[]
+
+  @@index([userId, expiresAt])
+}
+
+enum CancellationRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// בקשת לקוח לבטל חבילה. אינה מבטלת את החבילה ואינה מבצעת החזר: ההחלטה והחישוב הם של מנהל (שלב H)
+model PackageCancellationRequest {
+  id           String                    @id @default(cuid())
+  packageId    String
+  package      HoursPackage              @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  /// המשתמש שהגיש את הבקשה
+  userId       String
+  user         User                      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  reason       String?
+  status       CancellationRequestStatus @default(PENDING)
+  createdAt    DateTime                  @default(now())
+  decidedAt    DateTime?
+  decidedById  String?
+  decisionNote String?
+  /// סכום ההחזר הכספי שהמנהל קבע באישור (אגורות; 0 = ללא החזר) ושורת ההחזר שנוצרה עבורו
+  refundAgorot Int          @default(0)
+  refundId     String?      @unique
+  /// דקות שנותרו בחבילה ברגע האישור (נאפסו)
+  forfeitedMinutes Int?
+
+  @@index([packageId, status])
+  @@index([userId, createdAt])
+}
+
+model PackageUsage {
+  id            String           @id @default(cuid())
+  packageId     String
+  package       HoursPackage     @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  kind          PackageUsageKind
+  minutes       Int
+  /// ההזמנה שגרמה לתנועה (עדיין בלי FK, כמו ב-Payment)
+  appointmentId String?
+  /// בהחזרה מחבילה שפגה: הזיכוי שנוצר במקום (החבילה המקורית לא מוארכת ולא מקבלת את הדקות)
+  convertedToCreditId String?
+  createdAt     DateTime         @default(now())
+
+  @@index([packageId])
+  @@index([appointmentId])
+}
+
+/// זיכוי בדקות (למשל תמורת דקות מחבילה שפגה), בתוקף מוגבל
+model Credit {
+  id                  String   @id @default(cuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  minutesTotal        Int
+  minutesRemaining    Int
+  expiresAt           DateTime
+  reason              String?
+  sourceAppointmentId String?
+  createdAt           DateTime @default(now())
+  usages              CreditUsage[]
+
+  @@index([userId, expiresAt])
+}
+
+/// תנועות ניצול והחזרה של זיכוי (כמו PackageUsage)
+model CreditUsage {
+  id                  String           @id @default(cuid())
+  creditId            String
+  credit              Credit           @relation(fields: [creditId], references: [id], onDelete: Restrict)
+  kind                PackageUsageKind
+  minutes             Int
+  appointmentId       String?
+  convertedToCreditId String?
+  createdAt           DateTime         @default(now())
+
+  @@index([creditId])
+  @@index([appointmentId])
+}
+
+enum DebtStatus {
+  OPEN
+  /// ממתין לבירור (למשל חיוב חוב שמצבו לא ידוע). נחשב פתוח, אך אין להסדיר אותו עד הכרעה
+  IN_REVIEW
+  /// נסגר בתשלום בפועל (כסף נגבה או אושר כתשלום חיצוני עם אסמכתה)
+  PAID
+  /// נסגר בוויתור מנהל (עם סיבה). paidAgorot עשוי להכיל תשלום חלקי שבוצע לפני הוויתור
+  WAIVED
+}
+
+enum DebtSettlementKind {
+  PAYMENT
+  WAIVER
+}
+
+/// חוב על הזמנה שמנהל אישר ללא תשלום. חוב פתוח אינו חוסם הזמנות אוטומטית
+model Debt {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  appointmentId String?     @unique
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  amountAgorot  Int
+  status        DebtStatus  @default(OPEN)
+  reason        String?
+  createdById   String
+  resolvedById  String?
+  resolvedAt    DateTime?
+  /// כמה מהחוב שולם בפועל וכמה נמחל. החוב הפתוח = amountAgorot - paidAgorot - waivedAgorot, ולעולם לא שלילי (אילוץ במסד)
+  paidAgorot    Int         @default(0)
+  waivedAgorot  Int         @default(0)
+  reviewNote    String?
+  settlements   DebtSettlement[]
+  createdAt     DateTime    @default(now())
+
+  @@index([userId, status])
+}
+
+/// תנועת הסדרה של חוב: תשלום (בכרטיס שמור או תשלום חיצוני מתועד) או ויתור. נוספות בלבד; חוב לעולם לא נמחק
+model DebtSettlement {
+  id             String             @id @default(cuid())
+  debtId         String
+  debt           Debt               @relation(fields: [debtId], references: [id], onDelete: Restrict)
+  kind           DebtSettlementKind
+  amountAgorot   Int
+  /// SAVED_CARD (נגבה דרך הספק) או EXTERNAL (תשלום מחוץ למערכת שהמנהל אישר במפורש)
+  method         String?
+  /// תשלום דרך הספק, אם קיים. ייחודי: תשלום אחד לא מסדיר פעמיים
+  paymentId      String?            @unique
+  payment        Payment?           @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  /// אסמכתה לתשלום חיצוני (מספר קבלה, העברה וכד')
+  reference      String?
+  reason         String?
+  createdById    String
+  idempotencyKey String             @unique
+  createdAt      DateTime           @default(now())
+
+  @@index([debtId])
+}
+
+enum RefundReviewStatus {
+  APPROVED
+  REJECTED
+}
+
+/// הכרעת מנהל בבקשת חריג החזר להזמנה שבוטלה מאוחר. הזמנה ללא שורה כאן ממתינה להכרעה
+model RefundReview {
+  id            String             @id @default(cuid())
+  appointmentId String             @unique
+  status        RefundReviewStatus
+  reason        String?
+  decidedById   String
+  decidedAt     DateTime           @default(now())
+}
+
+/// יומן ביקורת של פעולות ניהול כספי. נוספות בלבד: טריגר במסד חוסם עדכון ומחיקה. ללא מפתחות זרים כדי שיישמר גם אחרי מחיקת ישויות.
+/// לעולם לא כולל מספרי כרטיס, טוקנים, סיסמאות או קודי IVR
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String
+  adminId    String?
+  userId     String?
+  entityType String
+  entityId   String?
+  /// הפעולה הכספית הקשורה (תשלום/החזר/חוב/חיוב משמרת) כמזהה טקסטואלי
+  paymentId  String?
+  outcome    String
+  reason     String?
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+}
+
+/// מצב "הצד של הספק" עבור ספק ה-Mock בלבד (sandbox). מדמה אחסון מרוחק שורד הפעלה מחדש של השרת.
+/// לא נקרא ולא נכתב על ידי שום ספק אמיתי
+model MockProviderRecord {
+  key       String   @id
+  data      Json
+  createdAt DateTime @default(now())
+}
+
+/// הגבלת ניסיונות לאימות קוד טלפוני, עמידה (במסד, לא בזיכרון). שורה אחת לכל (scope, subject):
+///  VERIFY/SET עם subject = מזהה משתמש; GLOBAL_VERIFY עם subject = "*" (הגנה מפני ניסיונות המוניים על משתמשים שונים)
+model PinThrottle {
+  scope        String
+  subject      String
+  failedCount  Int       @default(0)
+  /// רק ל-GLOBAL_VERIFY: תחילת חלון הספירה
+  windowStart  DateTime?
+  blockedUntil DateTime?
+  lastAttemptAt DateTime?
+  updatedAt    DateTime  @updatedAt
+
+  @@id([scope, subject])
+}
+
+enum IvrPinEventKind {
+  SET
+  CHANGED
+  RESET
+  MIGRATED_LEGACY
+  BLOCKED
+}
+
+/// יומן ביקורת לאירועי קוד טלפוני. לעולם לא כולל את הקוד או את ה-hash
+model IvrPinEvent {
+  id        String          @id @default(cuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      IvrPinEventKind
+  /// מי ביצע (המשתמש עצמו, מנהל, או ריק למערכת)
+  actorId   String?
+  createdAt DateTime        @default(now())
+
+  @@index([userId, createdAt])
+}
+
+enum PaymentAuthorizationAction {
+  /// אישור הזמנה מכוסה במלואה מיתרה
+  CONFIRM_BALANCE
+  /// חיוב אמצעי תשלום שמור (כולל תשלום משולב: החלק בכסף בלבד)
+  PAY_CARD
+}
+
+/**
+ * הרשאה חד-פעמית וקצרת-חיים לפעולה כספית אחת, שמונפקת רק אחרי אימות קוד טלפוני מוצלח. קשורה למשתמש, להזמנה,
+ * לפעולה ולחלוקת התשלום המדויקת (סכום ודקות) שהוצגה למתקשר. נצרכת אטומית (consumedAt) ברגע ביצוע הפעולה, ולכן
+ * אי אפשר להשתמש בה פעמיים, למשתמש אחר, להזמנה אחרת, לפעולה אחרת או אחרי שהתוכנית השתנתה. נשמרת במסד ולא בזיכרון שיחה.
+ */
+model PaymentAuthorization {
+  /// מזהה אקראי (128 ביט). משמש רק את הקוד השרתי שהנפיק את ההרשאה
+  id            String                     @id
+  userId        String
+  user          User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointmentId String
+  appointment   Appointment                @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  action        PaymentAuthorizationAction
+  amountAgorot  Int
+  packageMinutes Int
+  expiresAt     DateTime
+  consumedAt    DateTime?
+  createdAt     DateTime                   @default(now())
+
+  @@index([userId, createdAt])
+  @@index([appointmentId])
+}
+
+// ───────────────────────── משמרות קבועות (שלב G) ─────────────────────────
+// משמרת = הזמנה קבועה של אותו חדר, באותו יום בשבוע ובאותה משבצת, לשלושה חודשים קלנדריים (החודש שבו היא מתחילה ועוד
+// שניים). כל מופע הוא Appointment מאושר (source = SHIFT), ולכן כל מנגנון הזמינות וההתנגשויות הקיים חל עליו כמות שהוא.
+// כל הסכומים באגורות. החיוב החודשי נעשה ע"י ShiftCharge (שורה אחת לכל משמרת ולכל חודש) ובאמצעות Payment.
+
+enum ShiftStatus {
+  /// נוצרה והמשבצות שמורות, ממתינה לאישור החיוב הראשון (או לבירור מנהל אם מצב החיוב לא ידוע)
+  PENDING
+  ACTIVE
+  /// חיוב נכשל ותקופת החסד חלפה. המשבצות נשמרות; אין שימוש עד החלטת מנהל
+  SUSPENDED
+  CANCELLED
+  /// תקופת המשמרת הסתיימה
+  ENDED
+}
+
+model Shift {
+  id             String        @id @default(cuid())
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  roomId         String
+  room           Room          @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  /// 0 = ראשון ... 5 = שישי (אין משמרת בשבת)
+  weekday        Int
+  /// MORNING | NOON | AFTERNOON | EVENING (ראו pricing.ts)
+  windowId       String
+  /// YYYY-MM-DD (שעון ירושלים). endDate = היום האחרון של החודש השלישי
+  startDate      String
+  endDate        String
+  status         ShiftStatus   @default(PENDING)
+  /// אמצעי התשלום המועדף לחיוב החודשי (חייב להישאר שמיש בכל חיוב)
+  paymentMethodId String?
+  paymentMethod  PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  /// מחיר מופע בעת היצירה (תמונת מצב), באגורות
+  occurrencePriceAgorot Int
+  /// מפתח אידמפוטנטיות ליצירה (לחיצה כפולה/רענון מחזירים את אותה משמרת)
+  idempotencyKey String?       @unique
+  createdById    String
+  suspendedAt    DateTime?
+  suspensionReason String?
+  resumedAt      DateTime?
+  resumedById    String?
+  cancelledAt    DateTime?
+  cancelReason   String?
+  occurrences    ShiftOccurrence[]
+  charges        ShiftCharge[]
+  requests       ShiftChangeRequest[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([userId, status])
+  @@index([status, endDate])
+  @@index([roomId, weekday])
+}
+
+enum ShiftOccurrenceStatus {
+  SCHEDULED
+  /// נסגר ע"י סגירת יום מפורשת של מנהל: ללא חיוב
+  SKIPPED_CLOSED_DAY
+  CANCELLED
+}
+
+model ShiftOccurrence {
+  id            String                @id @default(cuid())
+  shiftId       String
+  shift         Shift                 @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  /// YYYY-MM-DD
+  date          String
+  /// YYYY-MM (חודש קלנדרי בשעון ירושלים): לפיו מחושב החיוב
+  month         String
+  startTime     DateTime
+  endTime       DateTime
+  status        ShiftOccurrenceStatus @default(SCHEDULED)
+  statusNote    String?
+  priceAgorot   Int
+  /// ההזמנה שחוסמת את החדר. מיוחדת למופע
+  appointmentId String?               @unique
+  appointment   Appointment?          @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  /// כמה הוחזר/זוכה על המופע הזה אחרי שנגבה (באגורות)
+  refundedAgorot Int                  @default(0)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@unique([shiftId, date])
+  @@index([shiftId, month, status])
+  @@index([date, status])
+}
+
+enum ShiftChargeStatus {
+  /// נוצר ועדיין לא נשלח לספק (או נתפס ע"י ריצה)
+  PENDING
+  PAID
+  /// כישלון ודאי: נרשם, תקופת חסד פעילה
+  FAILED
+  /// מצב החיוב אצל הספק לא ידוע: אסור חיוב חוזר אוטומטי עד בירור
+  UNKNOWN
+  /// בוטל/הוסדר ע"י מנהל או התאפס (למשל כל המופעים נסגרו): אין חיוב
+  WAIVED
+}
+
+model ShiftCharge {
+  id              String            @id @default(cuid())
+  shiftId         String
+  shift           Shift             @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  /// YYYY-MM
+  month           String
+  amountAgorot    Int
+  occurrenceCount Int
+  /// החיוב הראשון (נעשה באישור המשמרת)
+  isFirst         Boolean           @default(false)
+  status          ShiftChargeStatus @default(PENDING)
+  /// מספר ניסיון. נכנס למפתח האידמפוטנטיות מול הספק: ניסיון חדש רק אחרי כישלון ודאי
+  attempt         Int               @default(0)
+  /// תפיסת ריצה: מונעת שתי ריצות שמחייבות במקביל
+  claimedAt       DateTime?
+  paymentId       String?           @unique
+  payment         Payment?          @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  failureCode     String?
+  graceUntil      DateTime?
+  lastAttemptAt   DateTime?
+  paidAt          DateTime?
+  /// סך מה שהוחזר/זוכה על חיוב ששולם (סגירת יום, ביטול מאושר)
+  refundedAgorot  Int               @default(0)
+  resolvedById    String?
+  note            String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@unique([shiftId, month])
+  @@index([status, graceUntil])
+}
+
+enum ShiftRequestKind {
+  CHANGE
+  CANCEL
+}
+
+enum ShiftRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// בקשת לקוח לשינוי/ביטול משמרת. אינה משנה דבר עד אישור מנהל
+model ShiftChangeRequest {
+  id               String             @id @default(cuid())
+  shiftId          String
+  shift            Shift              @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  userId           String
+  user             User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  kind             ShiftRequestKind
+  status           ShiftRequestStatus @default(PENDING)
+  reason           String?
+  /// שינוי מבוקש (רק ל-CHANGE): חדר / יום בשבוע / משבצת
+  proposedRoomKey  String?
+  proposedWeekday  Int?
+  proposedWindowId String?
+  /// מתי הלקוח מבקש שהשינוי ייכנס לתוקף (YYYY-MM-DD, אופציונלי)
+  requestedFrom    String?
+  decidedAt        DateTime?
+  decidedById      String?
+  decisionNote     String?
+  /// מאיזה תאריך ההחלטה הוחלה בפועל (נקבע ע"י המערכת/מנהל)
+  appliedFrom      String?
+  createdAt        DateTime           @default(now())
+
+  @@index([shiftId, status])
+  @@index([status, createdAt])
+}
+
+enum CronRunStatus {
+  RUNNING
+  SUCCEEDED
+  PARTIAL
+  FAILED
+}
+
+/// תיעוד הרצות של עבודות מתוזמנות (חיוב חודשי). שורת RUNNING אחת לכל עבודה בכל רגע (אינדקס ייחודי חלקי) = מניעת ריצה מקבילה
+model CronRun {
+  id         String        @id @default(cuid())
+  job        String
+  /// YYYY-MM לפי שעון ירושלים בעת ההרצה
+  period     String
+  trigger    String
+  status     CronRunStatus @default(RUNNING)
+  startedAt  DateTime      @default(now())
+  finishedAt DateTime?
+  summary    Json?
+
+  @@index([job, startedAt])
 }

@@ -18,7 +18,7 @@ type Appointment = {
   endTime: string;
   status: "CONFIRMED" | "CANCELLED";
   notes: string | null;
-  source: "WEB" | "IVR" | "ADMIN";
+  source: "WEB" | "IVR" | "ADMIN" | "SHIFT";
   room: { key: RoomKey; name: string };
   user: { id: string; name: string; email: string | null; phone: string | null };
 };
@@ -53,6 +53,7 @@ const FILTER_FIELDS: FilterField[] = [
       { value: "WEB", label: "אתר" },
       { value: "ADMIN", label: "ניהול" },
       { value: "IVR", label: "IVR" },
+      { value: "SHIFT", label: "משמרת" },
     ],
   },
   { key: "userName", label: "שם לקוח", type: "text" },
@@ -408,7 +409,7 @@ export default function AdminAppointmentsPage() {
                     <td className="tabular-nums whitespace-nowrap text-stone-600">{a.user.phone ?? "—"}</td>
                     <td>
                       <span className="badge bg-cream-100 text-stone-600">
-                        {a.source === "WEB" ? "אתר" : a.source === "ADMIN" ? "ניהול" : "IVR"}
+                        {a.source === "WEB" ? "אתר" : a.source === "ADMIN" ? "ניהול" : a.source === "SHIFT" ? "משמרת" : "IVR"}
                       </span>
                     </td>
                     <td>

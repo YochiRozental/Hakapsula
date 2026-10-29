@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/require-admin";
 import { PageHeader } from "@/components/ui";
 import { UserCard } from "@/components/user-card";
 import { UserActions } from "./user-actions";
+import { getFinanceProvider } from "@/lib/finance/gate";
 
 export default async function AdminUserCardPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireAdmin();
@@ -28,9 +29,17 @@ export default async function AdminUserCardPage({ params }: { params: Promise<{ 
         eyebrow="כרטיס משתמש"
         title={user.name}
         actions={
-          <Link href="/admin/users" className="btn btn-secondary btn-sm">
-            חזרה לרשימה
-          </Link>
+          <>
+            {/* כרטיס כספי: מופיע רק כשהשער FINANCE_ADMIN_ENABLED פתוח */}
+            {user.role === "CLIENT" && getFinanceProvider() && (
+              <Link href={`/admin/finance/customers/${user.id}`} className="btn btn-primary btn-sm">
+                כרטיס כספי
+              </Link>
+            )}
+            <Link href="/admin/users" className="btn btn-secondary btn-sm">
+              חזרה לרשימה
+            </Link>
+          </>
         }
       />
       <UserCard

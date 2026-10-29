@@ -13,14 +13,18 @@ const TABS: { href: string; label: string; icon: IconName }[] = [
   { href: "/admin/users", label: "משתמשים", icon: "users" },
 ];
 
-export function AdminTabs() {
+const SHIFTS_TAB = { href: "/admin/shifts", label: "משמרות", icon: "clock" as IconName };
+
+const FINANCE_TAB = { href: "/admin/finance", label: "ניהול כספי", icon: "card" as IconName };
+
+export function AdminTabs({ showShifts = false, showFinance = false }: { showShifts?: boolean; showFinance?: boolean }) {
   const pathname = usePathname();
   return (
     <nav
       aria-label="ניווט ניהול"
       className="card p-2 lg:p-3 flex lg:flex-col gap-1 overflow-x-auto lg:sticky lg:top-28"
     >
-      {TABS.map((tab) => {
+      {[...TABS, ...(showShifts ? [SHIFTS_TAB] : []), ...(showFinance ? [FINANCE_TAB] : [])].map((tab) => {
         const active = tab.href === "/admin" ? pathname === "/admin" : pathname?.startsWith(tab.href);
         return (
           <Link

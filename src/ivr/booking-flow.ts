@@ -2,16 +2,16 @@ import type { Call, Msg } from "yemot-router2";
 import { prisma } from "@/lib/prisma";
 import { createAppointment, BookingError } from "@/lib/booking";
 import { hashPassword } from "@/lib/password";
+import { unusablePasswordHash } from "@/lib/ivr-pin/service";
+import { text } from "@/ivr/messages";
+import { isIvrPaymentsEnabled } from "@/ivr/payments-flag";
+import { runPaidBooking } from "@/ivr/payment-flow";
+import { getRuntimeProvider } from "@/lib/payments/runtime";
 import { identifyCaller, type CallerIdentity } from "@/ivr/identify";
 import { ROOM_DIGIT_MAP, DURATION_DIGIT_MAP } from "@/ivr/ivr-options";
 import { ROOM_LABELS } from "@/lib/rooms";
 import { DURATION_OPTIONS } from "@/lib/slots";
 import { bookingFile, notRegisteredFile, BOOKING_FILES, NOT_REGISTERED_FILES } from "@/ivr/prompts";
-
-/** להודעות שנשארות דינמיות בהכרח (שם חופשי שנאמר ע"י המתקשר, הודעת האישור עם התאריך/שעה, או הודעות שגיאה שמגיעות מלוגיקת עסקית משותפת עם האתר - src/lib/booking.ts) */
-function text(data: string): Msg {
-  return { type: "text", data, removeInvalidChars: true };
-}
 
 /**
  * מבצע read עם ולידציה + ניסיונות חוזרים. אם המתקשר לא נותן קלט תקין אחרי maxAttempts,
@@ -129,10 +129,13 @@ async function readNewPin(call: Call): Promise<string> {
 async function performRegistration(call: Call, phone: string) {
   const name = await readSpokenName(call);
   const pin = await readNewPin(call);
-  const passwordHash = await hashPassword(pin);
+  // הקוד הטלפוני נשמר רק ב-ivrPinHash. passwordHash (שדה חובה) מקבל hash של סיסמה אקראית שאיש אינו מכיר, כך שהקוד
+  // הטלפוני לעולם אינו סיסמת אתר, גם אם בעתיד יתווסף אימייל לחשבון
+  const ivrPinHash = await hashPassword(pin);
+  const passwordHash = await unusablePasswordHash();
 
   try {
-    await prisma.user.create({ data: { name, phone, passwordHash } });
+    await prisma.user.create({ data: { name, phone, passwordHash, ivrPinHash, ivrPinUpdatedAt: new Date() } });
   } catch {
     return call.id_list_message([notRegisteredFile(NOT_REGISTERED_FILES.REGISTRATION_ERROR)]);
   }
@@ -197,6 +200,12 @@ async function runBookingDialog(call: Call, user: { id: string; name: string }) 
     minute
   );
   const endTime = new Date(startTime.getTime() + durationMinutes * 60000);
+
+  // שער תשלום בטלפון (סגור כברירת מחדל): כשהוא פתוח וקיים ספק תשלום תקף, ההזמנה עוברת החזקה + תשלום מאומת בקוד.
+  // כשהוא סגור, ממשיכים בדיוק במסלול הקיים למטה, ללא שינוי.
+  if (isIvrPaymentsEnabled() && getRuntimeProvider()) {
+    return runPaidBooking(call, user, { roomKey, startTime, endTime });
+  }
 
   // הודעת אישור זו נכשלה שוב ושוב כשהורכבה משרשור ארוך של 12 קטעי קול נפרדים (קבצים+טקסט מתחלפים).
   // חוזרים לתבנית היחידה שהוכחה כעובדת בפועל בקו האמיתי: משפט TTS אחד + קובץ מוקלט אחד (בדיוק כמו הברכה).
