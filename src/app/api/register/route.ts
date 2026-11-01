@@ -17,7 +17,7 @@ const registerSchema = z
   .object({
     email: z.string().trim().email("כתובת אימייל לא תקינה"),
     password: z.string().min(4, "הסיסמה חייבת להכיל לפחות 4 תווים"),
-    gender: fields.gender,
+    gender: optionalField(fields.gender),
     firstName: optionalField(fields.firstName),
     lastName: optionalField(fields.lastName),
     phone: optionalField(fields.phone),

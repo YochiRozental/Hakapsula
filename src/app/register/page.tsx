@@ -144,7 +144,6 @@ function RegisterForm() {
                 <input
                   type="radio"
                   name="gender"
-                  required
                   value={o.value}
                   checked={form.gender === o.value}
                   onChange={() => setForm({ ...form, gender: o.value })}
@@ -153,7 +152,7 @@ function RegisterForm() {
               </label>
             ))}
           </div>
-          <p className="text-xs text-stone-400 mt-1.5">נדרש לצורך התאמת שעות בנים / בנות</p>
+          <p className="text-xs text-stone-400 mt-1.5">נדרש להזמנת חדר, לצורך התאמת שעות בנים / בנות</p>
         </div>
         <div>
           <label htmlFor="reg-email" className="field-label">אימייל *</label>
