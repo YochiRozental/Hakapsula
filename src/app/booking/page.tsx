@@ -11,16 +11,32 @@ import {
   formatWindow,
   parseTimeOption,
 } from "@/lib/opening-hours";
-import { combineDateAndTime, todayIsoDate, WEB_BOOKING_DURATION_MINUTES } from "@/lib/slots";
+import {
+  combineDateAndTime,
+  todayIsoDate,
+  WEB_BOOKING_DURATION_MINUTES,
+} from "@/lib/slots";
 import { MonthCalendar } from "@/components/month-calendar";
 import { ClockTimePicker } from "@/components/clock-time-picker";
 import { ActivityBadge } from "@/components/hours-summary";
 import { useDayHours } from "@/lib/use-day-hours";
 import { probeGate, usePaymentsGate } from "@/lib/payments/client";
-import { Alert, BrandHeader, Icon, ROOM_ACCENTS, RoomTile, RoomVisual, SectionTitle } from "@/components/ui";
+import {
+  Alert,
+  BrandHeader,
+  Icon,
+  ROOM_ACCENTS,
+  RoomTile,
+  RoomVisual,
+  SectionTitle,
+} from "@/components/ui";
 import type { RoomKey } from "@/generated/prisma/client";
 
-type BusyInterval = { startTime: string; endTime: string; room: { key: RoomKey; name: string } };
+type BusyInterval = {
+  startTime: string;
+  endTime: string;
+  room: { key: RoomKey; name: string };
+};
 
 const durationMinutes = WEB_BOOKING_DURATION_MINUTES;
 // בשעון מוצגות כל השעות (כל 5 דקות); אלו שאינן זמינות לפי שעות הפעילות של המסלול מוצגות מוחלשות
@@ -30,7 +46,12 @@ const MAX_START_MINUTES = 24 * 60 - durationMinutes;
 const DEFAULT_START_TIME = formatMinutes(8 * 60);
 function isValidStart(t: string) {
   const total = parseTimeOption(t);
-  return /^\d{2}:\d{2}$/.test(t) && total >= MIN_START_MINUTES && total <= MAX_START_MINUTES && total % CLOCK_STEP_MINUTES === 0;
+  return (
+    /^\d{2}:\d{2}$/.test(t) &&
+    total >= MIN_START_MINUTES &&
+    total <= MAX_START_MINUTES &&
+    total % CLOCK_STEP_MINUTES === 0
+  );
 }
 const LAST_SELECTION_KEY = "booking:lastSelection";
 
@@ -66,8 +87,10 @@ export default function BookingPage() {
       const stored = JSON.parse(raw) as Partial<StoredSelection>;
       /* eslint-disable react-hooks/set-state-in-effect -- one-time restore from localStorage after mount; reading storage during render would break SSR hydration */
       if (stored.date && stored.date >= todayIsoDate()) setDate(stored.date);
-      if (stored.roomKey && ROOM_KEYS.includes(stored.roomKey)) setRoomKey(stored.roomKey);
-      if (stored.startTime && isValidStart(stored.startTime)) setStartTime(stored.startTime);
+      if (stored.roomKey && ROOM_KEYS.includes(stored.roomKey))
+        setRoomKey(stored.roomKey);
+      if (stored.startTime && isValidStart(stored.startTime))
+        setStartTime(stored.startTime);
       if (stored.notes) setNotes(stored.notes);
       /* eslint-enable react-hooks/set-state-in-effect */
     } catch {
@@ -108,21 +131,32 @@ export default function BookingPage() {
     if (!dayHours) return "טוען שעות פעילות...";
     if (isToday) {
       const now = new Date();
-      if (startMinutes < now.getHours() * 60 + now.getMinutes()) return "השעה כבר עברה";
+      if (startMinutes < now.getHours() * 60 + now.getMinutes())
+        return "השעה כבר עברה";
     }
-    return explainUnavailable(dayHours, startMinutes, startMinutes + durationMinutes, track ?? undefined);
+    return explainUnavailable(
+      dayHours,
+      startMinutes,
+      startMinutes + durationMinutes,
+      track ?? undefined,
+    );
   };
   const selectedReason = unavailableReason(parseTimeOption(startTime));
   const dayWindows = dayHours?.windows ?? [];
 
-  const endTimeLabel = formatMinutes(parseTimeOption(startTime) + durationMinutes);
+  const endTimeLabel = formatMinutes(
+    parseTimeOption(startTime) + durationMinutes,
+  );
   const conflict = useMemo(() => {
     const start = combineDateAndTime(date, startTime);
     const end = new Date(start.getTime() + durationMinutes * 60000);
-    return busy.some((b) => start < new Date(b.endTime) && end > new Date(b.startTime));
+    return busy.some(
+      (b) => start < new Date(b.endTime) && end > new Date(b.startTime),
+    );
   }, [busy, date, startTime]);
 
-  const dateDraftInvalid = dateDraft !== null && (!dateDraft || dateDraft < todayIsoDate());
+  const dateDraftInvalid =
+    dateDraft !== null && (!dateDraft || dateDraft < todayIsoDate());
 
   function handleManualDate(value: string) {
     setDateDraft(value);
@@ -139,17 +173,22 @@ export default function BookingPage() {
 
     try {
       // כשהשער פתוח (סביבת פיתוח): יוצרים החזקה ל-10 דקות ועוברים לתשלום. ההזמנה מאושרת רק אחרי אימות בשרת
-      const paymentsOn = paymentsGate.loaded ? paymentsGate.enabled : await probeGate();
-      const res = await fetch(paymentsOn ? "/api/payments/holds" : "/api/appointments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          roomKey,
-          startTime: start.toISOString(),
-          endTime: end.toISOString(),
-          notes,
-        }),
-      });
+      const paymentsOn = paymentsGate.loaded
+        ? paymentsGate.enabled
+        : await probeGate();
+      const res = await fetch(
+        paymentsOn ? "/api/payments/holds" : "/api/appointments",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            roomKey,
+            startTime: start.toISOString(),
+            endTime: end.toISOString(),
+            notes,
+          }),
+        },
+      );
       const data = await res.json();
 
       // הבחירה כבר נשמרת ב-localStorage, ולכן היא תשוחזר בחזרה לעמוד זה
@@ -199,7 +238,7 @@ export default function BookingPage() {
                 {i + 1}
               </span>
               {step}
-              {i < 2 &&<span className="w-5 h-px bg-white/25" />}
+              {i < 2 && <span className="w-5 h-px bg-white/25" />}
             </li>
           ))}
         </ol>
@@ -241,11 +280,15 @@ export default function BookingPage() {
                     >
                       {ROOM_LABELS[key]}
                     </span>
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${ROOM_ACCENTS[key].dot}`} />
+                    <span
+                      className={`w-2 h-2 rounded-full shrink-0 ${ROOM_ACCENTS[key].dot}`}
+                    />
                   </span>
                   <span
                     className={`absolute inset-x-0 bottom-0 h-0.5 transition-opacity ${
-                      active ? "bg-linear-to-l from-brand-500 via-bronze-400 to-brand-500 opacity-100" : "opacity-0"
+                      active
+                        ? "bg-linear-to-l from-brand-500 via-bronze-400 to-brand-500 opacity-100"
+                        : "opacity-0"
                     }`}
                   />
                 </button>
@@ -255,7 +298,8 @@ export default function BookingPage() {
           {roomKey === "ROOM1_2" && (
             <p className="flex items-start gap-2 text-xs text-bronze-700 bg-bronze-50 ring-1 ring-bronze-100 rounded-xl px-3.5 py-2.5 mt-4">
               <Icon name="sparkle" className="w-4 h-4 shrink-0" />
-              שים לב: הזמנת חדר 1+2 חוסמת גם את חדר 1 וגם את חדר 2 בטווח הזמן שנבחר.
+              שים לב: הזמנת חדר 1+2 חוסמת גם את חדר 1 וגם את חדר 2 בטווח הזמן
+              שנבחר.
             </p>
           )}
         </section>
@@ -265,19 +309,9 @@ export default function BookingPage() {
             <SectionTitle index="02" hint="ימים שעברו אינם זמינים">
               תאריך
             </SectionTitle>
-            <div className="rounded-2xl bg-cream-50 ring-1 ring-cream-200 p-4 sm:p-5">
-              <MonthCalendar
-                value={date}
-                onChange={(d) => {
-                  setDateDraft(null);
-                  setDate(d);
-                }}
-                minDate={todayIsoDate()}
-              />
-            </div>
-            <div className="mt-4">
+            <div className="mb-4">
               <label htmlFor="booking-date" className="field-label">
-                או הזנה ידנית של תאריך
+                הזנה ידנית של תאריך
               </label>
               <input
                 id="booking-date"
@@ -288,7 +322,21 @@ export default function BookingPage() {
                 onBlur={() => setDateDraft(null)}
                 className="field"
               />
-              {dateDraftInvalid && <p className="text-xs text-red-600 mt-1.5">הזינו תאריך תקין מהיום ואילך</p>}
+              {dateDraftInvalid && (
+                <p className="text-xs text-red-600 mt-1.5">
+                  הזינו תאריך תקין מהיום ואילך
+                </p>
+              )}
+            </div>
+            <div className="rounded-2xl bg-cream-50 ring-1 ring-cream-200 p-4 sm:p-5">
+              <MonthCalendar
+                value={date}
+                onChange={(d) => {
+                  setDateDraft(null);
+                  setDate(d);
+                }}
+                minDate={todayIsoDate()}
+              />
             </div>
           </section>
 
@@ -311,9 +359,62 @@ export default function BookingPage() {
               {userTrack && (
                 <p className="mb-5 flex items-center gap-2 text-sm rounded-xl bg-cream-50 ring-1 ring-cream-200 px-3.5 py-2.5">
                   <ActivityBadge activity={userTrack} />
-                  <span className="text-stone-600">מוצגות לך השעות המתאימות למסלול {ACTIVITY_LABELS[userTrack]}.</span>
+                  <span className="text-stone-600">
+                    מוצגות לך השעות המתאימות למסלול {ACTIVITY_LABELS[userTrack]}
+                    .
+                  </span>
                 </p>
               )}
+              <div
+                className="mb-5 text-sm rounded-xl bg-cream-50 ring-1 ring-cream-200 px-3.5 py-3 space-y-2"
+                aria-live="polite"
+              >
+                <p className="font-semibold text-stone-600">
+                  שעות פעילות ביום זה:
+                </p>
+                {!dayHours ? (
+                  <p className="text-stone-500">טוען...</p>
+                ) : dayWindows.length === 0 ? (
+                  <p className="text-red-600">
+                    {explainUnavailable(dayHours, 0, 1, track ?? undefined)}
+                  </p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {dayWindows.map((w, i) => {
+                      const fits = activityMatches(
+                        w.activity,
+                        track ?? undefined,
+                      );
+                      return (
+                        <li
+                          key={i}
+                          className={`flex flex-wrap items-baseline justify-between gap-x-3 ${fits ? "text-stone-800" : "text-stone-400"}`}
+                        >
+                          <span
+                            className="tabular-nums font-semibold"
+                            dir="ltr"
+                          >
+                            {formatWindow(w)}
+                          </span>
+                          <span className="flex items-center gap-2 text-xs">
+                            <ActivityBadge activity={w.activity} />
+                            {!fits && track && (
+                              <span>
+                                לא מתאים למסלול {ACTIVITY_LABELS[track]}
+                              </span>
+                            )}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                <p className="text-xs text-stone-500">
+                  שעות וחלונות באפור אינם מתאימים למסלול שנבחר (או שכבר עברו).
+                  {userTrack === null &&
+                    " התחברו כדי להזמין — ההזמנה תתאים אוטומטית למסלול שלכם."}
+                </p>
+              </div>
               <ClockTimePicker
                 id="booking-time"
                 inline
@@ -325,35 +426,6 @@ export default function BookingPage() {
                 stepMinutes={CLOCK_STEP_MINUTES}
                 unavailable={(m) => unavailableReason(m) !== null}
               />
-              <div className="mt-4 text-sm rounded-xl bg-cream-50 ring-1 ring-cream-200 px-3.5 py-3 space-y-2" aria-live="polite">
-                <p className="font-semibold text-stone-600">שעות פעילות ביום זה:</p>
-                {!dayHours ? (
-                  <p className="text-stone-500">טוען...</p>
-                ) : dayWindows.length === 0 ? (
-                  <p className="text-red-600">{explainUnavailable(dayHours, 0, 1, track ?? undefined)}</p>
-                ) : (
-                  <ul className="space-y-1.5">
-                    {dayWindows.map((w, i) => {
-                      const fits = activityMatches(w.activity, track ?? undefined);
-                      return (
-                        <li key={i} className={`flex flex-wrap items-baseline justify-between gap-x-3 ${fits ? "text-stone-800" : "text-stone-400"}`}>
-                          <span className="tabular-nums font-semibold" dir="ltr">
-                            {formatWindow(w)}
-                          </span>
-                          <span className="flex items-center gap-2 text-xs">
-                            <ActivityBadge activity={w.activity} />
-                            {!fits && track && <span>לא מתאים למסלול {ACTIVITY_LABELS[track]}</span>}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-                <p className="text-xs text-stone-500">
-                  שעות וחלונות באפור אינם מתאימים למסלול שנבחר (או שכבר עברו).{userTrack === null && " התחברו כדי להזמין — ההזמנה תתאים אוטומטית למסלול שלכם."}
-                </p>
-                {selectedReason && dayHours && <p className="text-red-600 font-semibold">{selectedReason}</p>}
-              </div>
             </section>
           </div>
         </div>
@@ -372,7 +444,11 @@ export default function BookingPage() {
         </section>
 
         {error && <Alert tone="error">{error}</Alert>}
-        {success && <Alert tone="success">התור נקבע בהצלחה! מעביר אותך לתורים שלי...</Alert>}
+        {success && (
+          <Alert tone="success">
+            התור נקבע בהצלחה! מעביר אותך לתורים שלי...
+          </Alert>
+        )}
 
         <div className="sticky bottom-3 z-10 panel-brand rounded-[1.5rem] p-4 sm:px-7 sm:py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4 min-w-0">
@@ -390,12 +466,34 @@ export default function BookingPage() {
                 {startTime} – {endTimeLabel}
               </p>
               {conflict && (
-                <p className="text-sm text-red-200 font-semibold">השעה מתנגשת עם תור קיים</p>
+                <p className="text-sm text-red-200 font-semibold">
+                  השעה מתנגשת עם תור קיים
+                </p>
+              )}
+              {!conflict && dayHours && selectedReason && (
+                <p className="text-sm text-red-200 font-semibold">
+                  לא ניתן לקבוע תור – {selectedReason}
+                </p>
               )}
             </div>
           </div>
-          <button type="submit" disabled={submitting || conflict || dateDraftInvalid || selectedReason !== null} className="btn btn-bronze px-8! py-3! text-base!">
-            {submitting ? (paymentsGate.enabled ? "שומר את החדר..." : "קובע תור...") : paymentsGate.enabled ? "המשך לתשלום" : "קביעת תור"}
+          <button
+            type="submit"
+            disabled={
+              submitting ||
+              conflict ||
+              dateDraftInvalid ||
+              selectedReason !== null
+            }
+            className="btn btn-bronze px-8! py-3! text-base!"
+          >
+            {submitting
+              ? paymentsGate.enabled
+                ? "שומר את החדר..."
+                : "קובע תור..."
+              : paymentsGate.enabled
+                ? "המשך לתשלום"
+                : "קביעת תור"}
             {!submitting && <Icon name="arrowLeft" className="w-4 h-4" />}
           </button>
         </div>
