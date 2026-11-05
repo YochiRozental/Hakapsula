@@ -226,6 +226,7 @@ export default function AdminAppointmentsPage() {
                       setSelectedUserId(u.id);
                       setUserSearch(`${u.name} (${u.email ?? u.phone ?? "טלפון"})`);
                       setUserOptions([]);
+                      setFormError(null);
                     }}
                     className="px-4 py-2.5 text-sm hover:bg-brand-50 cursor-pointer"
                   >
