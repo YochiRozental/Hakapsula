@@ -46,6 +46,14 @@ test("ספק ה-Mock באתר מותקן אוכף בצד השרת: יצירת ת
   assert.equal(ok.status, "PENDING");
 });
 
+test("PAYMENT_MOCK_OPEN_TO_ALL מבטל את ההגבלה באתר מותקן, לכל משתמש; אינו מפעיל Mock בעצמו", () => {
+  const openEnv = { ...deployedEnv, PAYMENT_MOCK_OPEN_TO_ALL: "true" };
+  assert.equal(isMockAccessRestricted(openEnv), false);
+  assert.equal(isMockUserAllowed({ role: "CLIENT", email: "stranger@example.com" }, openEnv), true);
+  assert.equal(isMockUserAllowed({ role: "CLIENT", email: null }, openEnv), true, "גם למשתמש בלי אימייל (למשל נרשם חדש)");
+  assert.equal(isMockAccessRestricted({ ...openEnv, PAYMENT_PROVIDER: "none" }), false, "אין Mock פעיל: ממילא אין הגבלה, לא בגלל הדגל");
+});
+
 test("בהדגמה מקומית (בלי PAYMENT_MOCK_ALLOW_DEPLOYED) הספק אינו מגביל לקוחות", async () => {
   const localEnv = { ...deployedEnv, NODE_ENV: "development", DATABASE_URL: "postgresql://u:p@localhost:5433/x", PAYMENT_MOCK_ALLOW_DEPLOYED: undefined };
   const provider = getPaymentProvider(localEnv, { mockCustomerAllowed: async () => false });

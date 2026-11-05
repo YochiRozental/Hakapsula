@@ -219,6 +219,35 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
     assert.equal(o.outstandingNotCollectedAgorot, 4200);
     // ההזמנה עם החוב אינה נספרת ככסף שנגבה
     assert.equal(o.collected.grossAgorot, 5200);
+    // כל התשלום כאן דרך ספק ה-Mock (SANDBOX): לא נכלל בהכנסה האמיתית, וה-note משקף זאת
+    assert.equal(o.collected.sandboxGrossAgorot, 5200);
+    assert.equal(o.collected.liveGrossAgorot, 0);
+    assert.match(o.environmentNote, /Mock/);
+  });
+
+  test("תשלומי SANDBOX (Mock) לעולם לא נכללים ב-liveGrossAgorot, גם כשיש גם תשלום LIVE אמיתי", async () => {
+    await paidBooking(ids.a); // תשלום Mock, SANDBOX, 5200
+    const hold = await payBooking.holdRoom({ userId: ids.b, roomKey: "ROOM4", ...slot(), source: "ADMIN" });
+    // תשלום LIVE: נוצר ישירות במסד (עדיין אין ספק LIVE ממומש בקוד), כדי לבדוק את ההפרדה בתמונת המצב
+    await prisma.payment.create({
+      data: {
+        userId: ids.b,
+        appointmentId: hold.id,
+        purpose: "BOOKING",
+        amountAgorot: 9000,
+        status: "SUCCEEDED",
+        paidAt: new Date(),
+        environment: "LIVE",
+        provider: "payme",
+        idempotencyKey: `booking:${hold.id}:live`,
+      },
+    });
+    const o = await overview.getFinanceOverview({}, true);
+    assert.equal(o.collected.sandboxGrossAgorot, 5200, "תשלום ה-Mock נספר כפעילות דמה בלבד");
+    assert.equal(o.collected.liveGrossAgorot, 9000, "רק תשלום ה-LIVE נחשב הכנסה אמיתית");
+    assert.equal(o.collected.providerGrossAgorot, 5200 + 9000, "המעקב התפעולי הכולל ממשיך לשקף את שני הספקים");
+    assert.equal(o.collected.grossAgorot, 5200 + 9000);
+    assert.match(o.environmentNote, /LIVE/);
   });
 
   // ───────────── חובות ─────────────

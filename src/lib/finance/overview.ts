@@ -15,6 +15,12 @@ import { STUCK_PAYMENT_MS } from "@/lib/finance/unknown";
  *   החזר שממתין     = Refund PENDING (כולל כאלה שמצבם לא ידוע) + חריגי החזר שממתינים להכרעה (סכום פוטנציאלי בלבד).
  *   נמחל            = ויתורי מנהל; אינו הכנסה ואינו חוב.
  * סכומים באגורות שלמות; הטווח חל על תנועות (תשלומים/החזרים/ויתורים), לא על יתרות נוכחיות (חובות פתוחים וכד').
+ *
+ * תשלומי דמה (environment=SANDBOX, כולל כל תשלום דרך ספק ה-Mock) נספרים בנפרד מהכנסה אמיתית:
+ *   collected.liveGrossAgorot    = תשלומי ספק LIVE + תשלומים ידניים שאושרו (אלה היחידים שנחשבים הכנסה אמיתית).
+ *   collected.sandboxGrossAgorot = תשלומי ספק SANDBOX בלבד (Mock); לעולם לא נכלל ב-liveGrossAgorot.
+ *   collected.grossAgorot/netAgorot ממשיכים לשקף את כל מה שנגבה (כולל Mock), לצורכי מעקב תפעולי בשלב שאין בו
+ *   עדיין ספק LIVE; environmentNote מתעד במפורש אם חלק מהנתונים כבר LIVE.
  */
 
 export interface Range {
@@ -30,7 +36,12 @@ export async function getFinanceOverview(range: Range = {}, includeShifts = true
 
   const [paid, manualPaid, failed, stuck, refundsDone, refundsPending, refundsFailed, debts, waived, paidDown, cancelPending, exceptions, audits, shiftFailed, shiftPending, shiftUnknown, graceShifts, suspended] =
     await Promise.all([
-      prisma.payment.aggregate({ where: { status: "SUCCEEDED", ...(dateFilter ? { paidAt: dateFilter } : {}) }, _sum: { amountAgorot: true }, _count: true }),
+      prisma.payment.groupBy({
+        by: ["environment"],
+        where: { status: "SUCCEEDED", ...(dateFilter ? { paidAt: dateFilter } : {}) },
+        _sum: { amountAgorot: true },
+        _count: true,
+      }),
       // תשלומים ידניים שמנהל אישר שהתקבלו (חיובי משמרת). בלי ספירה כפולה: מי ששולם אצל הספק (Payment שהצליח) נספר רק שם
       prisma.shiftCharge.aggregate({
         where: { status: "PAID", manualPaidOn: { not: null }, OR: [{ paymentId: null }, { payment: { status: { not: "SUCCEEDED" } } }], ...(dateFilter ? { paidAt: dateFilter } : {}) },
@@ -60,8 +71,14 @@ export async function getFinanceOverview(range: Range = {}, includeShifts = true
     ]);
 
   const sum = (a: { _sum: { amountAgorot: number | null } } | null) => a?._sum.amountAgorot ?? 0;
-  const providerGross = sum(paid);
+  const byEnv = (environment: "LIVE" | "SANDBOX") => paid.find((p) => p.environment === environment);
+  const providerLiveGross = sum(byEnv("LIVE") ?? null);
+  const providerSandboxGross = sum(byEnv("SANDBOX") ?? null);
+  const providerGross = providerLiveGross + providerSandboxGross;
+  const providerCount = paid.reduce((n, p) => n + p._count, 0);
   const manualGross = manualPaid._sum.manualAmountAgorot ?? 0;
+  // הכנסה אמיתית: ספק LIVE + תשלומים ידניים שאושרו. תשלומי Mock (SANDBOX) לעולם לא נספרים כאן, בכוונה
+  const liveGrossAgorot = providerLiveGross + manualGross;
   const grossCollected = providerGross + manualGross;
   const refundedDone = sum(refundsDone);
   const debtOpen = debts.filter((d) => d.status === "OPEN").reduce((n, d) => n + d.amountAgorot - d.paidAgorot - d.waivedAgorot, 0);
@@ -69,18 +86,26 @@ export async function getFinanceOverview(range: Range = {}, includeShifts = true
   const shiftArrears = sum(shiftFailed) + sum(shiftPending);
 
   return {
-    environmentNote: "כל הנתונים בסביבת בדיקות (Mock)",
+    // דינמי ולא קבוע: אם כבר יש תשלום ספק LIVE כלשהו, לעולם לא נטען שהכול Mock
+    environmentNote:
+      providerLiveGross > 0
+        ? "יש כאן גם תשלומי ספק LIVE אמיתיים; תשלומי דמה (Mock/SANDBOX) מסוננים מ-liveGrossAgorot ואינם נחשבים הכנסה"
+        : "כל תשלומי הספק כאן בסביבת בדיקות (Mock); אין עדיין תשלום ספק אמיתי אחד",
     range: { from: range.from?.toISOString() ?? null, to: range.to?.toISOString() ?? null },
     collected: {
-      /** סך כל מה שהתקבל בפועל: ספק סליקה + תשלומים ידניים שאושרו (כל תשלום נספר פעם אחת בלבד) */
+      /** סך כל מה שהתקבל בפועל: ספק סליקה (LIVE+SANDBOX) + תשלומים ידניים שאושרו (כל תשלום נספר פעם אחת בלבד) */
       grossAgorot: grossCollected,
-      count: paid._count + manualPaid._count,
-      /** דרך ספק סליקה */
+      count: providerCount + manualPaid._count,
+      /** דרך ספק סליקה (LIVE+SANDBOX) */
       providerGrossAgorot: providerGross,
-      providerCount: paid._count,
+      providerCount,
       /** תשלומים ידניים שמנהל אישר (אין החזר אוטומטי עליהם: החזר ידני מחוץ למערכת) */
       manualGrossAgorot: manualGross,
       manualCount: manualPaid._count,
+      /** הכנסה אמיתית בלבד: ספק LIVE + תשלומים ידניים. תשלומי Mock (SANDBOX) לעולם לא נכללים כאן */
+      liveGrossAgorot,
+      /** תשלומי דמה (ספק SANDBOX בלבד): פעילות בדיקות, לעולם לא הכנסה */
+      sandboxGrossAgorot: providerSandboxGross,
       refundedAgorot: refundedDone,
       netAgorot: grossCollected - refundedDone,
     },

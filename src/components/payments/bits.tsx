@@ -22,7 +22,7 @@ export function SandboxNotice() {
     <p className="flex items-start gap-2 rounded-xl border border-dashed border-bronze-300 bg-bronze-50/70 px-4 py-3 text-sm text-bronze-700">
       <Icon name="sparkle" className="w-4 h-4 mt-0.5 shrink-0" />
       <span>
-        <strong>תשלום מדומה, סביבת בדיקות.</strong> לא מתבצע חיוב אמיתי ולא מוזנים פרטי כרטיס אשראי.
+        <strong>מצב הדגמה — לא מתבצע חיוב כספי.</strong> לא נדרשים ולא נקלטים פרטי כרטיס אשראי.
       </span>
     </p>
   );

@@ -11,7 +11,20 @@ import { monthLabel, SHIFT_STATUS_TEXT, windowLabel, WEEKDAY_NAMES } from "@/lib
 
 export interface Overview {
   environmentNote: string;
-  collected: { grossAgorot: number; count: number; providerGrossAgorot: number; providerCount: number; manualGrossAgorot: number; manualCount: number; refundedAgorot: number; netAgorot: number };
+  collected: {
+    grossAgorot: number;
+    count: number;
+    providerGrossAgorot: number;
+    providerCount: number;
+    manualGrossAgorot: number;
+    manualCount: number;
+    refundedAgorot: number;
+    netAgorot: number;
+    /** הכנסה אמיתית בלבד: ספק LIVE + תשלומים ידניים. תשלומי דמה (Mock) לעולם לא נכללים */
+    liveGrossAgorot: number;
+    /** תשלומי דמה (ספק SANDBOX/Mock): פעילות בדיקות בלבד, לעולם לא הכנסה */
+    sandboxGrossAgorot: number;
+  };
   failedPayments: { count: number; agorot: number };
   unknownPayments: { count: number; agorot: number; stuckPayments: number; unknownShiftCharges: number };
   debts: { openCount: number; openAgorot: number; inReviewCount: number; inReviewAgorot: number; waivedAgorot: number; waivedCount: number; paidDownAgorot: number; paidDownCount: number };
@@ -152,12 +165,16 @@ function OverviewTab({ version }: { version: number }) {
           <p className="text-xs text-stone-500">{o.environmentNote}. הסכומים מוצגים בשקלים ובאגורות מדויקות. הכנסות אינן מחושבות מהזמנות, רק מתשלומים שהספק אישר ומתשלומים ידניים שמנהל אישר במפורש.</p>
           <div>
             <SectionTitle hint="כסף שהתקבל בפועל: ספק סליקה + תשלומים ידניים שמנהל אישר, ופחות מזה החזרים שבוצעו">נגבה בפועל</SectionTitle>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-3" data-testid="collected-env-split">
+              <StatCard label="הכנסה אמיתית (LIVE + ידני)" value={<Money agorot={o.collected.liveGrossAgorot} strong />} icon="chart" />
+              <StatCard label="תשלומי דמה (Mock, לא הכנסה)" value={<Money agorot={o.collected.sandboxGrossAgorot} strong />} icon="sparkle" tone="gold" />
+            </div>
             <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-3" data-testid="collected">
-              <StatCard label={`דרך ספק סליקה · ${o.collected.providerCount}`} value={<Money agorot={o.collected.providerGrossAgorot} strong />} icon="card" />
+              <StatCard label={`דרך ספק סליקה (LIVE+Mock) · ${o.collected.providerCount}`} value={<Money agorot={o.collected.providerGrossAgorot} strong />} icon="card" />
               <StatCard label={`תשלומים ידניים · ${o.collected.manualCount}`} value={<Money agorot={o.collected.manualGrossAgorot} strong />} icon="card" />
-              <StatCard label={`סך הכול התקבל (ברוטו) · ${o.collected.count}`} value={<Money agorot={o.collected.grossAgorot} strong />} icon="card" />
+              <StatCard label={`סך הכול התקבל, כולל Mock (ברוטו) · ${o.collected.count}`} value={<Money agorot={o.collected.grossAgorot} strong />} icon="card" />
               <StatCard label={`הוחזר בפועל · ${o.refunds.doneCount}`} value={<Money agorot={o.collected.refundedAgorot} strong />} icon="chart" tone="gold" />
-              <StatCard label="נטו שנגבה" value={<Money agorot={o.collected.netAgorot} strong />} icon="chart" />
+              <StatCard label="נטו שנגבה, כולל Mock" value={<Money agorot={o.collected.netAgorot} strong />} icon="chart" />
             </div>
           </div>
           <div>
