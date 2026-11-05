@@ -88,6 +88,7 @@ export default function AdminAppointmentsPage() {
   const [newNotes, setNewNotes] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [formSubmitting, setFormSubmitting] = useState(false);
+  const [createSuccess, setCreateSuccess] = useState(false);
 
   // שעות הפעילות של התאריך הנבחר (מקור מרכזי). שבת סגורה לכולם; מחוץ לשעות בימי חול המנהל רשאי לקבוע (חריג)
   const { day: newDayHours } = useDayHours(newDate);
@@ -131,6 +132,13 @@ export default function AdminAppointmentsPage() {
     return () => clearTimeout(handle);
   }, [userSearch]);
 
+  // נעלמת לבד אחרי כמה שניות, גם אם הטופס נסגר/התאפס בינתיים
+  useEffect(() => {
+    if (!createSuccess) return;
+    const handle = setTimeout(() => setCreateSuccess(false), 4000);
+    return () => clearTimeout(handle);
+  }, [createSuccess]);
+
   async function handleCancel(id: string) {
     setCancellingId(id);
     await fetch(`/api/appointments/${id}`, { method: "DELETE" });
@@ -141,6 +149,7 @@ export default function AdminAppointmentsPage() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
+    setCreateSuccess(false);
     if (!selectedUserId) {
       setFormError("יש לבחור לקוח קיים (חיפוש לפי אימייל או שם)");
       return;
@@ -171,6 +180,7 @@ export default function AdminAppointmentsPage() {
       setSelectedUserId("");
       setUserSearch("");
       setNewNotes("");
+      setCreateSuccess(true);
       loadAppointments();
     } finally {
       setFormSubmitting(false);
@@ -193,6 +203,8 @@ export default function AdminAppointmentsPage() {
           </button>
         }
       />
+
+      {createSuccess && <Alert tone="success">התור נקבע בהצלחה!</Alert>}
 
       <TableFilterBar
         state={filterState}
