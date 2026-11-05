@@ -231,6 +231,15 @@ test("no provider configured, unknown, and unimplemented payme all refuse", () =
   assert.throws(() => getPaymentProvider({ PAYMENT_PROVIDER: "payme", PAYMENT_ENVIRONMENT: "live" }), /לא ממומש/);
 });
 
+test("PAYMENT_MOCK_ALLOW_DEPLOYED מתיר Mock על שרת מותקן ומסד מרוחק, אך לא מבטל את שאר התנאים", () => {
+  const deployed = { ...goodEnv, NODE_ENV: "production", DATABASE_URL: "postgresql://u:p@ep-x.neon.tech/x", PAYMENT_MOCK_ALLOW_DEPLOYED: "true" };
+  assert.equal(getPaymentProvider(deployed).name, "mock");
+  assert.throws(() => getPaymentProvider({ ...deployed, PAYMENT_MOCK_ALLOW_DEPLOYED: "yes" }), PaymentConfigError, "רק הערך true");
+  assert.throws(() => getPaymentProvider({ ...deployed, PAYMENT_ENVIRONMENT: "live" }), PaymentConfigError);
+  assert.throws(() => getPaymentProvider({ ...deployed, PAYMENT_MOCK_ENABLED: "false" }), PaymentConfigError);
+  assert.throws(() => getPaymentProvider({ ...deployed, PAYMENT_WEBHOOK_SECRET: "short" }), PaymentConfigError);
+});
+
 test("isLocalDatabaseUrl", () => {
   assert.equal(isLocalDatabaseUrl("postgresql://a:b@localhost:5433/x"), true);
   assert.equal(isLocalDatabaseUrl("postgresql://a:b@127.0.0.1/x"), true);

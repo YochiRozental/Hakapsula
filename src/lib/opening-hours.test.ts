@@ -13,6 +13,7 @@ import {
   bookingViolation,
   closedDayViolation,
   jerusalemParts,
+  defaultDayWindow,
   explainUnavailable,
   fitsOpening,
   resolveDay,
@@ -84,7 +85,7 @@ test("הסבר מופיע עם שעות היום או חוסר פעילות", ()
   const day = resolveDay(base, SUN);
   assert.equal(explainUnavailable(day, 8 * 60, 9 * 60, "BOYS"), null);
   assert.match(explainUnavailable(day, 13 * 60, 14 * 60, "BOYS")!, /08:00–12:00 · 16:00–20:00/);
-  // יום בלי חלונות מפורשים (שלישי) פתוח 08:00–21:00 במסלול ברירת המחדל שלו (בנות)
+  // יום בלי חלונות מפורשים (שלישי) פתוח 07:00–22:00 במסלול ברירת המחדל שלו (בנות)
   assert.match(explainUnavailable(resolveDay(base, "2030-01-08"), 600, 660, "BOYS")!, /בנות.*אינה מתאימה למסלול בנים/);
 });
 
@@ -291,19 +292,31 @@ test("parseTimeOption / buildTimeOptions: כל היממה בקפיצות, ללא
   assert.equal(formatMinutes(parseTimeOption("07:05")), "07:05");
 });
 
-// ---- יום בלי חלונות מפורשים: 08:00–21:00 במסלול היום ----
+// ---- יום בלי חלונות מפורשים: א'–ה' 07:00–22:00, ו' 07:00–12:00, במסלול היום ----
 const dayDefault = (weekday: number, activity: ActivityType): HoursWindow => ({
-  weekday, date: null, startMinutes: 8 * 60, endMinutes: 21 * 60, closed: false, activity, dayDefault: true,
+  weekday, date: null, startMinutes: 7 * 60, endMinutes: 22 * 60, closed: false, activity, dayDefault: true,
 });
 
-test("בלי שום הגדרה: כל יום חול פתוח 08:00–21:00 במסלול ברירת המחדל של היום", () => {
+test("שישי בלי הגדרה: פתוח 07:00–12:00 בלבד, במסלול בנים; ימים א'–ה' 07:00–22:00; שבת סגורה", () => {
+  const FRI = "2030-01-11";
+  const fri = resolveDay([], FRI);
+  assert.deepEqual(fri.windows, [{ startMinutes: 420, endMinutes: 720, activity: "BOYS" }]);
+  assert.equal(fitsOpening(fri, 7 * 60, 12 * 60, "BOYS"), true);
+  assert.equal(fitsOpening(fri, 11 * 60, 13 * 60, "BOYS"), false);
+  assert.equal(fitsOpening(resolveDay([], SUN), 21 * 60, 22 * 60, "GIRLS"), true);
+  assert.equal(fitsOpening(resolveDay([], SUN), 21 * 60 + 30, 22 * 60 + 30, "GIRLS"), false);
+  assert.equal(defaultDayWindow(5).endMinutes, 12 * 60);
+  for (const d of [0, 1, 2, 3, 4]) assert.deepEqual(defaultDayWindow(d), { startMinutes: 420, endMinutes: 1320 });
+});
+
+test("בלי שום הגדרה: כל יום חול פתוח לפי שעות ברירת המחדל במסלול ברירת המחדל של היום", () => {
   for (const [date, track] of [[SUN, "GIRLS"], [MON, "BOYS"], ["2030-01-08", "GIRLS"]] as const) {
     const day = resolveDay([], date);
-    assert.deepEqual(day.windows, [{ startMinutes: 480, endMinutes: 1260, activity: track }]);
+    assert.deepEqual(day.windows, [{ startMinutes: 420, endMinutes: 1320, activity: track }]);
     assert.equal(day.source, "weekly");
-    assert.equal(fitsOpening(day, 8 * 60, 9 * 60, track), true);
-    assert.equal(fitsOpening(day, 20 * 60, 21 * 60, track), true);
-    assert.equal(fitsOpening(day, 20 * 60 + 30, 21 * 60 + 30, track), false);
+    assert.equal(fitsOpening(day, 7 * 60, 8 * 60, track), true);
+    assert.equal(fitsOpening(day, 21 * 60, 22 * 60, track), true);
+    assert.equal(fitsOpening(day, 21 * 60 + 30, 22 * 60 + 30, track), false);
     assert.equal(fitsOpening(day, 9 * 60, 10 * 60, track === "BOYS" ? "GIRLS" : "BOYS"), false);
   }
   assert.equal(resolveDay([], SAT).closed, true); // שבת נשארת סגורה
@@ -314,7 +327,7 @@ test("מסלול היום שנשמר (שורת dayDefault) קובע את המס�
   assert.equal(weeklyDefaultActivity(saved, 0), "BOYS");
   assert.equal(weeklyDefaultActivity(saved, 2), "GIRLS"); // יום אחר — ברירת המחדל המובנית
   const day = resolveDay(saved, SUN);
-  assert.deepEqual(day.windows, [{ startMinutes: 480, endMinutes: 1260, activity: "BOYS" }]);
+  assert.deepEqual(day.windows, [{ startMinutes: 420, endMinutes: 1320, activity: "BOYS" }]);
   assert.equal(fitsOpening(day, 9 * 60, 10 * 60, "BOYS"), true);
   assert.equal(fitsOpening(day, 9 * 60, 10 * 60, "GIRLS"), false);
   assert.deepEqual(weeklyWindows(saved, 0), []); // שורת היום אינה חלון מפורש בממשק
@@ -340,8 +353,10 @@ test("חריג לתאריך גובר על מסלול היום ועל חלונו�
 test("אימות הזמנה בימים ללא חלונות מפורשים: לפי ברירת המחדל והמסלול", () => {
   assert.equal(hoursRejection([], at(SUN, 8), at(SUN, 9), "WEB", "GIRLS"), null);
   assert.ok(hoursRejection([], at(SUN, 8), at(SUN, 9), "WEB", "BOYS"));
-  assert.ok(hoursRejection([], at(SUN, 7), at(SUN, 8), "IVR", "GIRLS")); // לפני 08:00
-  assert.equal(hoursRejection([], at(SUN, 7), at(SUN, 8), "ADMIN", "BOYS"), null); // מנהל פטור בימי חול
+  assert.equal(hoursRejection([], at(SUN, 7), at(SUN, 8), "IVR", "GIRLS"), null); // 07:00 כבר בתוך שעות הפעילות
+  assert.ok(hoursRejection([], at(SUN, 6), at(SUN, 7), "IVR", "GIRLS")); // לפני 07:00
+  assert.ok(hoursRejection([], at(SUN, 22), at(SUN, 23), "WEB", "GIRLS")); // אחרי 22:00
+  assert.equal(hoursRejection([], at(SUN, 22), at(SUN, 23), "ADMIN", "BOYS"), null); // מנהל פטור בימי חול
 });
 
 // ---- יום קבוע סגור (שורת "מסלול היום" עם closed) ----
@@ -374,7 +389,7 @@ test("מעבר מסגור חזרה לפעילות מחזיר את השעות ה�
   const reopened = [{ ...closedDay(0, "GIRLS"), closed: false }];
   const day = resolveDay(reopened, SUN);
   assert.equal(day.closed, false);
-  assert.deepEqual(day.windows, [{ startMinutes: 480, endMinutes: 1260, activity: "GIRLS" }]);
+  assert.deepEqual(day.windows, [{ startMinutes: 420, endMinutes: 1320, activity: "GIRLS" }]);
   // חלונות מפורשים פעילים שוב אחרי פתיחה
   const withExplicit = [...reopened, weekly(0, 10, 12, "GIRLS")];
   assert.deepEqual(resolveDay(withExplicit, SUN).windows, [{ startMinutes: 600, endMinutes: 720, activity: "GIRLS" }]);

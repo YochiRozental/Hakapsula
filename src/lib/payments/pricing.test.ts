@@ -2,16 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   HOURS_PACKAGES,
-  SHIFT_HOURLY_AGOROT,
-  SHIFT_WINDOWS,
   allocatePackageMinutes,
   formatAgorot,
-  monthlyShiftChargeAgorot,
   packageExpiry,
   packageSavingsAgorot,
   regularPriceAgorot,
-  shiftSessionPriceAgorot,
-  shiftWindowMinutes,
   splitBookingPrice,
 } from "@/lib/payments/pricing";
 import { creditExpiry, isAutoRefundEligible } from "@/lib/payments/policy";
@@ -89,31 +84,6 @@ test("booking split combines package balance with regular payment", () => {
 
   const none = splitBookingPrice(60, [], now);
   assert.equal(none.regularPriceAgorot, 5200);
-});
-
-test("shift pricing: 20% off, 41.60 per hour", () => {
-  assert.equal(SHIFT_HOURLY_AGOROT, 4160);
-  assert.equal(shiftSessionPriceAgorot(60), 4160);
-  assert.equal(shiftSessionPriceAgorot(15), 1040);
-});
-
-test("shift windows are valid, ordered, and priced per actual session count", () => {
-  assert.deepEqual(
-    SHIFT_WINDOWS.map((w) => w.id),
-    ["MORNING", "NOON", "AFTERNOON", "EVENING"]
-  );
-  assert.equal(shiftWindowMinutes("MORNING"), 240);
-  assert.equal(shiftWindowMinutes("NOON"), 225);
-  assert.equal(shiftWindowMinutes("EVENING"), 165);
-  // 4 מפגשים בבוקר: 4 שעות * 41.60 * 4
-  assert.equal(monthlyShiftChargeAgorot("MORNING", 4), 4 * 4 * 4160);
-  assert.equal(monthlyShiftChargeAgorot("MORNING", 5), 5 * 4 * 4160);
-  assert.equal(monthlyShiftChargeAgorot("NOON", 0), 0);
-  assert.throws(() => monthlyShiftChargeAgorot("NOON", -1), RangeError);
-  for (const w of SHIFT_WINDOWS) {
-    assert.ok(w.startMinutes < w.endMinutes);
-    assert.ok(Number.isInteger(shiftSessionPriceAgorot(w.endMinutes - w.startMinutes)));
-  }
 });
 
 test("cancellation: no automatic refund within 24h of start, unless admin exception", () => {

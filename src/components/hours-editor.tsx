@@ -3,7 +3,6 @@
 import {
   ACTIVITY_LABELS,
   ACTIVITY_TYPES,
-  DEFAULT_DAY_WINDOW,
   formatMinutes,
   formatWindow,
   parseTimeOption,
@@ -16,7 +15,7 @@ import { Icon } from "@/components/ui";
 export type EditRow = { start: string; end: string; activity: ActivityType };
 
 /**
- * עריכת יום: מסלול היום (חל גם בלי חלונות: היום המלא 08:00–21:00), האם היום סגור, והחלונות המפורשים.
+ * עריכת יום: מסלול היום (חל גם בלי חלונות: היום המלא לפי שעות ברירת המחדל שלו), האם היום סגור, והחלונות המפורשים.
  * כשהיום סגור החלונות נשמרים (לא נמחקים) אך אינם פעילים.
  */
 export type DayEdit = { dayActivity: ActivityType; closed: boolean; rows: EditRow[] };
@@ -99,11 +98,14 @@ export function HoursEditor({
   onChange,
   disabled,
   idPrefix,
+  defaultWindow,
 }: {
   value: DayEdit;
   onChange: (value: DayEdit) => void;
   disabled?: boolean;
   idPrefix: string;
+  /** שעות ברירת המחדל של היום כשאין חלונות מפורשים (ראו defaultDayWindow) */
+  defaultWindow: { startMinutes: number; endMinutes: number };
 }) {
   const { rows } = value;
   const dayActivity = effectiveDayActivity(value);
@@ -141,7 +143,7 @@ export function HoursEditor({
         <>
           {rows.length === 0 && (
             <p className="text-sm text-stone-500">
-              ללא חלונות מוגדרים — פתוח <span className="tabular-nums" dir="ltr">{formatWindow({ ...DEFAULT_DAY_WINDOW, activity: dayActivity })}</span>{" "}
+              ללא חלונות מוגדרים — פתוח <span className="tabular-nums" dir="ltr">{formatWindow({ ...defaultWindow, activity: dayActivity })}</span>{" "}
               במסלול {ACTIVITY_LABELS[dayActivity]}.
             </p>
           )}

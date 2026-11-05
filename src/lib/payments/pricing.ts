@@ -125,43 +125,7 @@ export function splitBookingPrice(
 }
 
 // ---- משמרות קבועות ----
-
-export const SHIFT_DISCOUNT_PERCENT = 20;
-/** 41.60 ₪ לשעה */
-export const SHIFT_HOURLY_AGOROT = (REGULAR_HOURLY_AGOROT * (100 - SHIFT_DISCOUNT_PERCENT)) / 100;
-export const SHIFT_MONTHS = 3;
-
-export const SHIFT_WINDOWS = [
-  { id: "MORNING", startMinutes: 8 * 60, endMinutes: 12 * 60 },
-  { id: "NOON", startMinutes: 12 * 60 + 15, endMinutes: 16 * 60 },
-  { id: "AFTERNOON", startMinutes: 16 * 60 + 15, endMinutes: 20 * 60 },
-  { id: "EVENING", startMinutes: 20 * 60 + 15, endMinutes: 23 * 60 },
-] as const;
-
-export type ShiftWindowId = (typeof SHIFT_WINDOWS)[number]["id"];
-
-export function findShiftWindow(id: string) {
-  return SHIFT_WINDOWS.find((w) => w.id === id);
-}
-
-export function shiftWindowMinutes(id: ShiftWindowId): number {
-  const w = findShiftWindow(id)!;
-  return w.endMinutes - w.startMinutes;
-}
-
-/** מחיר מפגש יחיד במשמרת (אגורות): מחיר שעתי מוזל, מחושב לפי דקות */
-export function shiftSessionPriceAgorot(windowMinutes: number): number {
-  assertQuarterHours(windowMinutes);
-  return (windowMinutes / SLOT_MINUTES) * (SHIFT_HOURLY_AGOROT / 4);
-}
-
-/** חיוב חודשי לפי מספר המפגשים בפועל באותו חודש */
-export function monthlyShiftChargeAgorot(windowId: ShiftWindowId, sessionCount: number): number {
-  if (!Number.isInteger(sessionCount) || sessionCount < 0) {
-    throw new RangeError("מספר המפגשים חייב להיות שלם ולא שלילי");
-  }
-  return sessionCount * shiftSessionPriceAgorot(shiftWindowMinutes(windowId));
-}
+// המשבצות והמחירים החודשיים נשמרים במסד וניתנים לעריכה ע"י מנהל: ראו src/lib/shifts/windows.ts
 
 /** תצוגה: 4160 -> "41.60" */
 export function formatAgorot(agorot: number): string {

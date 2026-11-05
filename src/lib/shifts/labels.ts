@@ -1,20 +1,28 @@
 /** תוויות עברית לתצוגת משמרות (טהור, בטוח לשימוש בדפדפן ובשרת). אין כאן חישוב עסקי: רק ניסוח של ערכים שהשרת קבע */
 
-import { SHIFT_WINDOWS } from "@/lib/payments/pricing";
+import { windowLabelById } from "@/lib/shifts/windows";
 
-export const WINDOW_NAMES: Record<string, string> = {
-  MORNING: "בוקר",
-  NOON: "צהריים",
-  AFTERNOON: "אחר הצהריים",
-  EVENING: "ערב",
-};
-
-const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-
+/** שם ושעות של משבצת לפי מזהה. המשבצות נטענות מהמסד ע"י ShiftWindowsProvider (ראו windows.ts) */
 export function windowLabel(id: string): string {
-  const w = SHIFT_WINDOWS.find((x) => x.id === id);
-  return w ? `${WINDOW_NAMES[id] ?? id} ${hhmm(w.startMinutes)}–${hhmm(w.endMinutes)}` : id;
+  return windowLabelById(id);
 }
+
+/** משך בדקות בניסוח קריא: 240 -> "4 שעות", 180 -> "3 שעות", 45 -> "45 דקות", 90 -> "שעה ו-30 דקות" */
+export function minutesLabel(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const hours = h === 0 ? "" : h === 1 ? "שעה" : `${h} שעות`;
+  const mins = m === 0 ? "" : `${m} דקות`;
+  return [hours, mins].filter(Boolean).join(" ו-") || "0 דקות";
+}
+
+export const MAKEUP_STATE_TEXT: Record<string, string> = {
+  PENDING_GRANT: "ממתינה למתן הזיכוי",
+  OPEN: "יתרה זמינה",
+  USED: "נוצלה",
+  EXPIRED: "פג תוקף",
+  WAIVED: "ויתור",
+};
 
 export const WEEKDAY_NAMES = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי"];
 
@@ -58,6 +66,7 @@ const FAILURE_TEXT: Record<string, string> = {
   amount_mismatch: "סכום החיוב שהתקבל אינו תואם",
   pending_at_provider: "החיוב ממתין אצל הספק",
   manual_not_charged: "נקבע ידנית שלא חויב",
+  manual_payment_overdue: "התשלום הידני לא התקבל במועד",
 };
 export const failureText = (code: string | null | undefined) => (code ? FAILURE_TEXT[code] ?? "שגיאה בחיוב" : "");
 

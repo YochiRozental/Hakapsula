@@ -27,7 +27,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       startDate: plan.startDate,
       endDate: plan.endDate,
-      priceAgorot: plan.priceAgorot,
+      monthlyPriceAgorot: plan.monthlyPriceAgorot,
+      totalAgorot: plan.totalAgorot,
       firstChargeAgorot: plan.firstChargeAgorot,
       months: plan.months,
       conflicts: plan.conflicts,

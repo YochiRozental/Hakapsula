@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { jerusalemTodayIso } from "@/lib/jerusalem-time";
 import type { Prisma } from "@/generated/prisma/client";
 import { getBalanceView } from "@/lib/payments/views";
 import { toDebtView } from "@/lib/finance/debts";
@@ -27,9 +28,15 @@ export async function getFinanceOverview(range: Range = {}, includeShifts = true
   const dateFilter = between(range);
   const stuckBefore = new Date(now.getTime() - STUCK_PAYMENT_MS);
 
-  const [paid, failed, stuck, refundsDone, refundsPending, refundsFailed, debts, waived, paidDown, cancelPending, exceptions, audits, shiftFailed, shiftPending, shiftUnknown, graceShifts, suspended] =
+  const [paid, manualPaid, failed, stuck, refundsDone, refundsPending, refundsFailed, debts, waived, paidDown, cancelPending, exceptions, audits, shiftFailed, shiftPending, shiftUnknown, graceShifts, suspended] =
     await Promise.all([
       prisma.payment.aggregate({ where: { status: "SUCCEEDED", ...(dateFilter ? { paidAt: dateFilter } : {}) }, _sum: { amountAgorot: true }, _count: true }),
+      // תשלומים ידניים שמנהל אישר שהתקבלו (חיובי משמרת). בלי ספירה כפולה: מי ששולם אצל הספק (Payment שהצליח) נספר רק שם
+      prisma.shiftCharge.aggregate({
+        where: { status: "PAID", manualPaidOn: { not: null }, OR: [{ paymentId: null }, { payment: { status: { not: "SUCCEEDED" } } }], ...(dateFilter ? { paidAt: dateFilter } : {}) },
+        _sum: { manualAmountAgorot: true },
+        _count: true,
+      }),
       prisma.payment.aggregate({ where: { status: "FAILED", ...(dateFilter ? { createdAt: dateFilter } : {}) }, _sum: { amountAgorot: true }, _count: true }),
       prisma.payment.aggregate({ where: { status: "PENDING", purpose: { in: ["BOOKING", "PACKAGE", "DEBT"] }, createdAt: { lte: stuckBefore } }, _sum: { amountAgorot: true }, _count: true }),
       prisma.refund.aggregate({ where: { status: "SUCCEEDED", ...(dateFilter ? { createdAt: dateFilter } : {}) }, _sum: { amountAgorot: true }, _count: true }),
@@ -46,14 +53,16 @@ export async function getFinanceOverview(range: Range = {}, includeShifts = true
         _count: true,
       }),
       includeShifts ? prisma.shiftCharge.aggregate({ where: { status: "FAILED" }, _sum: { amountAgorot: true }, _count: true }) : null,
-      includeShifts ? prisma.shiftCharge.aggregate({ where: { status: "PENDING" }, _sum: { amountAgorot: true }, _count: true }) : null,
+      includeShifts ? prisma.shiftCharge.aggregate({ where: { status: "PENDING", OR: [{ dueDate: null }, { dueDate: { lte: jerusalemTodayIso(now) } }] }, _sum: { amountAgorot: true }, _count: true }) : null,
       includeShifts ? prisma.shiftCharge.aggregate({ where: { status: "UNKNOWN" }, _sum: { amountAgorot: true }, _count: true }) : null,
       includeShifts ? prisma.shift.count({ where: { status: "ACTIVE", charges: { some: { status: "FAILED", graceUntil: { gt: now } } } } }) : 0,
       includeShifts ? prisma.shift.count({ where: { status: "SUSPENDED" } }) : 0,
     ]);
 
   const sum = (a: { _sum: { amountAgorot: number | null } } | null) => a?._sum.amountAgorot ?? 0;
-  const grossCollected = sum(paid);
+  const providerGross = sum(paid);
+  const manualGross = manualPaid._sum.manualAmountAgorot ?? 0;
+  const grossCollected = providerGross + manualGross;
   const refundedDone = sum(refundsDone);
   const debtOpen = debts.filter((d) => d.status === "OPEN").reduce((n, d) => n + d.amountAgorot - d.paidAgorot - d.waivedAgorot, 0);
   const debtReview = debts.filter((d) => d.status === "IN_REVIEW").reduce((n, d) => n + d.amountAgorot - d.paidAgorot - d.waivedAgorot, 0);
@@ -63,8 +72,15 @@ export async function getFinanceOverview(range: Range = {}, includeShifts = true
     environmentNote: "כל הנתונים בסביבת בדיקות (Mock)",
     range: { from: range.from?.toISOString() ?? null, to: range.to?.toISOString() ?? null },
     collected: {
+      /** סך כל מה שהתקבל בפועל: ספק סליקה + תשלומים ידניים שאושרו (כל תשלום נספר פעם אחת בלבד) */
       grossAgorot: grossCollected,
-      count: paid._count,
+      count: paid._count + manualPaid._count,
+      /** דרך ספק סליקה */
+      providerGrossAgorot: providerGross,
+      providerCount: paid._count,
+      /** תשלומים ידניים שמנהל אישר (אין החזר אוטומטי עליהם: החזר ידני מחוץ למערכת) */
+      manualGrossAgorot: manualGross,
+      manualCount: manualPaid._count,
       refundedAgorot: refundedDone,
       netAgorot: grossCollected - refundedDone,
     },
@@ -123,7 +139,7 @@ export interface LedgerFilters extends Range {
 export interface LedgerRow {
   key: string;
   at: string;
-  type: "PAYMENT" | "REFUND" | "DEBT_PAYMENT" | "DEBT_WAIVER";
+  type: "PAYMENT" | "MANUAL_PAYMENT" | "REFUND" | "DEBT_PAYMENT" | "DEBT_WAIVER";
   label: string;
   user: { id: string; name: string };
   amountAgorot: number;
@@ -147,6 +163,23 @@ export async function getLedger(f: LedgerFilters = {}): Promise<LedgerRow[]> {
     });
     for (const p of payments) {
       rows.push({ key: `p:${p.id}`, at: (p.paidAt ?? p.createdAt).toISOString(), type: "PAYMENT", label: p.purpose, user: p.user, amountAgorot: p.amountAgorot, status: p.status, ref: p.id });
+    }
+  }
+  if (want("MANUAL_PAYMENT") && (!f.status || f.status === "SUCCEEDED")) {
+    const manual = await prisma.shiftCharge.findMany({
+      where: {
+        status: "PAID",
+        manualPaidOn: { not: null },
+        OR: [{ paymentId: null }, { payment: { status: { not: "SUCCEEDED" } } }],
+        ...(f.userId || userWhere ? { shift: { ...(f.userId ? { userId: f.userId } : {}), ...(userWhere ? { user: userWhere } : {}) } } : {}),
+        ...(dateFilter ? { paidAt: dateFilter } : {}),
+      },
+      include: { shift: { include: { user: { select: { id: true, name: true } } } } },
+      orderBy: { paidAt: "desc" },
+      take: 200,
+    });
+    for (const c of manual) {
+      rows.push({ key: `m:${c.id}`, at: (c.paidAt ?? c.updatedAt).toISOString(), type: "MANUAL_PAYMENT", label: c.manualReference ?? `משמרת ${c.month}`, user: c.shift.user, amountAgorot: c.manualAmountAgorot ?? c.amountAgorot, status: "SUCCEEDED", ref: c.id });
     }
   }
   if (want("REFUND")) {
@@ -177,13 +210,14 @@ export async function getLedger(f: LedgerFilters = {}): Promise<LedgerRow[]> {
 export async function getShiftFinance(now: Date = new Date()) {
   const [charges, graceShifts, suspended] = await Promise.all([
     prisma.shiftCharge.findMany({
-      where: { status: { in: ["FAILED", "UNKNOWN", "PENDING"] } },
+      // חיוב ממתין נחשב חוב רק כשמועדו הגיע: שלושת החיובים נוצרים מראש, והעתידיים אינם חוב
+      where: { OR: [{ status: { in: ["FAILED", "UNKNOWN"] } }, { status: "PENDING", OR: [{ dueDate: null }, { dueDate: { lte: jerusalemTodayIso(now) } }] }] },
       include: { shift: { include: { user: { select: { id: true, name: true } }, room: { select: { name: true } } } } },
       orderBy: { updatedAt: "desc" },
       take: 200,
     }),
     prisma.shift.findMany({ where: { status: "ACTIVE", charges: { some: { status: "FAILED", graceUntil: { gt: now } } } }, include: { user: { select: { id: true, name: true } }, room: { select: { name: true } }, charges: { where: { status: "FAILED" } } }, take: 100 }),
-    prisma.shift.findMany({ where: { status: "SUSPENDED" }, include: { user: { select: { id: true, name: true } }, room: { select: { name: true } }, charges: { where: { status: { in: ["FAILED", "UNKNOWN", "PENDING"] } } } }, take: 100 }),
+    prisma.shift.findMany({ where: { status: "SUSPENDED" }, include: { user: { select: { id: true, name: true } }, room: { select: { name: true } }, charges: { where: { OR: [{ status: { in: ["FAILED", "UNKNOWN"] } }, { status: "PENDING", OR: [{ dueDate: null }, { dueDate: { lte: jerusalemTodayIso(now) } }] }] } } }, take: 100 }),
   ]);
   return {
     charges: charges.map((c) => ({

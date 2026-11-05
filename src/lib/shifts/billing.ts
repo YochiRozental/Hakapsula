@@ -4,13 +4,16 @@ import { jerusalemDayStart, jerusalemTodayIso } from "@/lib/jerusalem-time";
 import type { PaymentProvider } from "@/lib/payments/provider";
 import { findUsableCard } from "@/lib/payments/saved-methods";
 import { audit, environmentOf, isUniqueViolation } from "@/lib/payments/shared";
-import { billingMonths, monthKeyOf } from "@/lib/shifts/calendar";
-import { CHARGE_CLAIM_TTL_MS, CRON_STALE_RUN_MS, SHIFT_BILLING_JOB, SHIFT_GRACE_DAYS } from "@/lib/shifts/policy";
+import { billingDueDates, billingMonths, monthKeyOf } from "@/lib/shifts/calendar";
+import { writeAudit } from "@/lib/finance/audit";
+import { CHARGE_CLAIM_TTL_MS, CRON_STALE_RUN_MS, MAKEUP_CREDIT_VALIDITY_DAYS, PENDING_SHIFT_MAX_HOLD_MS, SHIFT_BILLING_JOB, SHIFT_GRACE_DAYS } from "@/lib/shifts/policy";
 
 /**
- * חיוב חודשי של משמרות. שורה אחת ב-ShiftCharge לכל (משמרת, חודש) -> אי אפשר לחייב פעמיים עבור אותו חודש (אילוץ ייחודיות
- * במסד), ולא נסמכים על תזמון לצורך אידמפוטנטיות. כל ניסיון מקבל מפתח יציב מול הספק (shiftcharge:<shift>:<month>:a<N>) ונרשם
- * ב-Payment. הסכום מחושב בשרת מהמופעים שבפועל מתוזמנים באותו חודש.
+ * חיוב חודשי של משמרות: בדיוק שלושה חיובים, במועדים שמחושבים מתאריך ההתחלה (calendar.ts). שורה אחת ב-ShiftCharge לכל
+ * (משמרת, מפתח חודש) -> אי אפשר לחייב פעמיים עבור אותו חיוב (אילוץ ייחודיות במסד), ולא נסמכים על תזמון לצורך אידמפוטנטיות.
+ * כל ניסיון מקבל מפתח יציב מול הספק (shiftcharge:<shift>:<month>:a<N>) ונרשם ב-Payment. הסכום הוא תמיד המחיר החודשי הקבוע
+ * של המשמרת (בלי חישוב יחסי). משמרת ישנה שתומחרה לפי מופע (monthlyPriceAgorot = 0) ממשיכה להתחשבן לפי המופעים בחודש.
+ * משמרת בתשלום ידני (MANUAL) לעולם אינה מחויבת אוטומטית: רק מנהל מתעד תשלום (recordManualPayment).
  *
  * הבחנה חשובה: כישלון ודאי (נדחה/אין אמצעי) פותח תקופת חסד ומאפשר ניסיון חוזר חדש; מצב לא ידוע (שגיאת רשת, תשובה
  * עמומה, ריצה שנקטעה באמצע) הופך ל-UNKNOWN ואינו מחויב שוב אוטומטית עד בירור/התאמה.
@@ -76,7 +79,11 @@ async function claimCharge(
     if (!(shift.status === "ACTIVE" || (isFirst && shift.status === "PENDING"))) {
       return { kind: "result", result: { outcome: "NOT_BILLABLE" } } as Claim;
     }
+    if (shift.paymentMode === "MANUAL") return { kind: "result", result: { outcome: "NOT_BILLABLE" } } as Claim;
 
+    const fixed = shift.monthlyPriceAgorot > 0;
+    const amountOf = (t: { amountAgorot: number }) => (fixed ? shift.monthlyPriceAgorot : t.amountAgorot);
+    const dueDate = billingDueDates(shift.startDate)[billingMonths(shift.startDate).indexOf(month)] ?? null;
     const totals = await monthTotals(tx, shiftId, month);
     let charge = await tx.shiftCharge.findUnique({ where: { shiftId_month: { shiftId, month } } });
 
@@ -92,7 +99,7 @@ async function claimCharge(
         return { kind: "result", result: { outcome: "IN_PROGRESS", chargeId: charge.id } };
       }
     } else {
-      if (totals.count === 0) {
+      if (!fixed && totals.count === 0) {
         // אין מופעים בחודש הזה: אין מה לחייב. שורה מאופסת מתעדת שהחודש טופל
         const zero = await tx.shiftCharge.create({
           data: { shiftId, month, amountAgorot: 0, occurrenceCount: 0, isFirst, status: "WAIVED", note: "no_occurrences", paidAt: now },
@@ -100,7 +107,7 @@ async function claimCharge(
         return { kind: "result", result: { outcome: "NOTHING_DUE", chargeId: zero.id, amountAgorot: 0 } };
       }
       charge = await tx.shiftCharge.create({
-        data: { shiftId, month, amountAgorot: totals.amountAgorot, occurrenceCount: totals.count, isFirst, status: "PENDING" },
+        data: { shiftId, month, dueDate, amountAgorot: amountOf(totals), occurrenceCount: totals.count, isFirst, status: "PENDING" },
       });
     }
 
@@ -116,7 +123,7 @@ async function claimCharge(
     }
 
     const recomputed = await monthTotals(tx, shiftId, month);
-    if (recomputed.count === 0) {
+    if (!fixed && recomputed.count === 0) {
       await tx.shiftCharge.update({ where: { id: charge.id }, data: { status: "WAIVED", amountAgorot: 0, occurrenceCount: 0, note: "no_occurrences", paidAt: now } });
       return { kind: "result", result: { outcome: "NOTHING_DUE", chargeId: charge.id, amountAgorot: 0 } };
     }
@@ -129,8 +136,10 @@ async function claimCharge(
         attempt,
         claimedAt: now,
         lastAttemptAt: now,
-        amountAgorot: recomputed.amountAgorot,
+        amountAgorot: amountOf(recomputed),
         occurrenceCount: recomputed.count,
+        // החיוב הראשון נקבע בעת ההזמנה (לא בתאריך ההתחלה): לא דורסים מועד שכבר נשמר
+        dueDate: charge.dueDate ?? dueDate,
         failureCode: null,
         paymentId: null,
       },
@@ -287,7 +296,7 @@ export async function chargeShiftMonth(params: {
 export interface DueCharge {
   shiftId: string;
   month: string;
-  /** MISSED = חודש קודם שלא חויב (הריצה החודשית הוחמצה) */
+  /** MISSED = חיוב שמועדו עבר ועדיין לא חויב (הריצה היומית הוחמצה) */
   kind: "MONTHLY" | "MISSED";
 }
 
@@ -300,17 +309,23 @@ export function currentMonthKey(now: Date): string {
  * חיובים שנכשלו (ממתינים לריצת retry) וחיובים במצב לא ידוע אינם נכללים.
  */
 export async function scanDueCharges(db: PrismaClient, now: Date): Promise<{ due: DueCharge[]; needsReview: number }> {
-  const current = currentMonthKey(now);
-  const shifts = await db.shift.findMany({ where: { status: "ACTIVE" }, include: { charges: true } });
+  const today = jerusalemTodayIso(now);
+  // משמרת בתשלום ידני אינה מחויבת אוטומטית (המנהל מתעד תשלום)
+  const shifts = await db.shift.findMany({ where: { status: "ACTIVE", paymentMode: "AUTO" }, include: { charges: true } });
   const due: DueCharge[] = [];
   let needsReview = 0;
   for (const shift of shifts) {
-    for (const month of billingMonths(shift.startDate)) {
-      if (month > current) continue;
+    const months = billingMonths(shift.startDate);
+    const dueDates = billingDueDates(shift.startDate);
+    for (const [index, month] of months.entries()) {
+      // החיוב הראשון של משמרת במחיר חודשי קבוע מתבצע רק בעת ההזמנה (createShift), לא בריצה היומית
+      if (index === 0 && shift.monthlyPriceAgorot > 0) continue;
+      // החיוב מגיע במועדו המלא (לא בתחילת החודש הקלנדרי)
+      if (dueDates[index] > today) continue;
       const charge = shift.charges.find((c) => c.month === month);
       if (charge?.status === "UNKNOWN") needsReview++;
       if (charge && charge.status !== "PENDING") continue;
-      due.push({ shiftId: shift.id, month, kind: month < current ? "MISSED" : "MONTHLY" });
+      due.push({ shiftId: shift.id, month, kind: dueDates[index] < today ? "MISSED" : "MONTHLY" });
     }
   }
   return { due, needsReview };
@@ -327,6 +342,13 @@ export interface BillingRunSummary {
   retriedPaid: number;
   suspended: number;
   ended: number;
+  /** משמרות שהמתינו לאישור חיוב ראשון מעבר לזמן המותר: אושרו / שוחררו */
+  pendingActivated: number;
+  pendingReleased: number;
+  /** חיובים ידניים שלא התקבלו במועד ונכנסו לתקופת חסד */
+  manualOverdue: number;
+  /** זיכויי שעות חלופיות שניתנו בריצה זו (רשת ביטחון להשלמה) */
+  makeupGranted: number;
   missedFound: number;
   needsReview: number;
   errors: number;
@@ -375,10 +397,10 @@ export async function runMonthlyShiftBilling(params: {
   const run = await acquireRun(db, { period, trigger, now });
   if (!run) return { outcome: "ALREADY_RUNNING" };
 
-  const summary: BillingRunSummary = { period, scanned: 0, charged: 0, failed: 0, unknown: 0, skipped: 0, retried: 0, retriedPaid: 0, suspended: 0, ended: 0, missedFound: 0, needsReview: 0, errors: 0 };
+  const summary: BillingRunSummary = { period, scanned: 0, charged: 0, failed: 0, unknown: 0, skipped: 0, retried: 0, retriedPaid: 0, suspended: 0, ended: 0, pendingActivated: 0, pendingReleased: 0, manualOverdue: 0, makeupGranted: 0, missedFound: 0, needsReview: 0, errors: 0 };
   let fatal = false;
   try {
-    // 1) סריקה
+    // 1) סריקה: חיובים שמועדם הגיע (כולל כאלה שהוחמצו בריצה קודמת)
     const { due, needsReview } = await scanDueCharges(db, now);
     summary.scanned = due.length;
     summary.needsReview = needsReview;
@@ -398,10 +420,31 @@ export async function runMonthlyShiftBilling(params: {
       }
     }
 
+    // 2ב) תשלום ידני שלא התקבל במועדו: נכנס למנגנון החובות כמו חיוב רגיל שנכשל (תקופת חסד של 7 ימים ואז השעיה)
+    const todayIso = jerusalemTodayIso(now);
+    const overdueManual = await db.shiftCharge.findMany({
+      where: { status: "PENDING", dueDate: { lt: todayIso }, shift: { status: "ACTIVE", paymentMode: "MANUAL" } },
+      include: { shift: { select: { userId: true } } },
+    });
+    for (const c of overdueManual) {
+      try {
+        const { count } = await db.shiftCharge.updateMany({
+          where: { id: c.id, status: "PENDING" },
+          data: { status: "FAILED", failureCode: "manual_payment_overdue", graceUntil: graceDeadline(now), lastAttemptAt: now, claimedAt: null },
+        });
+        if (count === 1) {
+          summary.manualOverdue++;
+          await writeAudit(db, { action: "shift_charge.manual_overdue", userId: c.shift.userId, entityType: "ShiftCharge", entityId: c.id, outcome: "ok", reason: `due:${c.dueDate}`, before: { status: "PENDING" }, after: { status: "FAILED", failureCode: "manual_payment_overdue" } });
+        }
+      } catch {
+        summary.errors++;
+      }
+    }
+
     // 3) ניסיון חוזר: כישלונות ודאיים בתקופת חסד, פעם אחת ביום (לפי יום ירושלים)
     const todayStart = jerusalemDayStart(jerusalemTodayIso(now));
     const failed = await db.shiftCharge.findMany({
-      where: { status: "FAILED", graceUntil: { gt: now }, shift: { status: "ACTIVE" }, OR: [{ lastAttemptAt: null }, { lastAttemptAt: { lt: todayStart } }] },
+      where: { status: "FAILED", graceUntil: { gt: now }, shift: { status: "ACTIVE", paymentMode: "AUTO" }, OR: [{ lastAttemptAt: null }, { lastAttemptAt: { lt: todayStart } }] },
     });
     for (const charge of failed) {
       try {
@@ -423,7 +466,16 @@ export async function runMonthlyShiftBilling(params: {
         data: { status: "SUSPENDED", suspendedAt: now, suspensionReason: `payment_failed:${e.month}` },
       });
       summary.suspended += count;
+      if (count === 1) await writeAudit(db, { action: "shift.suspended_nonpayment", entityType: "Shift", entityId: e.shiftId, outcome: "ok", reason: `payment_failed:${e.month}` });
     }
+
+    // 4ב) משמרות שממתינות לחיוב ראשון זמן רב מדי: אימות מול הספק, ואם אין אישור ודאי — שחרור המשבצות
+    const expired2 = await expireStalePendingShifts(db, provider, now);
+    summary.pendingActivated += expired2.activated;
+    summary.pendingReleased += expired2.released;
+
+    // 4ג) רשת ביטחון: זיכוי שעות חלופיות שטרם ניתן למפגשים שדולגו במשמרות פעילות
+    summary.makeupGranted += (await grantMakeupCredits(db, now)).granted;
 
     // 5) סיום: משמרת שתקופתה חלפה וכל חודשיה שולמו/אופסו
     const today = jerusalemTodayIso(now);
@@ -497,4 +549,103 @@ export async function refundChargeAmount(params: {
     await audit(payment.id, "refund", "error", "shift_refund_failed");
     return 0;
   }
+}
+
+// ───────────────────────────── שחרור משבצות של משמרת שלא אושרה ─────────────────────────────
+
+/** משחרר משמרת שלא אושרה: מבטל את הזמנות המפגשים, מסמן את המפגשים והמשמרת כמבוטלים. לא מוחק היסטוריה */
+export async function abortPendingShift(db: PrismaClient, shiftId: string, reason: string, now: Date) {
+  await db.$transaction(async (tx) => {
+    const occurrences = await tx.shiftOccurrence.findMany({ where: { shiftId, status: "SCHEDULED" } });
+    const appointmentIds = occurrences.map((o) => o.appointmentId).filter((x): x is string => !!x);
+    await tx.appointment.updateMany({ where: { id: { in: appointmentIds }, status: "CONFIRMED" }, data: { status: "CANCELLED" } });
+    await tx.shiftOccurrence.updateMany({ where: { shiftId, status: "SCHEDULED" }, data: { status: "CANCELLED", statusNote: reason } });
+    await tx.shift.updateMany({ where: { id: shiftId, status: "PENDING" }, data: { status: "CANCELLED", cancelledAt: now, cancelReason: reason } });
+    // משמרת שלא אושרה: אין זכאות לשעות חלופיות על ימים שנסגרו לפני האישור (זיכוי ניתן רק למשמרת פעילה)
+    await tx.shiftOccurrence.updateMany({ where: { shiftId, makeupStatus: "OWED", makeupCreditId: null }, data: { makeupStatus: null, statusNote: reason } });
+  });
+}
+
+// ───────────────────────────── שעות חלופיות: זיכוי בדקות ─────────────────────────────
+
+/**
+ * נותן זיכוי (Credit, המנגנון הקיים של יתרות דקות) על כל מפגש שדולג בגלל סגירה ביוזמת ההנהלה: בדיוק משך המפגש שבוטל
+ * (4 שעות = 240 דקות, 3 שעות = 180). רק למשמרת פעילה (לא למשמרת שעדיין ממתינה לחיוב הראשון), פעם אחת לכל מפגש
+ * (אילוץ ייחודיות על makeupCreditId). אידמפוטנטי ובטוח להפעלה חוזרת/מקבילית. אינו נוגע בחיובי המשמרת.
+ * הלקוח מממש את הזיכוי כמו כל יתרה: "אישור מהיתרה" בהזמנת חדר, או שיבוץ ע"י מנהל. הזיכוי פוקע אחרי MAKEUP_CREDIT_VALIDITY_DAYS.
+ */
+export async function grantMakeupCredits(db: PrismaClient, now: Date, filter: { shiftId?: string; date?: string } = {}): Promise<{ granted: number; minutes: number }> {
+  const pending = await db.shiftOccurrence.findMany({
+    where: {
+      status: "SKIPPED_CLOSED_DAY",
+      makeupStatus: "OWED",
+      makeupCreditId: null,
+      shift: { status: "ACTIVE", ...(filter.shiftId ? { id: filter.shiftId } : {}) },
+      ...(filter.date ? { date: filter.date } : {}),
+    },
+    include: { shift: { select: { userId: true } } },
+    take: 500,
+  });
+  let granted = 0;
+  let minutes = 0;
+  for (const occ of pending) {
+    const duration = Math.round((occ.endTime.getTime() - occ.startTime.getTime()) / 60_000);
+    if (duration <= 0) continue;
+    try {
+      await db.$transaction(async (tx) => {
+        const credit = await tx.credit.create({
+          data: {
+            userId: occ.shift.userId,
+            minutesTotal: duration,
+            minutesRemaining: duration,
+            expiresAt: new Date(now.getTime() + MAKEUP_CREDIT_VALIDITY_DAYS * 24 * 3_600_000),
+            reason: `shift_makeup:${occ.id}`,
+            sourceAppointmentId: occ.appointmentId,
+          },
+        });
+        const { count } = await tx.shiftOccurrence.updateMany({ where: { id: occ.id, makeupStatus: "OWED", makeupCreditId: null }, data: { makeupCreditId: credit.id, makeupUpdatedAt: now } });
+        if (count !== 1) throw new Error("makeup already granted");
+        await writeAudit(tx, { action: "shift_makeup.granted", userId: occ.shift.userId, entityType: "ShiftOccurrence", entityId: occ.id, outcome: "ok", after: { minutes: duration, creditId: credit.id, date: occ.date } });
+      });
+      granted++;
+      minutes += duration;
+    } catch {
+      // מתן כפול/מקביל נדחה באילוץ; ממשיכים לשאר המפגשים
+    }
+  }
+  return { granted, minutes };
+}
+
+/**
+ * משמרת בחיוב אוטומטי שממתינה לאישור החיוב הראשון (מצב לא ידוע / ריצה שנקטעה) לא מחזיקה משבצות ללא הגבלה. אחרי
+ * PENDING_SHIFT_MAX_HOLD_MS: אם יש תשלום אצל הספק — מאמתים מולו (הצלחה: המשמרת מאושרת; כישלון ודאי: משוחררת). אם אי אפשר
+ * לאמת — המשבצות משוחררות, והחיוב נשאר "לא ידוע" בתור הבירור של המנהל (החזר/הכרעה ידניים; אין חיוב חוזר אוטומטי).
+ */
+export async function expireStalePendingShifts(db: PrismaClient, provider: PaymentProvider, now: Date): Promise<{ activated: number; released: number }> {
+  const cutoff = new Date(now.getTime() - PENDING_SHIFT_MAX_HOLD_MS);
+  const stale = await db.shift.findMany({ where: { status: "PENDING", paymentMode: "AUTO", createdAt: { lt: cutoff } }, include: { charges: { where: { isFirst: true } } } });
+  let activated = 0;
+  let released = 0;
+  for (const shift of stale) {
+    try {
+      const charge = shift.charges[0];
+      // ניסיון חיוב שעדיין בתהליך (תפיסה טרייה) לא נקטע
+      if (charge?.claimedAt && now.getTime() - charge.claimedAt.getTime() < CHARGE_CLAIM_TTL_MS) continue;
+      const payment = charge?.paymentId ? await db.payment.findUnique({ where: { id: charge.paymentId } }) : null;
+      if (charge && payment?.providerPaymentId) {
+        const res = await settleFromProvider(db, provider, charge, payment.id, payment.providerPaymentId, now);
+        if (res.outcome === "PAID") {
+          const { count } = await db.shift.updateMany({ where: { id: shift.id, status: "PENDING" }, data: { status: "ACTIVE" } });
+          activated += count;
+          if (count === 1) await grantMakeupCredits(db, now, { shiftId: shift.id });
+          continue;
+        }
+      }
+      await abortPendingShift(db, shift.id, charge?.status === "FAILED" ? "first_charge_failed" : "first_charge_unconfirmed_timeout", now);
+      released++;
+    } catch {
+      // שגיאה במשמרת אחת לא עוצרת את האחרות; תטופל בריצה הבאה
+    }
+  }
+  return { activated, released };
 }

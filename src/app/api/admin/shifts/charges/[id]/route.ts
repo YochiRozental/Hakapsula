@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
-import { resolveUnknownCharge, retryChargeAsAdmin } from "@/lib/shifts/lifecycle";
-import { gateProvider, mutationGuard, notFound, readJson, requireAdminUser, shiftErrorResponse, str } from "@/lib/shifts/http";
+import { recordManualPayment, resolveUnknownCharge, retryChargeAsAdmin } from "@/lib/shifts/lifecycle";
+import { gateProvider, int, mutationGuard, notFound, readJson, requireAdminUser, shiftErrorResponse, str } from "@/lib/shifts/http";
 
 /**
  * טיפול מנהל בחיוב חודשי: ניסיון חוזר אחרי כישלון ודאי (retry), או בירור של חיוב במצב "לא ידוע" לפי בדיקה מול הספק
- * (resolve-paid / resolve-not-charged). חיוב לא ידוע לעולם לא מחויב שוב אוטומטית.
+ * (resolve-paid / resolve-not-charged), או תיעוד תשלום ידני שהתקבל בפועל (manual-payment: סכום, תאריך, אישור מפורש).
+ * חיוב לא ידוע לעולם לא מחויב שוב אוטומטית. תשלום ידני לא מסומן כשולם בלי confirm: true.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const provider = gateProvider();
@@ -18,6 +19,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const action = str(body?.action);
   try {
     if (action === "retry") return NextResponse.json(await retryChargeAsAdmin({ chargeId: id, adminId: admin.user.id, provider }));
+    if (action === "manual-payment") {
+      return NextResponse.json(
+        await recordManualPayment({
+          chargeId: id,
+          adminId: admin.user.id,
+          amountAgorot: int(body?.amountAgorot) ?? Number.NaN,
+          paidOn: str(body?.paidOn) ?? "",
+          reference: str(body?.reference),
+          confirm: body?.confirm === true,
+        })
+      );
+    }
     if (action === "resolve-paid" || action === "resolve-not-charged") {
       return NextResponse.json(
         await resolveUnknownCharge({ chargeId: id, adminId: admin.user.id, outcome: action === "resolve-paid" ? "PAID" : "NOT_CHARGED", note: str(body?.note) })

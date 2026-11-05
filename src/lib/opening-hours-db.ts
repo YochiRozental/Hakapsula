@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { BookingError } from "@/lib/booking-error";
 import {
   closedDayViolation,
-  DEFAULT_DAY_WINDOW,
+  defaultDayWindow,
   hoursRejection,
   trackForGender,
   fitsOpening,
@@ -21,10 +21,10 @@ import {
 
 /** מקור הנתונים היחיד לשעות הפעילות (לוח אחד לכל החדרים): הדף הציבורי, הניהול וההזמנות (אתר, IVR, API) קוראים מכאן */
 
-/** סימון בעמודת note של שורה שבועית שהיא "מסלול היום" (08:00–21:00) ולא חלון מפורש — כך אין צורך בשינוי סכמה */
+/** סימון בעמודת note של שורה שבועית שהיא "מסלול היום" (ברירת מחדל) ולא חלון מפורש — כך אין צורך בשינוי סכמה */
 const DAY_DEFAULT_NOTE = "__DAY_DEFAULT__";
 
-/** כל החלונות הפעילים. יום בלי חלונות מפורשים נפתר ל-DEFAULT_DAY_WINDOW במסלול היום (ראו weeklyDay) */
+/** כל החלונות הפעילים. יום בלי חלונות מפורשים נפתר לשעות ברירת המחדל של היום (defaultDayWindow) במסלול היום (ראו weeklyDay) */
 export async function loadWindows(): Promise<HoursWindow[]> {
   const rows = await prisma.openingWindow.findMany({
     where: { active: true },
@@ -81,7 +81,7 @@ export async function replaceWeekday(weekday: number, windows: DayInterval[], da
     prisma.openingWindow.updateMany({ where: { active: true, date: null, weekday }, data: { active: false } }),
     prisma.openingWindow.createMany({
       data: [
-        { weekday, ...DEFAULT_DAY_WINDOW, activity: dayActivity, closed, note: DAY_DEFAULT_NOTE },
+        { weekday, ...defaultDayWindow(weekday), activity: dayActivity, closed, note: DAY_DEFAULT_NOTE },
         ...windows.map((w) => ({ weekday, startMinutes: w.startMinutes, endMinutes: w.endMinutes, activity: w.activity })),
       ],
     }),

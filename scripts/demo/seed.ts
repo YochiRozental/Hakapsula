@@ -43,6 +43,13 @@ async function main() {
   const debtBooking = await import("../../src/lib/finance/debt-booking");
   const { jerusalemWallInstant, jerusalemTodayIso } = await import("../../src/lib/jerusalem-time");
 
+  /**
+   * שעות הפעילות הרגילות (א'–ה' 07:00–22:00, ו' 07:00–12:00) כבר מכסות את משבצות המשמרות, ולכן אין צורך בהגדרות מיוחדות.
+   * גרסה קודמת של ההדגמה הרחיבה ידנית את הימים ל-07:00–23:00 (חלון מפורש): מסירים אותו כדי שייעשה שימוש בשעות הרגילות.
+   * רץ גם על מסד הדגמה קיים (לפני בדיקת "הנתונים כבר קיימים"), כדי שלא יידרש איפוס שמוחק משתמשים שנרשמו בהדגמה.
+   */
+  await prisma.openingWindow.deleteMany({ where: { date: null, closed: false, startMinutes: 7 * 60, endMinutes: 23 * 60 } });
+
   if ((await prisma.user.count({ where: { email: { endsWith: "@demo.local" } } })) > 0) {
     console.log("נתוני ההדגמה כבר קיימים (להתחלה מחדש: npm run demo:reset)");
     await prisma.$disconnect();
@@ -90,6 +97,7 @@ async function main() {
   const gad = await mk("gad", "גד (משמרת מושעית)", { canBookShifts: true });
   const reuven = await mk("reuven", "ראובן (תשלום בבירור)");
   const tester = await mk("tester", "לקוח לניסוי עצמי", { canBookShifts: true });
+  const manual = await mk("manual", "משמרת בתשלום ידני", { canBookShifts: true, cardLast4: null, cardExpiry: null });
 
   // ───────── עזרים ─────────
   const addCard = async (userId: string, key: string) => {
@@ -163,13 +171,22 @@ async function main() {
 
   // 8. משמרת קבועה פעילה
   await addCard(shimon.id, "shimon");
-  const s1 = await shifts.createShift({ userId: shimon.id, roomKey: "ROOM3", weekday: 1, windowId: "MORNING", startDate: nextDow(1, 1), clientKey: keyOf(), provider });
+  // תאריך ההתחלה הוא היום: לפי הכללים החיוב הראשון הוא בתאריך ההתחלה, ולכן הוא מתבצע מיד
+  const today = jerusalemTodayIso();
+  const s1 = await shifts.createShift({ userId: shimon.id, roomKey: "ROOM3", weekday: 1, windowId: "MORNING", startDate: today, clientKey: keyOf(), provider });
   // 9-10. משמרות עם חיוב שנכשל (בתקופת חסד) ומושעית
   await addCard(binyamin.id, "binyamin");
   await addCard(gad.id, "gad");
-  const s2 = await shifts.createShift({ userId: binyamin.id, roomKey: "ROOM4", weekday: 3, windowId: "AFTERNOON", startDate: nextDow(3, 1), clientKey: keyOf(), provider });
-  const s3 = await shifts.createShift({ userId: gad.id, roomKey: "ROOM1", weekday: 1, windowId: "NOON", startDate: nextDow(1, 1), clientKey: keyOf(), provider });
-  for (const s of [s1, s2, s3]) if (s.status !== "ACTIVE") throw new Error("shift creation: " + s.status);
+  const s2 = await shifts.createShift({ userId: binyamin.id, roomKey: "ROOM4", weekday: 3, windowId: "AFTERNOON", startDate: today, clientKey: keyOf(), provider });
+  const s3 = await shifts.createShift({ userId: gad.id, roomKey: "ROOM1", weekday: 1, windowId: "NOON", startDate: today, clientKey: keyOf(), provider });
+  // משמרת בתשלום ידני (בתיאום מנהל): נוצרה ע"י המנהל בלי אמצעי תשלום; התשלום הראשון תועד ידנית, ושני האחרים ממתינים
+  const sm = await shifts.createShift({ userId: manual.id, roomKey: "ROOM2", weekday: 3, windowId: "EVENING", startDate: today, clientKey: keyOf(), provider, createdById: admin.id, paymentMode: "MANUAL" });
+  {
+    const lifecycle = await import("../../src/lib/shifts/lifecycle");
+    const first = await prisma.shiftCharge.findFirstOrThrow({ where: { shiftId: sm.shiftId, isFirst: true } });
+    await lifecycle.recordManualPayment({ chargeId: first.id, adminId: admin.id, amountAgorot: first.amountAgorot, paidOn: today, reference: "קבלה 1001 (מזומן)", confirm: true });
+  }
+  for (const s of [s1, s2, s3, sm]) if (s.status !== "ACTIVE") throw new Error("shift creation: " + s.status);
   // החיוב הראשון של שתי המשמרות האחרונות סומן ככושל (נתוני הדגמה): הכרטיס נדחה; גד כבר עבר את שבעת ימי החסד
   const DAY = 86400_000;
   async function failFirstCharge(shiftId: string, userId: string, graceUntil: Date, firstFailure: Date) {
@@ -231,6 +248,7 @@ async function main() {
     { key: "gad", label: "משמרת מושעית", name: gad.name },
     { key: "reuven", label: "שני תשלומים בבירור", name: reuven.name },
     { key: "tester", label: "לקוח נקי לניסוי עצמי (כרטיס שמור, זכאי למשמרות)", name: tester.name },
+    { key: "manual", label: "משמרת בתשלום ידני (תשלום ראשון תועד, שניים ממתינים)", name: manual.name },
   ].map((a) => ({ ...a, email: `${a.key}@demo.local`, password: passwords[a.key] }));
   if (out) {
     mkdirSync(dirname(out), { recursive: true });

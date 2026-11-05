@@ -34,6 +34,7 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
   let pkgs: typeof import("@/lib/payments/packages");
   let shiftSvc: typeof import("@/lib/shifts/schedule");
   let shiftBill: typeof import("@/lib/shifts/billing");
+  let shiftLife: typeof import("@/lib/shifts/lifecycle");
   let methods: typeof import("@/lib/payments/saved-methods");
   let hoursDb: typeof import("@/lib/opening-hours-db");
   let pw: typeof import("@/lib/password");
@@ -89,6 +90,7 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
     pkgs = await import("@/lib/payments/packages");
     shiftSvc = await import("@/lib/shifts/schedule");
     shiftBill = await import("@/lib/shifts/billing");
+    shiftLife = await import("@/lib/shifts/lifecycle");
     methods = await import("@/lib/payments/saved-methods");
     hoursDb = await import("@/lib/opening-hours-db");
     pw = await import("@/lib/password");
@@ -674,11 +676,11 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
 
   async function shiftWorld() {
     // "היום" הקבוע של בדיקות המשמרות (רביעי 10.2.2027); התחלה ביום שני 15.2.2027
-    for (const wd of [1]) await hoursDb.replaceWeekday(wd, [{ startMinutes: 8 * 60, endMinutes: 23 * 60, activity: "BOYS" }], "BOYS", false);
+    for (const wd of [1]) await hoursDb.replaceWeekday(wd, [{ startMinutes: 7 * 60, endMinutes: 23 * 60, activity: "BOYS" }], "BOYS", false);
     await prisma.user.update({ where: { id: ids.a }, data: { canBookShifts: true } });
     const added = await methods.addMockCard({ userId: ids.a, currentPassword: SITE_PASSWORD, provider });
     assert.equal(added.status, "OK");
-    const NOW = new Date("2027-02-10T09:00:00Z");
+    const NOW = new Date("2027-02-15T09:00:00Z");
     const res = await shiftSvc.createShift({ userId: ids.a, roomKey: "ROOM3", weekday: 1, windowId: "MORNING", startDate: "2027-02-15", clientKey: key(), provider, now: NOW });
     assert.equal(res.status, "ACTIVE", JSON.stringify(res));
     return { shiftId: res.shiftId, NOW };
@@ -688,37 +690,74 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
     const { shiftId } = await shiftWorld();
     const card = await prisma.paymentMethod.findFirstOrThrow({ where: { userId: ids.a } });
     await provider.declineToken(card.token);
-    const MARCH_1 = new Date("2027-03-01T05:00:00Z");
-    await shiftBill.runMonthlyShiftBilling({ provider, trigger: "test", now: MARCH_1 });
+    const MARCH_15 = new Date("2027-03-15T05:00:00Z");
+    await shiftBill.runMonthlyShiftBilling({ provider, trigger: "test", now: MARCH_15 });
     const march = await prisma.shiftCharge.findUniqueOrThrow({ where: { shiftId_month: { shiftId, month: "2027-03" } } });
     assert.equal(march.status, "FAILED");
 
     // בתקופת חסד
-    const o1 = await overview.getFinanceOverview({}, true, new Date("2027-03-02T05:00:00Z"));
+    const o1 = await overview.getFinanceOverview({}, true, new Date("2027-03-16T05:00:00Z"));
     assert.equal(o1.shifts!.failedChargesCount, 1);
     assert.equal(o1.shifts!.failedChargesAgorot, march.amountAgorot);
     assert.equal(o1.shifts!.graceShifts, 1);
     assert.equal(o1.shifts!.suspendedShifts, 0);
     assert.equal(o1.outstandingNotCollectedAgorot, march.amountAgorot);
     assert.equal(o1.outstandingBreakdown.bookingDebtsAgorot, 0);
-    const sf1 = await overview.getShiftFinance(new Date("2027-03-02T05:00:00Z"));
+    const sf1 = await overview.getShiftFinance(new Date("2027-03-16T05:00:00Z"));
     assert.equal(sf1.graceShifts[0].id, shiftId);
     assert.equal(sf1.charges[0].shiftId, shiftId);
 
     // אחרי 7 ימים: מושעית, והמשבצות נשמרות
-    await shiftBill.runMonthlyShiftBilling({ provider, trigger: "test", now: new Date("2027-03-09T05:00:00Z") });
+    await shiftBill.runMonthlyShiftBilling({ provider, trigger: "test", now: new Date("2027-03-23T05:00:00Z") });
     assert.equal((await prisma.shift.findUniqueOrThrow({ where: { id: shiftId } })).status, "SUSPENDED");
-    const o2 = await overview.getFinanceOverview({}, true, new Date("2027-03-09T06:00:00Z"));
+    const o2 = await overview.getFinanceOverview({}, true, new Date("2027-03-23T06:00:00Z"));
     assert.equal(o2.shifts!.suspendedShifts, 1);
-    assert.equal((await overview.getShiftFinance(new Date("2027-03-09T06:00:00Z"))).suspendedShifts[0].id, shiftId);
+    assert.equal((await overview.getShiftFinance(new Date("2027-03-23T06:00:00Z"))).suspendedShifts[0].id, shiftId);
     assert.ok((await prisma.shiftOccurrence.count({ where: { shiftId, status: "SCHEDULED" } })) > 0);
     // חוב משמרת מיוצג רק ב-ShiftCharge: אין Debt על תורים של משמרת
     assert.equal(await prisma.debt.count({ where: { appointment: { shiftOccurrence: { isNot: null } } } }), 0);
-    const card2 = await overview.getCustomerFinance(ids.a, true, new Date("2027-03-09T06:00:00Z"));
+    const card2 = await overview.getCustomerFinance(ids.a, true, new Date("2027-03-23T06:00:00Z"));
     assert.equal(card2!.shifts[0].status, "SUSPENDED");
     assert.equal(card2!.debts.length, 0);
     // מודול המשמרות סגור: אין חיובי משמרת בסכומים
     assert.equal((await overview.getFinanceOverview({}, false)).shifts, null);
+  });
+
+  test("תשלום ידני שמנהל אישר נכלל בהכנסות בפועל בנפרד מספק הסליקה, בלי ספירה כפולה; לפני אישור מפורש אינו נספר; מופיע בספר התנועות", async () => {
+    const { NOW } = await shiftWorld(); // ids.a: חיוב ראשון דרך הספק (480 ₪)
+    await prisma.user.update({ where: { id: ids.b }, data: { canBookShifts: true } });
+    const manual = await shiftSvc.createShift({ userId: ids.b, roomKey: "ROOM4", weekday: 1, windowId: "MORNING", startDate: "2027-02-15", clientKey: key(), provider, now: NOW, createdById: ids.admin, paymentMode: "MANUAL" });
+    const charge = await prisma.shiftCharge.findFirstOrThrow({ where: { shiftId: manual.shiftId, isFirst: true } });
+    const MONTHLY = charge.amountAgorot;
+
+    // לפני אישור מפורש: רק הספק נספר, והתשלום הידני הממתין הוא חוב ולא הכנסה
+    const before = await overview.getFinanceOverview({}, true, NOW);
+    assert.deepEqual([before.collected.providerGrossAgorot, before.collected.manualGrossAgorot, before.collected.manualCount], [MONTHLY, 0, 0]);
+    assert.equal(before.collected.grossAgorot, MONTHLY);
+
+    // ניסיון בלי אישור מפורש נדחה ואינו משנה כלום
+    await assert.rejects(() => shiftLife.recordManualPayment({ chargeId: charge.id, adminId: ids.admin, amountAgorot: MONTHLY, paidOn: "2027-02-15", confirm: false, now: NOW }), { code: "INVALID" });
+    assert.equal((await overview.getFinanceOverview({}, true, NOW)).collected.manualGrossAgorot, 0);
+
+    await shiftLife.recordManualPayment({ chargeId: charge.id, adminId: ids.admin, amountAgorot: MONTHLY, paidOn: "2027-02-15", reference: "קבלה 7", confirm: true, now: NOW });
+    const after = await overview.getFinanceOverview({}, true, NOW);
+    assert.deepEqual(
+      [after.collected.providerGrossAgorot, after.collected.providerCount, after.collected.manualGrossAgorot, after.collected.manualCount, after.collected.grossAgorot, after.collected.count, after.collected.netAgorot],
+      [MONTHLY, 1, MONTHLY, 1, 2 * MONTHLY, 2, 2 * MONTHLY]
+    );
+    // אין ספירה כפולה: קריאה חוזרת וניסיון תיעוד שני לא משנים את הסכומים
+    await assert.rejects(() => shiftLife.recordManualPayment({ chargeId: charge.id, adminId: ids.admin, amountAgorot: MONTHLY, paidOn: "2027-02-15", confirm: true, now: NOW }), { code: "CONFLICT" });
+    assert.equal((await overview.getFinanceOverview({}, true, NOW)).collected.grossAgorot, 2 * MONTHLY);
+    // טווח תאריכים: התשלום הידני נספר לפי תאריך הקבלה
+    const outside = await overview.getFinanceOverview({ from: new Date("2027-03-01T00:00:00Z"), to: new Date("2027-04-01T00:00:00Z") }, true, NOW);
+    assert.deepEqual([outside.collected.manualGrossAgorot, outside.collected.providerGrossAgorot], [0, 0]);
+    // ספר התנועות: שורה נפרדת מסוג תשלום ידני, ללא כפילות מול תשלומי הספק
+    const ledger = await overview.getLedger({});
+    const manualRows = ledger.filter((r) => r.type === "MANUAL_PAYMENT");
+    assert.deepEqual(manualRows.map((r) => [r.user.id, r.amountAgorot, r.label]), [[ids.b, MONTHLY, "קבלה 7"]]);
+    assert.equal(ledger.filter((r) => r.type === "PAYMENT" && r.status === "SUCCEEDED").length, 1);
+    // תיעוד ידני אחרי כישלון בספק: החיוב שנכשל (תשלום FAILED) אינו נספר פעמיים
+    assert.equal(await prisma.payment.count({ where: { status: "SUCCEEDED", purpose: "SHIFT_MONTH" } }), 1);
   });
 
   test("חיוב משמרת במצב לא ידוע: הכרעה דורשת אימות או אסמכתה, ומתועדת", async () => {
@@ -726,10 +765,10 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
     MockPaymentProvider.prototype.chargeSavedMethod = async () => {
       throw new Error("timeout");
     };
-    await shiftBill.runMonthlyShiftBilling({ provider, trigger: "test", now: new Date("2027-03-01T05:00:00Z") });
+    await shiftBill.runMonthlyShiftBilling({ provider, trigger: "test", now: new Date("2027-03-15T05:00:00Z") });
     const charge = await prisma.shiftCharge.findUniqueOrThrow({ where: { shiftId_month: { shiftId, month: "2027-03" } } });
     assert.equal(charge.status, "UNKNOWN");
-    const q = await unknown.listUnknown(new Date("2027-03-01T06:00:00Z"), true);
+    const q = await unknown.listUnknown(new Date("2027-03-15T06:00:00Z"), true);
     assert.equal(q.shiftCharges[0].id, charge.id);
     await rejects(unknown.resolveShiftChargeUnknown({ chargeId: charge.id, adminId: ids.admin, provider, outcome: "NOT_CHARGED" }), "INVALID");
     const done = await unknown.resolveShiftChargeUnknown({ chargeId: charge.id, adminId: ids.admin, provider, outcome: "NOT_CHARGED", evidence: "אין חיוב בדוח הספק" });

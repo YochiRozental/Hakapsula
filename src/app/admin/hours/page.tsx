@@ -6,6 +6,7 @@ import { DayHours } from "@/components/hours-summary";
 import { effectiveDayActivity, fromEditRows, HoursEditor, toEditRows, type DayEdit } from "@/components/hours-editor";
 import {
   dateKey,
+  defaultDayWindow,
   DEFAULT_WEEKDAY_ACTIVITY,
   isClosedDate,
   OPEN_WEEKDAYS,
@@ -157,6 +158,7 @@ export default function AdminHoursPage() {
                 </div>
                 <HoursEditor
                   idPrefix={`weekday-${d}`}
+                  defaultWindow={defaultDayWindow(d)}
                   value={draft}
                   disabled={busy}
                   onChange={(next) => setDrafts((prev) => ({ ...prev, [d]: next }))}
@@ -204,6 +206,7 @@ export default function AdminHoursPage() {
             {!exception.closed && (
               <HoursEditor
                 idPrefix="exception"
+                defaultWindow={defaultDayWindow(parseDateKey(exception.date)?.getDay() ?? 0)}
                 value={exception.edit}
                 disabled={busy}
                 onChange={(next) => setException({ ...exception, edit: next })}

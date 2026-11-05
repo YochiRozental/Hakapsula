@@ -2,6 +2,7 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { InMemoryMockStore, type MockStore } from "@/lib/payments/mock-store";
 import {
   IdempotencyConflictError,
+  PaymentError,
   PaymentStateError,
   WebhookVerificationError,
   type ChargeResult,
@@ -56,11 +57,20 @@ export class MockPaymentProvider implements PaymentProvider {
 
   constructor(
     private readonly webhookSecret: string,
-    private readonly store: MockStore = new InMemoryMockStore()
+    private readonly store: MockStore = new InMemoryMockStore(),
+    /** הגבלת לקוחות (אתר מותקן): מחזירה false ללקוח שאינו משתמש בדיקה מורשה. ללא פונקציה — אין הגבלה (הדגמה מקומית) */
+    private readonly customerAllowed?: (customerRef: string) => Promise<boolean>
   ) {}
+
+  private async assertCustomerAllowed(customerRef: string) {
+    if (this.customerAllowed && !(await this.customerAllowed(customerRef))) {
+      throw new PaymentError("תשלומי הדמה זמינים רק למשתמשי בדיקה מורשים");
+    }
+  }
 
   async createPaymentRequest(input: CreatePaymentRequestInput): Promise<PaymentRequestResult> {
     assertPositiveAmount(input.amountAgorot);
+    await this.assertCustomerAllowed(input.customerRef);
     const fingerprint = JSON.stringify([input.amountAgorot, input.currency, input.customerRef, !!input.savePaymentMethod]);
     const idemKey = `idem:${input.idempotencyKey}`;
 
@@ -133,6 +143,7 @@ export class MockPaymentProvider implements PaymentProvider {
 
   async chargeSavedMethod(input: ChargeSavedMethodInput): Promise<ChargeResult> {
     assertPositiveAmount(input.amountAgorot);
+    await this.assertCustomerAllowed(input.customerRef);
     const fingerprint = JSON.stringify([input.token, input.amountAgorot, input.currency, input.customerRef]);
     const idemKey = `idem:${input.idempotencyKey}`;
     const existing = await this.store.get<IdempotencyEntry>(idemKey);

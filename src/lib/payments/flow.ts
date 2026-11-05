@@ -4,6 +4,7 @@ import { BookingError } from "@/lib/booking";
 import { prisma } from "@/lib/prisma";
 import { getMissingBookingDetails } from "@/lib/profile";
 import { getRuntimeProvider } from "@/lib/payments/runtime";
+import { isMockUserAllowed, MOCK_ACCESS_DENIED_MESSAGE } from "@/lib/payments/mock-access";
 import { PaymentFlowError } from "@/lib/payments/booking-payment";
 import { WebhookVerificationError, type PaymentProvider } from "@/lib/payments/provider";
 
@@ -27,6 +28,7 @@ export async function requireBookingUser(): Promise<{ user: SessionUser } | { re
   if (!session?.user) return { response: NextResponse.json({ error: "יש להתחבר", code: "AUTH_REQUIRED" }, { status: 401 }) };
   const user = await prisma.user.findUnique({ where: { id: session.user.id } });
   if (!user) return { response: NextResponse.json({ error: "יש להתחבר", code: "AUTH_REQUIRED" }, { status: 401 }) };
+  if (!isMockUserAllowed(user)) return { response: NextResponse.json({ error: MOCK_ACCESS_DENIED_MESSAGE, code: "MOCK_NOT_ALLOWED" }, { status: 403 }) };
   const missing = getMissingBookingDetails(user);
   if (missing.length > 0) {
     return { response: NextResponse.json({ error: "יש להשלים את פרטי החשבון", code: "PROFILE_INCOMPLETE", missing }, { status: 422 }) };

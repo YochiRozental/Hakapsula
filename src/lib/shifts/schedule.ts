@@ -10,19 +10,22 @@ import { isUniqueViolation } from "@/lib/payments/shared";
 import { CONFLICTING_ROOM_KEYS, ROOM_KEYS } from "@/lib/rooms";
 import { ensureRooms } from "@/lib/rooms-db";
 import {
+  billingDueDates,
   billingMonths,
-  groupByMonth,
-  isShiftWindowId,
-  monthAmountAgorot,
   occurrenceDatesBetween,
   occurrencePriceAgorot,
   occurrenceTimes,
+  periodKeyOf,
   shiftEndDate,
   validateStartDate,
   SHIFT_WEEKDAYS,
-  type ShiftWindowId,
 } from "@/lib/shifts/calendar";
-import { chargeShiftMonth } from "@/lib/shifts/billing";
+import { requireActiveWindow } from "@/lib/shifts/windows-db";
+import type { ShiftWindowDef } from "@/lib/shifts/windows";
+import { abortPendingShift, chargeShiftMonth, grantMakeupCredits } from "@/lib/shifts/billing";
+import { writeAudit } from "@/lib/finance/audit";
+
+export { abortPendingShift };
 import { ShiftError, type ShiftConflict } from "@/lib/shifts/errors";
 import { MAX_OPEN_SHIFTS_PER_USER } from "@/lib/shifts/policy";
 
@@ -34,11 +37,12 @@ import { MAX_OPEN_SHIFTS_PER_USER } from "@/lib/shifts/policy";
 
 export interface PlannedOccurrence {
   date: string;
+  /** מפתח החיוב (YYYY-MM של מועד החיוב) של תקופת החיוב שבה חל המופע */
   month: string;
   startTime: Date;
   endTime: Date;
   priceAgorot: number;
-  /** יום שנסגר במפורש ע"י מנהל: המופע מדולג ואינו מחויב */
+  /** יום שנסגר במפורש ע"י ההנהלה: המופע מדולג והלקוח זכאי לשעה חלופית (אין החזר כספי) */
   skipReason?: string;
 }
 
@@ -47,9 +51,13 @@ export interface ShiftPlan {
   conflicts: ShiftConflict[];
   startDate: string;
   endDate: string;
-  priceAgorot: number;
-  months: { month: string; count: number; amountAgorot: number; isFirst: boolean }[];
+  /** המחיר החודשי של המשבצת (תמונת מצב ליצירה) */
+  monthlyPriceAgorot: number;
+  /** שלושת החיובים: מועד, סכום קבוע (בלי חישוב יחסי), וכמה מפגשים כלולים בתקופה */
+  months: { month: string; dueDate: string; count: number; amountAgorot: number; isFirst: boolean }[];
   firstChargeAgorot: number;
+  /** סך שלושת החיובים */
+  totalAgorot: number;
 }
 
 export interface PlanInput {
@@ -59,15 +67,19 @@ export interface PlanInput {
   windowId: string;
   startDate: string;
   now?: Date;
+  /** אופן הגבייה. MANUAL רק ע"י מנהל (ראו createShift) */
+  paymentMode?: "AUTO" | "MANUAL";
+  /** שינוי מאושר של משמרת קיימת רשאי להמשיך להשתמש במשבצת שהושבתה מאז (לא מזמינים אותה מחדש ללקוחות) */
+  allowInactiveWindow?: boolean;
 }
 
-/** תכנון הלוח של משמרת חדשה: מאמת את הקלט, ומתכנן מהתאריך שנבחר ועד סוף שלושת החודשים. לא כולל זמינות החדר (ראו findRoomConflicts) */
+/** תכנון הלוח של משמרת חדשה: מאמת את הקלט, ומתכנן מתאריך ההתחלה ועד סוף שלושת החודשים. לא כולל זמינות החדר (ראו findRoomConflicts) */
 export async function buildPlan(input: PlanInput, db: PrismaClient = defaultDb): Promise<ShiftPlan> {
   const { startDate, now = new Date() } = input;
   const startError = validateStartDate(startDate, jerusalemTodayIso(now));
   if (startError) throw new ShiftError(startError, "INVALID");
-  const planned = await planOccurrences({ ...input, from: startDate, to: shiftEndDate(startDate) }, db);
-  return { ...summarize(planned.occurrences, startDate, input.windowId as ShiftWindowId), conflicts: planned.conflicts };
+  const planned = await planOccurrences({ ...input, from: startDate, to: shiftEndDate(startDate), startDate }, db);
+  return { ...summarize(planned.occurrences, startDate, planned.window, jerusalemTodayIso(now)), conflicts: planned.conflicts };
 }
 
 /**
@@ -75,14 +87,13 @@ export async function buildPlan(input: PlanInput, db: PrismaClient = defaultDb):
  * שעות פעילות, מסלול המשתמש, ימים סגורים. ללא בדיקת זמינות החדר.
  */
 export async function planOccurrences(
-  input: Omit<PlanInput, "startDate"> & { from: string; to: string },
+  input: Omit<PlanInput, "startDate"> & { from: string; to: string; /** תאריך ההתחלה המקורי של המשמרת (קובע את תקופות החיוב) */ startDate: string },
   db: PrismaClient = defaultDb
-): Promise<{ occurrences: PlannedOccurrence[]; conflicts: ShiftConflict[] }> {
-  const { userId, roomKey, weekday, windowId, from, to } = input;
+): Promise<{ occurrences: PlannedOccurrence[]; conflicts: ShiftConflict[]; window: ShiftWindowDef }> {
+  const { userId, roomKey, weekday, windowId, from, to, startDate, allowInactiveWindow } = input;
 
   if (!ROOM_KEYS.includes(roomKey)) throw new ShiftError("חדר לא קיים", "INVALID");
   if (!SHIFT_WEEKDAYS.includes(weekday as (typeof SHIFT_WEEKDAYS)[number])) throw new ShiftError("יום בשבוע לא תקין (אין משמרות בשבת)", "INVALID");
-  if (!isShiftWindowId(windowId)) throw new ShiftError("משבצת שעות לא קיימת", "INVALID");
 
   await ensureRooms();
   const room = await db.room.findUnique({ where: { key: roomKey } });
@@ -91,15 +102,21 @@ export async function planOccurrences(
   const track = await trackForUser(userId);
   if (!track) throw new ShiftError("יש להשלים מגדר בפרופיל כדי להזמין משמרת", "INVALID");
 
+  const shiftWindow = await requireActiveWindow(windowId, db, { allowInactive: allowInactiveWindow });
   const windows = await loadWindows();
-  const price = occurrencePriceAgorot(windowId);
   const conflicts: ShiftConflict[] = [];
   const occurrences: PlannedOccurrence[] = occurrenceDatesBetween(from, to, weekday).map((date) => {
-    const { startTime, endTime } = occurrenceTimes(date, windowId);
-    const occ: PlannedOccurrence = { date, month: date.slice(0, 7), startTime, endTime, priceAgorot: price };
+    const { startTime, endTime } = occurrenceTimes(date, shiftWindow);
+    const occ: PlannedOccurrence = {
+      date,
+      month: periodKeyOf(startDate, date),
+      startTime,
+      endTime,
+      priceAgorot: occurrencePriceAgorot(shiftWindow.monthlyPriceAgorot, startDate, weekday, date),
+    };
     const day = resolveDay(windows, date);
     if (day.closed) {
-      // סגירה מפורשת של תאריך (חריג של מנהל): המופע מדולג ללא חיוב. יום שבועי סגור: אי אפשר לקבוע משמרת בו
+      // סגירה מפורשת של תאריך (חריג של מנהל): המופע מדולג והלקוח זכאי לשעה חלופית. יום שבועי סגור: אי אפשר לקבוע משמרת בו
       if (day.source === "exception") occ.skipReason = `יום סגור${day.note ? ` (${day.note})` : ""}`;
       else conflicts.push({ date, reason: "היום סגור לפי שעות הפעילות" });
       return occ;
@@ -110,24 +127,29 @@ export async function planOccurrences(
   });
 
   if (occurrences.length === 0) throw new ShiftError("אין מופעים בתקופה שנבחרה", "INVALID");
-  return { occurrences, conflicts };
+  return { occurrences, conflicts, window: shiftWindow };
 }
 
-function summarize(occurrences: PlannedOccurrence[], startDate: string, windowId: ShiftWindowId) {
+function summarize(occurrences: PlannedOccurrence[], startDate: string, window: ShiftWindowDef, todayIso: string) {
   const live = occurrences.filter((o) => !o.skipReason);
-  const byMonth = groupByMonth(live);
-  const [firstMonth, ...rest] = billingMonths(startDate);
-  const months = [firstMonth, ...rest].map((month) => {
-    const count = byMonth.get(month)?.length ?? 0;
-    return { month, count, amountAgorot: monthAmountAgorot(windowId, count), isFirst: month === firstMonth };
-  });
+  // החיוב הראשון בעת אישור ההזמנה (היום), גם כשתאריך ההתחלה עתידי; השני והשלישי חודש וחודשיים אחרי תאריך ההתחלה
+  const dueDates = [todayIso, ...billingDueDates(startDate).slice(1)];
+  // שלושה חיובים בדיוק, כל אחד במחיר החודשי הקבוע (אין חישוב יחסי לחודש ראשון או אחרון)
+  const months = billingMonths(startDate).map((month, index) => ({
+    month,
+    dueDate: dueDates[index],
+    count: live.filter((o) => o.month === month).length,
+    amountAgorot: window.monthlyPriceAgorot,
+    isFirst: index === 0,
+  }));
   return {
     occurrences,
     startDate,
     endDate: shiftEndDate(startDate),
-    priceAgorot: occurrencePriceAgorot(windowId),
+    monthlyPriceAgorot: window.monthlyPriceAgorot,
     months,
-    firstChargeAgorot: months[0].amountAgorot,
+    firstChargeAgorot: window.monthlyPriceAgorot,
+    totalAgorot: window.monthlyPriceAgorot * months.length,
   };
 }
 
@@ -192,16 +214,24 @@ function resultFor(shift: { id: string; status: string; occurrencePriceAgorot: n
 }
 
 /**
- * יוצר משמרת: זכאות, אמצעי תשלום שמיש, בדיקה ויצירה אטומית של כל המופעים תחת נעילת החדר, ואז חיוב ראשון.
- * המשמרת מאושרת רק אחרי חיוב ראשון מוצלח. כישלון ודאי משחרר את המשבצות; מצב לא ידוע משאיר אותן שמורות לבירור מנהל.
+ * יוצר משמרת: זכאות, אמצעי תשלום שמיש (חיוב אוטומטי), בדיקה ויצירה אטומית של כל המופעים תחת נעילת החדר, ושלוש שורות חיוב.
+ * החיוב הראשון מתבצע מיד באישור ההזמנה, גם כשתאריך ההתחלה עתידי, והמשמרת מאושרת סופית רק אחרי חיוב ראשון מוצלח. כישלון ודאי
+ * משחרר את המשבצות מיד. מצב לא ידוע משאיר אותן שמורות לזמן מוגבל בלבד (PENDING_SHIFT_MAX_HOLD_MS), ואז הריצה היומית מאמתת מול
+ * הספק או משחררת (expireStalePendingShifts). החיוב השני והשלישי: חודש וחודשיים אחרי תאריך ההתחלה.
+ * תשלום ידני (MANUAL, רק ע"י מנהל עבור לקוח זכאי): באישור המפורש של המנהל המשמרת מאושרת בלי חיוב אוטומטי; המנהל מתעד כל תשלום.
  * אידמפוטנטי לפי clientKey (לחיצה כפולה/רענון מחזירים את אותה משמרת).
  */
 export async function createShift(
   params: PlanInput & { clientKey: string; provider: PaymentProvider; createdById?: string; db?: PrismaClient }
 ): Promise<CreateShiftResult> {
-  const { userId, roomKey, weekday, windowId, startDate, clientKey, provider, createdById = userId, now = new Date(), db = defaultDb } = params;
+  const { userId, roomKey, weekday, windowId, startDate, clientKey, provider, createdById = userId, paymentMode = "AUTO", now = new Date(), db = defaultDb } = params;
 
   await assertShiftEligible(userId, db);
+  // תשלום ידני נקבע בתיאום עם מנהל בלבד: לקוח אינו רשאי לבחור בו בעצמו (נבדק מול המסד, לא מול הבקשה)
+  if (paymentMode === "MANUAL") {
+    const actor = await db.user.findUnique({ where: { id: createdById }, select: { role: true } });
+    if (actor?.role !== "ADMIN") throw new ShiftError("תשלום ידני נקבע על ידי מנהל בלבד", "FORBIDDEN");
+  }
   if (!CLIENT_KEY.test(clientKey)) throw new ShiftError("מפתח הבקשה אינו תקין", "INVALID");
   const idempotencyKey = `shift:${userId}:${clientKey}`;
 
@@ -214,9 +244,10 @@ export async function createShift(
   const openShifts = await db.shift.count({ where: { userId, status: { in: ["PENDING", "ACTIVE", "SUSPENDED"] } } });
   if (openShifts >= MAX_OPEN_SHIFTS_PER_USER) throw new ShiftError("הגעת למספר המשמרות המרבי", "CONFLICT");
 
-  // אין לאשר משמרת בלי אמצעי תשלום שמיש: בודקים לפני שנועלים משבצות
-  const card = await findUsableCard(userId, provider, db);
-  if (!card) throw new ShiftError("יש לשמור אמצעי תשלום באזור האישי לפני הזמנת משמרת", "NO_PAYMENT_METHOD");
+  // חיוב אוטומטי: אין לאשר משמרת בלי אמצעי תשלום שמיש. בודקים לפני שנועלים משבצות
+  const card = paymentMode === "AUTO" ? await findUsableCard(userId, provider, db) : null;
+  if (paymentMode === "AUTO" && !card) throw new ShiftError("יש לשמור אמצעי תשלום באזור האישי לפני הזמנת משמרת", "NO_PAYMENT_METHOD");
+  const chargeNow = paymentMode === "AUTO";
 
   const plan = await buildPlan({ userId, roomKey, weekday, windowId, startDate, now }, db);
   if (plan.conflicts.length > 0) throw new ShiftError("לא ניתן ליצור את המשמרת בגלל התנגשויות", "CONFLICT", { conflicts: plan.conflicts });
@@ -245,17 +276,35 @@ export async function createShift(
           windowId,
           startDate,
           endDate: plan.endDate,
-          status: "PENDING",
-          paymentMethodId: card.id,
-          occurrencePriceAgorot: plan.priceAgorot,
+          status: chargeNow ? "PENDING" : "ACTIVE",
+          paymentMode,
+          paymentMethodId: card?.id ?? null,
+          occurrencePriceAgorot: Math.round(plan.monthlyPriceAgorot / 4),
+          monthlyPriceAgorot: plan.monthlyPriceAgorot,
           idempotencyKey,
           createdById,
         },
       });
+      // שלושת החיובים נוצרים מראש (ממתינים), כל אחד במועדו ובסכום הקבוע: כך אין חיוב רביעי ואין חישוב מחדש בדיעבד
+      for (const m of plan.months) {
+        await tx.shiftCharge.create({
+          data: { shiftId: shift.id, month: m.month, dueDate: m.dueDate, amountAgorot: m.amountAgorot, occurrenceCount: m.count, isFirst: m.isFirst, status: "PENDING" },
+        });
+      }
       for (const occ of plan.occurrences) {
         if (occ.skipReason) {
           await tx.shiftOccurrence.create({
-            data: { shiftId: shift.id, date: occ.date, month: occ.month, startTime: occ.startTime, endTime: occ.endTime, priceAgorot: occ.priceAgorot, status: "SKIPPED_CLOSED_DAY", statusNote: occ.skipReason },
+            data: {
+              shiftId: shift.id,
+              date: occ.date,
+              month: occ.month,
+              startTime: occ.startTime,
+              endTime: occ.endTime,
+              priceAgorot: occ.priceAgorot,
+              status: "SKIPPED_CLOSED_DAY",
+              statusNote: occ.skipReason,
+              makeupStatus: "OWED",
+            },
           });
           continue;
         }
@@ -282,12 +331,20 @@ export async function createShift(
     return resultFor(existing, existing.charges.find((c) => c.isFirst)?.amountAgorot ?? 0, existing.charges.find((c) => c.isFirst)?.failureCode ?? undefined);
   }
 
-  // חיוב ראשון, מיד: רק החודש שבו המשמרת מתחילה, ורק המופעים שנותרו בו
+  // תשלום ידני: המשמרת מאושרת באישור המנהל, והתשלומים מתועדים ידנית
+  if (!chargeNow) {
+    await writeAudit(db, { action: "shift.create_manual", adminId: createdById, userId, entityType: "Shift", entityId: shiftId, outcome: "ok", after: { monthlyPriceAgorot: plan.monthlyPriceAgorot, startDate, windowId, weekday } });
+    await grantMakeupCredits(db, now, { shiftId });
+    return { status: "ACTIVE", shiftId, firstChargeAgorot: plan.firstChargeAgorot };
+  }
+
+  // חיוב ראשון, מיד באישור ההזמנה (גם כשתאריך ההתחלה עתידי)
   const [firstMonth] = billingMonths(startDate);
   const charge = await chargeShiftMonth({ shiftId, month: firstMonth, provider, isFirst: true, now, db });
 
   if (charge.outcome === "PAID" || charge.outcome === "NOTHING_DUE" || charge.outcome === "ALREADY_PAID") {
     await db.shift.updateMany({ where: { id: shiftId, status: "PENDING" }, data: { status: "ACTIVE" } });
+    await grantMakeupCredits(db, now, { shiftId });
     return { status: "ACTIVE", shiftId, firstChargeAgorot: charge.amountAgorot ?? 0 };
   }
   if (charge.outcome === "FAILED") {
@@ -296,15 +353,4 @@ export async function createShift(
   }
   // UNKNOWN / IN_PROGRESS / NEEDS_REVIEW: נשאר PENDING והמשבצות שמורות עד בירור
   return { status: "PENDING_REVIEW", shiftId, firstChargeAgorot: charge.amountAgorot ?? 0 };
-}
-
-/** משחרר משמרת שלא אושרה: מבטל את הזמנות המופעים, מסמן את המופעים והמשמרת כמבוטלים. לא מוחק היסטוריה */
-export async function abortPendingShift(db: PrismaClient, shiftId: string, reason: string, now: Date) {
-  await db.$transaction(async (tx) => {
-    const occurrences = await tx.shiftOccurrence.findMany({ where: { shiftId, status: "SCHEDULED" } });
-    const appointmentIds = occurrences.map((o) => o.appointmentId).filter((x): x is string => !!x);
-    await tx.appointment.updateMany({ where: { id: { in: appointmentIds }, status: "CONFIRMED" }, data: { status: "CANCELLED" } });
-    await tx.shiftOccurrence.updateMany({ where: { shiftId, status: "SCHEDULED" }, data: { status: "CANCELLED", statusNote: reason } });
-    await tx.shift.updateMany({ where: { id: shiftId, status: "PENDING" }, data: { status: "CANCELLED", cancelledAt: now, cancelReason: reason } });
-  });
 }

@@ -1,9 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Alert, EmptyState, Loading, SectionTitle } from "@/components/ui";
 import { Dialog, ToneBadge, jerusalemTime } from "@/components/shifts/bits";
+import { WindowsTab } from "@/components/shifts/windows-tab";
+import { todayIsoDate } from "@/lib/slots";
+import { windowLabelOf, type ShiftWindowDef } from "@/lib/shifts/windows";
 import { api, shekel, useSingleFlight } from "@/lib/payments/client";
 import { ROOM_KEYS, ROOM_LABELS } from "@/lib/rooms";
 import {
@@ -14,11 +17,13 @@ import {
   WEEKDAY_NAMES,
   dateLabel,
   failureText,
+  minutesLabel,
+  MAKEUP_STATE_TEXT,
   monthLabel,
   suspensionText,
   windowLabel,
 } from "@/lib/shifts/labels";
-import type { AdminShiftDetail, AdminShiftRow, ShiftRequestView } from "@/lib/shifts/views";
+import type { AdminShiftDetail, AdminShiftRow, MakeupView, ShiftRequestView } from "@/lib/shifts/views";
 
 type Person = { id: string; name: string; email: string | null; phone: string | null };
 type PendingRequest = ShiftRequestView & {
@@ -33,7 +38,7 @@ interface Overview {
   runs: CronRunRow[];
 }
 
-type Tab = "shifts" | "requests" | "eligibility" | "billing";
+type Tab = "shifts" | "requests" | "eligibility" | "windows" | "billing";
 
 export function AdminShifts() {
   const [tab, setTab] = useState<Tab>("shifts");
@@ -60,6 +65,7 @@ export function AdminShifts() {
     { id: "shifts", label: "משמרות" },
     { id: "requests", label: `בקשות${overview && overview.requests.length ? ` (${overview.requests.length})` : ""}` },
     { id: "eligibility", label: "זכאות" },
+    { id: "windows", label: "משבצות ומחירים" },
     { id: "billing", label: "חיוב חודשי" },
   ];
 
@@ -84,9 +90,10 @@ export function AdminShifts() {
         <Loading />
       ) : (
         <>
-          {tab === "shifts" && <ShiftsTab version={version} onChanged={refresh} tell={tell} />}
+          {tab === "shifts" && <ShiftsTab version={version} onChanged={refresh} tell={tell} eligible={overview.eligibility.filter((e) => e.canBookShifts)} />}
           {tab === "requests" && <RequestsTab requests={overview.requests} onChanged={refresh} tell={tell} />}
           {tab === "eligibility" && <EligibilityTab rows={overview.eligibility} query={eligQuery} setQuery={setEligQuery} onChanged={refresh} tell={tell} />}
+          {tab === "windows" && <WindowsTab onChanged={refresh} tell={tell} />}
           {tab === "billing" && <BillingTab runs={overview.runs} onChanged={refresh} tell={tell} />}
         </>
       )}
@@ -96,9 +103,221 @@ export function AdminShifts() {
 
 type Tell = (tone: "success" | "error", text: string) => void;
 
+/** שעה חלופית של מפגש שבוטל: יתרה, תוקף, ושיבוץ/ויתור. השיבוץ גורע מהיתרה (אין ניצול כפול); אין השפעה על חיובי המשמרת */
+function MakeupRow({ makeup, busy, onWaive, onSchedule }: { makeup: MakeupView; busy: boolean; onWaive: () => void; onSchedule: (body: { roomKey: string; startTime: string; endTime: string }) => void }) {
+  const [open, setOpen] = useState(false);
+  const [roomKey, setRoomKey] = useState<string>("ROOM3");
+  const [date, setDate] = useState(todayIsoDate());
+  const [time, setTime] = useState("10:00");
+  const [minutes, setMinutes] = useState(Math.min(60, makeup.minutesRemaining || 60));
+  const durations = Array.from({ length: Math.floor(makeup.minutesRemaining / 15) }, (_, i) => (i + 1) * 15);
+  const start = new Date(`${date}T${time}:00`);
+  return (
+    <span className="block mt-1 text-right" data-testid="makeup-row">
+      שעה חלופית: {MAKEUP_STATE_TEXT[makeup.state] ?? makeup.state} · {minutesLabel(makeup.minutesRemaining)} מתוך {minutesLabel(makeup.minutesTotal)}
+      {makeup.expiresAt && makeup.state === "OPEN" ? ` · עד ${dateLabel(makeup.expiresAt.slice(0, 10))}` : ""}
+      {makeup.note ? ` · ${makeup.note}` : ""}
+      {makeup.state === "OPEN" && (
+        <span className="flex flex-wrap gap-1 mt-1 justify-end">
+          <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={() => setOpen((v) => !v)}>
+            שיבוץ שעה חלופית
+          </button>
+          <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={onWaive}>
+            ויתור על היתרה
+          </button>
+        </span>
+      )}
+      {open && makeup.state === "OPEN" && (
+        <span className="flex flex-wrap gap-2 items-end mt-2 justify-end">
+          <select aria-label="חדר" className="field" value={roomKey} onChange={(e) => setRoomKey(e.target.value)}>
+            {ROOM_KEYS.map((k) => (
+              <option key={k} value={k}>{ROOM_LABELS[k]}</option>
+            ))}
+          </select>
+          <input aria-label="תאריך" type="date" className="field" value={date} min={todayIsoDate()} onChange={(e) => setDate(e.target.value)} />
+          <input aria-label="שעה" type="time" step={900} dir="ltr" className="field" value={time} onChange={(e) => setTime(e.target.value)} />
+          <select aria-label="משך" className="field" value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>
+            {durations.map((d) => (
+              <option key={d} value={d}>{minutesLabel(d)}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            disabled={busy || Number.isNaN(start.getTime())}
+            onClick={() => onSchedule({ roomKey, startTime: start.toISOString(), endTime: new Date(start.getTime() + minutes * 60_000).toISOString() })}
+          >
+            אישור שיבוץ
+          </button>
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** תיעוד תשלום ידני שהתקבל: סכום, תאריך, אסמכתה ואישור מפורש. השרת בודק שוב הכול ולא מסמן שולם בלי אישור */
+function ManualPaymentForm({ amountAgorot, busy, onSubmit }: { amountAgorot: number; busy: boolean; onSubmit: (body: { amountAgorot: number; paidOn: string; reference?: string; confirm: boolean }) => void }) {
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState(String(amountAgorot / 100));
+  const [paidOn, setPaidOn] = useState(todayIsoDate());
+  const [reference, setReference] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  if (!open) {
+    return (
+      <button type="button" className="btn btn-secondary btn-sm" onClick={() => setOpen(true)}>
+        תיעוד תשלום ידני
+      </button>
+    );
+  }
+  return (
+    <div className="rounded-xl bg-cream-50 ring-1 ring-cream-200 p-3 space-y-2" data-testid="manual-payment-form">
+      <div className="grid sm:grid-cols-3 gap-2">
+        <label className="block">
+          <span className="field-label">סכום שהתקבל (₪)</span>
+          <input type="number" min={0} step="0.01" dir="ltr" className="field" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </label>
+        <label className="block">
+          <span className="field-label">תאריך קבלה</span>
+          <input type="date" className="field" value={paidOn} max={todayIsoDate()} onChange={(e) => setPaidOn(e.target.value)} />
+        </label>
+        <label className="block">
+          <span className="field-label">אסמכתה (לא חובה)</span>
+          <input className="field" maxLength={200} value={reference} onChange={(e) => setReference(e.target.value)} />
+        </label>
+      </div>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
+        אני מאשר/ת שהתשלום התקבל בפועל
+      </label>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          disabled={busy || !confirmed || !paidOn || !Number.isFinite(Number(amount))}
+          onClick={() => onSubmit({ amountAgorot: Math.round(Number(amount) * 100), paidOn, reference: reference || undefined, confirm: confirmed })}
+        >
+          סימון כשולם
+        </button>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setOpen(false)}>
+          ביטול
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** הזמנת משמרת עבור לקוח זכאי ע"י מנהל, כולל תשלום ידני. אותן בדיקות התנגשות, שעות פעילות וזכאות כמו הזמנה רגילה (נאכף בשרת) */
+function CreateShiftDialog({ customers, onClose, onCreated, onError }: { customers: EligibilityRow[]; onClose: () => void; onCreated: (t: string) => void; onError: (t: string) => void }) {
+  const [windows, setWindows] = useState<ShiftWindowDef[] | null>(null);
+  const [userId, setUserId] = useState(customers[0]?.id ?? "");
+  const [roomKey, setRoomKey] = useState<string>("ROOM3");
+  const [weekday, setWeekday] = useState(0);
+  const [windowId, setWindowId] = useState("");
+  const [startDate, setStartDate] = useState(todayIsoDate());
+  const [paymentMode, setPaymentMode] = useState<"MANUAL" | "AUTO">("MANUAL");
+  const [error, setError] = useState<string | null>(null);
+  const clientKey = useRef(globalThis.crypto.randomUUID().replace(/-/g, ""));
+  const { busy, run } = useSingleFlight();
+
+  useEffect(() => {
+    api<{ windows: ShiftWindowDef[] }>("/api/admin/shifts/windows").then((res) => {
+      if (!res.ok) return;
+      const active = (res.data as { windows: ShiftWindowDef[] }).windows.filter((w) => w.active);
+      setWindows(active);
+      setWindowId((cur) => cur || active[0]?.id || "");
+    });
+  }, []);
+
+  async function submit() {
+    await run(async () => {
+      setError(null);
+      const res = await api<{ status?: string }>("/api/admin/shifts", { body: { userId, roomKey, weekday, windowId, startDate, paymentMode, clientKey: clientKey.current } });
+      if (res.ok && res.data.status === "ACTIVE") onCreated(paymentMode === "MANUAL" ? "המשמרת נוצרה. התשלומים יתועדו ידנית." : "המשמרת נוצרה.");
+      else {
+        const message = res.data.error ?? "לא ניתן ליצור את המשמרת";
+        setError(message);
+        onError(message);
+        if (res.status !== 0) clientKey.current = globalThis.crypto.randomUUID().replace(/-/g, "");
+      }
+    });
+  }
+
+  return (
+    <Dialog title="הזמנת משמרת ללקוח" labelId="create-shift" onClose={onClose}>
+      {customers.length === 0 ? (
+        <p className="text-sm text-stone-600">אין לקוחות זכאים. יש להעניק זכאות בלשונית &quot;זכאות&quot; לפני הזמנה.</p>
+      ) : !windows ? (
+        <Loading />
+      ) : (
+        <div className="space-y-3 text-sm">
+          <div>
+            <label className="field-label" htmlFor="cs-user">לקוח (זכאי)</label>
+            <select id="cs-user" className="field" value={userId} onChange={(e) => setUserId(e.target.value)}>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label className="field-label" htmlFor="cs-room">חדר</label>
+              <select id="cs-room" className="field" value={roomKey} onChange={(e) => setRoomKey(e.target.value)}>
+                {ROOM_KEYS.map((k) => (
+                  <option key={k} value={k}>{ROOM_LABELS[k]}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="field-label" htmlFor="cs-day">יום</label>
+              <select id="cs-day" className="field" value={weekday} onChange={(e) => setWeekday(Number(e.target.value))}>
+                {WEEKDAY_NAMES.map((n, i) => (
+                  <option key={n} value={i}>{n}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="field-label" htmlFor="cs-window">משבצת</label>
+              <select id="cs-window" className="field" value={windowId} onChange={(e) => setWindowId(e.target.value)}>
+                {windows.map((w) => (
+                  <option key={w.id} value={w.id}>{windowLabelOf(w)} · {shekel(w.monthlyPriceAgorot)}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="field-label" htmlFor="cs-start">תאריך התחלה</label>
+              <input id="cs-start" type="date" className="field" value={startDate} min={todayIsoDate()} onChange={(e) => setStartDate(e.target.value)} />
+            </div>
+          </div>
+          <fieldset className="space-y-1">
+            <legend className="field-label">אופן תשלום</legend>
+            <label className="flex items-center gap-2">
+              <input type="radio" name="cs-mode" checked={paymentMode === "MANUAL"} onChange={() => setPaymentMode("MANUAL")} />
+              ידני בתיאום (בלי אמצעי תשלום; כל תשלום מתועד ידנית)
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="radio" name="cs-mode" checked={paymentMode === "AUTO"} onChange={() => setPaymentMode("AUTO")} />
+              חיוב אוטומטי באמצעי תשלום שמור של הלקוח
+            </label>
+          </fieldset>
+          {error && <Alert tone="error">{error}</Alert>}
+          <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
+            <button type="button" className="btn btn-secondary" disabled={busy} onClick={onClose}>
+              חזרה
+            </button>
+            <button type="button" className="btn btn-primary" disabled={busy || !userId || !windowId} onClick={submit}>
+              {busy ? "יוצר..." : "יצירת משמרת"}
+            </button>
+          </div>
+        </div>
+      )}
+    </Dialog>
+  );
+}
+
 // ───────────────────────────── משמרות ─────────────────────────────
 
-function ShiftsTab({ version, onChanged, tell }: { version: number; onChanged: () => void; tell: Tell }) {
+function ShiftsTab({ version, onChanged, tell, eligible }: { version: number; onChanged: () => void; tell: Tell; eligible: EligibilityRow[] }) {
+  const [creating, setCreating] = useState(false);
   const searchParams = useSearchParams();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
@@ -126,6 +345,11 @@ function ShiftsTab({ version, onChanged, tell }: { version: number; onChanged: (
 
   return (
     <section className="space-y-4">
+      <div className="flex justify-end">
+        <button type="button" className="btn btn-primary btn-sm" onClick={() => setCreating(true)}>
+          הזמנת משמרת ללקוח
+        </button>
+      </div>
       <div className="card p-4 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <input aria-label="חיפוש לקוח" className="field" placeholder="שם, אימייל או טלפון" value={q} onChange={(e) => setQ(e.target.value)} />
         <select aria-label="סטטוס" className="field" value={status} onChange={(e) => setStatus(e.target.value)}>
@@ -189,6 +413,8 @@ function ShiftsTab({ version, onChanged, tell }: { version: number; onChanged: (
                       {r.unpaidCharges > 0 && <ToneBadge tone="bad">{r.unpaidCharges} חיובים לא שולמו</ToneBadge>}
                       {r.unknownCharges > 0 && <ToneBadge tone="pending">{r.unknownCharges} בבירור</ToneBadge>}
                       {r.hasOpenRequest && <ToneBadge tone="pending">בקשה פתוחה</ToneBadge>}
+                      {r.makeupOwed > 0 && <ToneBadge tone="pending">{r.makeupOwed} שעות חלופיות</ToneBadge>}
+                      {r.paymentMode === "MANUAL" && <ToneBadge tone="neutral">תשלום ידני</ToneBadge>}
                     </td>
                   </tr>
                 );
@@ -196,6 +422,18 @@ function ShiftsTab({ version, onChanged, tell }: { version: number; onChanged: (
             </tbody>
           </table>
         </div>
+      )}
+      {creating && (
+        <CreateShiftDialog
+          customers={eligible}
+          onClose={() => setCreating(false)}
+          onCreated={(text) => {
+            setCreating(false);
+            tell("success", text);
+            onChanged();
+          }}
+          onError={(text) => tell("error", text)}
+        />
       )}
       {openId && <ShiftDetailDialog id={openId} version={version} onClose={() => setOpenId(null)} onChanged={onChanged} tell={tell} />}
     </section>
@@ -236,7 +474,7 @@ function ShiftDetailDialog({ id, version, onClose, onChanged, tell }: { id: stri
           <p>
             <strong>{shift.user.name}</strong> · {shift.room.name} · יום {WEEKDAY_NAMES[shift.weekday]} · {windowLabel(shift.windowId)}
             <span className="block text-stone-500">
-              {dateLabel(shift.startDate)} – {dateLabel(shift.endDate)} · {shekel(shift.occurrencePriceAgorot)} למופע · {SHIFT_STATUS_TEXT[shift.status]?.label ?? shift.status}
+              {dateLabel(shift.startDate)} – {dateLabel(shift.endDate)} · {shift.monthlyPriceAgorot > 0 ? `${shekel(shift.monthlyPriceAgorot)} לחודש (סה"כ ${shekel(shift.totalAgorot)})` : `${shekel(shift.occurrencePriceAgorot)} למופע`} · {SHIFT_STATUS_TEXT[shift.status]?.label ?? shift.status} · {shift.paymentMode === "MANUAL" ? "תשלום ידני" : "חיוב אוטומטי"}
             </span>
           </p>
           {shift.status === "SUSPENDED" && <Alert tone="error">מושעית: {suspensionText(shift.suspensionReason)}</Alert>}
@@ -253,7 +491,8 @@ function ShiftDetailDialog({ id, version, onClose, onChanged, tell }: { id: stri
                     <li key={c.id} className="py-2 space-y-1">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span>
-                          {monthLabel(c.month)} · {c.occurrenceCount} מופעים · <strong>{shekel(c.amountAgorot)}</strong> · ניסיון {c.attempt}
+                          {c.dueDate ? dateLabel(c.dueDate) : monthLabel(c.month)} · <strong>{shekel(c.amountAgorot)}</strong>
+                          {shift.paymentMode === "AUTO" && ` · ניסיון ${c.attempt}`}
                         </span>
                         <ToneBadge tone={cs.tone}>{cs.label}</ToneBadge>
                       </div>
@@ -261,8 +500,21 @@ function ShiftDetailDialog({ id, version, onClose, onChanged, tell }: { id: stri
                       {c.graceUntil && c.status === "FAILED" && <p className="text-xs text-stone-500">תקופת חסד עד {dateLabel(c.graceUntil.slice(0, 10))}</p>}
                       {c.refundedAgorot > 0 && <p className="text-xs text-brand-700">הוחזרו {shekel(c.refundedAgorot)}</p>}
                       {c.note && <p className="text-xs text-stone-500">{c.note}</p>}
+                      {shift.months.find((m) => m.chargeId === c.id)?.manual && (
+                        <p className="text-xs text-stone-500">
+                          תשלום ידני: התקבל ב-{dateLabel(shift.months.find((m) => m.chargeId === c.id)!.manual!.paidOn)}
+                          {shift.months.find((m) => m.chargeId === c.id)!.manual!.reference ? ` · אסמכתה: ${shift.months.find((m) => m.chargeId === c.id)!.manual!.reference}` : ""}
+                        </p>
+                      )}
+                      {(c.status === "PENDING" || c.status === "FAILED") && (
+                        <ManualPaymentForm
+                          amountAgorot={c.amountAgorot}
+                          busy={busy}
+                          onSubmit={(body) => act(`/api/admin/shifts/charges/${c.id}`, { action: "manual-payment", ...body }, "התשלום הידני תועד והחיוב סומן כשולם")}
+                        />
+                      )}
                       <div className="flex flex-wrap gap-2">
-                        {c.status === "FAILED" && (
+                        {c.status === "FAILED" && shift.paymentMode === "AUTO" && (
                           <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={() => act(`/api/admin/shifts/charges/${c.id}`, { action: "retry" }, "החיוב נוסה שוב")}>
                             ניסיון חיוב חוזר
                           </button>
@@ -304,8 +556,16 @@ function ShiftDetailDialog({ id, version, onClose, onChanged, tell }: { id: stri
                     {dateLabel(o.date)} · {jerusalemTime(o.startTime)}–{jerusalemTime(o.endTime)}
                   </span>
                   <span>
-                    {OCCURRENCE_STATUS_TEXT[o.status] ?? o.status} · {shekel(o.priceAgorot)}
+                    {OCCURRENCE_STATUS_TEXT[o.status] ?? o.status}
                     {o.refundedAgorot > 0 && ` · הוחזר ${shekel(o.refundedAgorot)}`}
+                    {shift.makeups.find((m) => m.occurrenceId === o.id) && (
+                      <MakeupRow
+                        makeup={shift.makeups.find((m) => m.occurrenceId === o.id)!}
+                        busy={busy}
+                        onWaive={() => act(`/api/admin/shifts/occurrences/${o.id}/makeup`, { action: "waive", note: reason || undefined }, "בוצע ויתור על השעה החלופית")}
+                        onSchedule={(body) => act(`/api/admin/shifts/occurrences/${o.id}/makeup`, { action: "schedule", ...body }, "השעה החלופית שובצה ונגרעה מהיתרה")}
+                      />
+                    )}
                   </span>
                 </li>
               ))}
@@ -517,9 +777,9 @@ function BillingTab({ runs, onChanged, tell }: { runs: CronRunRow[]; onChanged: 
 
   async function closeDay() {
     await run(async () => {
-      const res = await api<{ skipped?: number; refunded?: number; credited?: number }>("/api/admin/shifts/close-day", { body: { date: closeDate, note: closeNote || undefined } });
+      const res = await api<{ skipped?: number; makeupOwed?: number }>("/api/admin/shifts/close-day", { body: { date: closeDate, note: closeNote || undefined } });
       if (res.ok) {
-        tell("success", `היום נסגר. משמרות שדולגו: ${res.data.skipped ?? 0}`);
+        tell("success", `היום נסגר. מפגשים שדולגו: ${res.data.skipped ?? 0}. הלקוחות זכאים לשעה חלופית (בלי החזר כספי).`);
         onChanged();
       } else tell("error", res.data.error ?? "סגירת היום נכשלה");
     });
@@ -565,7 +825,7 @@ function BillingTab({ runs, onChanged, tell }: { runs: CronRunRow[]; onChanged: 
       </div>
 
       <div className="card p-5 space-y-3">
-        <SectionTitle hint="משמרות באותו יום ידולגו ללא חיוב; מה ששולם יוחזר">סגירת יום</SectionTitle>
+        <SectionTitle hint="מפגשי משמרת באותו יום יידלגו והלקוחות יהיו זכאים לשעה חלופית. אין החזר ואין שינוי בחיוב">סגירת יום</SectionTitle>
         <div className="grid sm:grid-cols-2 gap-3">
           <div>
             <label className="field-label" htmlFor="cd-date">תאריך</label>

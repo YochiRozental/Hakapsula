@@ -13,6 +13,15 @@ export const CRON_STALE_RUN_MS = 30 * 60_000;
 
 export const SHIFT_BILLING_JOB = "shift-billing";
 
+/**
+ * כמה זמן משמרת שממתינה לאישור החיוב הראשון (PENDING) רשאית להחזיק משבצות. אחרי זה הריצה היומית מאמתת מול הספק, ואם עדיין
+ * אין אישור ודאי למשמרת המשבצות משוחררות (החיוב הלא-ודאי נשאר בתור הבירור של המנהל). לא מחזיקים משבצות ללא הגבלת זמן.
+ */
+export const PENDING_SHIFT_MAX_HOLD_MS = 24 * 3600_000;
+
+/** תוקף זיכוי שעות חלופיות אחרי סגירה ביוזמת ההנהלה (ימים מרגע מתן הזיכוי) */
+export const MAKEUP_CREDIT_VALIDITY_DAYS = 90;
+
 /** תקרות בטיחות לגודל בקשות */
 export const MAX_REASON_LENGTH = 500;
 export const MAX_NOTE_LENGTH = 500;

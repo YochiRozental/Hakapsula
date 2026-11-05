@@ -35,8 +35,13 @@ export function activityMatches(activity: ActivityType, track?: BookingTrack): b
   return !track || activity === track;
 }
 
-/** שעות היום המלא כשלא הוגדרו חלונות מפורשים: 08:00–21:00, במסלול ברירת המחדל של היום */
-export const DEFAULT_DAY_WINDOW = { startMinutes: 8 * 60, endMinutes: 21 * 60 };
+/**
+ * שעות היום המלא כשלא הוגדרו חלונות מפורשים, לפי היום בשבוע: ראשון עד חמישי 07:00–22:00, שישי 07:00–12:00 (שבת סגורה תמיד),
+ * במסלול ברירת המחדל של היום. הגדרה מפורשת של מנהל גוברת עליהן.
+ */
+export function defaultDayWindow(weekday: number): { startMinutes: number; endMinutes: number } {
+  return weekday === 5 ? { startMinutes: 7 * 60, endMinutes: 12 * 60 } : { startMinutes: 7 * 60, endMinutes: 22 * 60 };
+}
 
 export type HoursWindow = {
   id?: string;
@@ -49,7 +54,7 @@ export type HoursWindow = {
   closed: boolean;
   activity: ActivityType;
   note?: string | null;
-  /** שורת "מסלול היום" של יום שבועי (ברירת מחדל 08:00–21:00): נשמרת כדי לזכור את בחירת המסלול ליום גם בלי חלונות מפורשים */
+  /** שורת "מסלול היום" של יום שבועי (ברירת מחדל לפי היום, ראו defaultDayWindow): נשמרת כדי לזכור את בחירת המסלול ליום גם בלי חלונות מפורשים */
   dayDefault?: boolean;
 };
 
@@ -165,7 +170,7 @@ export function weeklyDay(all: HoursWindow[], weekday: number): ResolvedDay {
   const windows =
     explicit.length > 0
       ? mergeIntervals(explicit)
-      : [{ ...DEFAULT_DAY_WINDOW, activity: weeklyDefaultActivity(all, weekday) }];
+      : [{ ...defaultDayWindow(weekday), activity: weeklyDefaultActivity(all, weekday) }];
   return { source: "weekly", closed: false, note: null, windows };
 }
 

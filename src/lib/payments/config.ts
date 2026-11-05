@@ -12,6 +12,9 @@ import { PaymentConfigError, type PaymentProvider } from "@/lib/payments/provide
  *   4. NODE_ENV אינו production
  *   5. DATABASE_URL מצביע למסד מקומי (כך Mock לא יכול לעבוד מול מסד חי כמו Neon)
  *   6. PAYMENT_WEBHOOK_SECRET מוגדר
+ *
+ * חריג מפורש לשלב הפיתוח: PAYMENT_MOCK_ALLOW_DEPLOYED=true מבטל את תנאים 4 ו-5, כדי שאפשר יהיה להריץ את ההדגמה על אתר
+ * מותקן (שרת + מסד מרוחק) כל עוד אין בו לקוחות או כסף אמיתיים. חובה להסיר אותו לפני שמחברים סליקה אמיתית או מקבלים לקוחות.
  */
 
 export interface PaymentEnv {
@@ -19,6 +22,8 @@ export interface PaymentEnv {
   PAYMENT_PROVIDER?: string;
   PAYMENT_ENVIRONMENT?: string;
   PAYMENT_MOCK_ENABLED?: string;
+  PAYMENT_MOCK_ALLOW_DEPLOYED?: string;
+  PAYMENT_MOCK_TEST_USERS?: string;
   PAYMENT_WEBHOOK_SECRET?: string;
   DATABASE_URL?: string;
 }
@@ -39,8 +44,10 @@ function assertMockAllowed(env: PaymentEnv) {
   const problems: string[] = [];
   if (env.PAYMENT_ENVIRONMENT !== "sandbox") problems.push("PAYMENT_ENVIRONMENT חייב להיות sandbox");
   if (env.PAYMENT_MOCK_ENABLED !== "true") problems.push("PAYMENT_MOCK_ENABLED חייב להיות true");
-  if (env.NODE_ENV === "production") problems.push("אסור בבניית production");
-  if (!isLocalDatabaseUrl(env.DATABASE_URL)) problems.push("DATABASE_URL חייב להצביע למסד מקומי");
+  if (env.PAYMENT_MOCK_ALLOW_DEPLOYED !== "true") {
+    if (env.NODE_ENV === "production") problems.push("אסור בבניית production");
+    if (!isLocalDatabaseUrl(env.DATABASE_URL)) problems.push("DATABASE_URL חייב להצביע למסד מקומי");
+  }
   if (!env.PAYMENT_WEBHOOK_SECRET || env.PAYMENT_WEBHOOK_SECRET.length < MIN_WEBHOOK_SECRET_LENGTH) {
     problems.push(`PAYMENT_WEBHOOK_SECRET חסר או קצר מ-${MIN_WEBHOOK_SECRET_LENGTH} תווים`);
   }
@@ -53,7 +60,7 @@ function assertMockAllowed(env: PaymentEnv) {
 /** מחזיר את הספק המוגדר, או זורק PaymentConfigError. אין יצירה אוטומטית של Mock */
 export function getPaymentProvider(
   env: PaymentEnv = process.env,
-  options: { mockStore?: MockStore } = {}
+  options: { mockStore?: MockStore; mockCustomerAllowed?: (customerRef: string) => Promise<boolean> } = {}
 ): PaymentProvider {
   const kind = env.PAYMENT_PROVIDER?.trim().toLowerCase();
   if (!kind || kind === "none") {
@@ -61,7 +68,8 @@ export function getPaymentProvider(
   }
   if (kind === "mock") {
     assertMockAllowed(env);
-    return new MockPaymentProvider(env.PAYMENT_WEBHOOK_SECRET!, options.mockStore);
+    // באתר מותקן (PAYMENT_MOCK_ALLOW_DEPLOYED) תשלומי דמה מוגבלים למשתמשי בדיקה מורשים; בהדגמה מקומית אין הגבלה
+    return new MockPaymentProvider(env.PAYMENT_WEBHOOK_SECRET!, options.mockStore, env.PAYMENT_MOCK_ALLOW_DEPLOYED === "true" ? options.mockCustomerAllowed : undefined);
   }
   if (kind === "payme") {
     // מכוון: אין מימוש עד שיכולות ה-API של PAYME יאומתו בתיעוד הרשמי

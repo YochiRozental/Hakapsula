@@ -6,12 +6,11 @@ import { gateProvider, mutationGuard, notFound, readJson, requireAdminUser, shif
 import { BookingError } from "@/lib/booking-error";
 
 /**
- * סגירה מפורשת של יום ע"י מנהל, יחד עם השפעתה על משמרות קיימות באותו יום (דילוג בלי חיוב, החזר אם החודש שולם). סוגר את
- * היום באותו מנגנון חריגים של שעות הפעילות. אידמפוטנטי: הרצה חוזרת משלימה החזרים שנכשלו. מנהל בלבד
+ * סגירה מפורשת של יום ע"י מנהל, יחד עם השפעתה על משמרות קיימות באותו יום (דילוג, והלקוח זכאי לשעה חלופית; אין החזר
+ * ואין שינוי בחיוב). סוגר את היום באותו מנגנון חריגים של שעות הפעילות. אידמפוטנטי. מנהל בלבד
  */
 export async function POST(request: Request) {
-  const provider = gateProvider();
-  if (!provider) return notFound();
+  if (!gateProvider()) return notFound();
   const blocked = mutationGuard(request);
   if (blocked) return blocked;
   const admin = await requireAdminUser();
@@ -22,7 +21,7 @@ export async function POST(request: Request) {
   if (date < jerusalemParts(new Date()).date) return NextResponse.json({ error: "לא ניתן לסגור תאריך שעבר" }, { status: 400 });
   try {
     await replaceDate(date, { closed: true, note: str(body?.note) ?? null });
-    const effects = await applyDayClosure({ date, adminId: admin.user.id, provider });
+    const effects = await applyDayClosure({ date, adminId: admin.user.id });
     return NextResponse.json(effects);
   } catch (err) {
     if (err instanceof BookingError) return NextResponse.json({ error: err.message }, { status: 400 });

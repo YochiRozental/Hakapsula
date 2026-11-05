@@ -7,8 +7,9 @@ import { Dialog, ToneBadge, jerusalemTime } from "@/components/shifts/bits";
 import { api, shekel, useSingleFlight } from "@/lib/payments/client";
 import { ROOM_KEYS, ROOM_LABELS } from "@/lib/rooms";
 import { todayIsoDate } from "@/lib/slots";
-import { SHIFT_WINDOWS } from "@/lib/payments/pricing";
-import { occurrencePriceAgorot, weekdayOf } from "@/lib/shifts/calendar";
+import { weekdayOf } from "@/lib/shifts/calendar";
+import { ShiftPriceTable } from "@/components/shifts/price-table";
+import { windowLabelOf, type ShiftWindowDef } from "@/lib/shifts/windows";
 import {
   CHARGE_STATUS_TEXT,
   OCCURRENCE_STATUS_TEXT,
@@ -18,6 +19,8 @@ import {
   WEEKDAY_NAMES,
   dateLabel,
   failureText,
+  minutesLabel,
+  MAKEUP_STATE_TEXT,
   monthLabel,
   suspensionText,
   windowLabel,
@@ -35,16 +38,17 @@ interface PreviewOccurrence {
 interface Preview {
   startDate: string;
   endDate: string;
-  priceAgorot: number;
+  monthlyPriceAgorot: number;
+  totalAgorot: number;
   firstChargeAgorot: number;
-  months: { month: string; count: number; amountAgorot: number; isFirst: boolean }[];
+  months: { month: string; dueDate: string; count: number; amountAgorot: number; isFirst: boolean }[];
   conflicts: { date: string; reason: string }[];
   occurrences: PreviewOccurrence[];
 }
 
 const newKey = () => globalThis.crypto.randomUUID().replace(/-/g, "");
 
-export function ShiftsCenter({ mockCardLink }: { mockCardLink: boolean }) {
+export function ShiftsCenter({ mockCardLink, windows }: { mockCardLink: boolean; windows: ShiftWindowDef[] }) {
   const [data, setData] = useState<MyShiftsView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -74,20 +78,23 @@ export function ShiftsCenter({ mockCardLink }: { mockCardLink: boolean }) {
         ) : (
           <ul className="space-y-4">
             {data.shifts.map((s) => (
-              <ShiftCard key={s.id} shift={s} onChanged={load} onNotice={setNotice} />
+              <ShiftCard key={s.id} shift={s} windows={windows} onChanged={load} onNotice={setNotice} />
             ))}
           </ul>
         )}
       </section>
 
+      <ShiftPriceTable windows={windows} />
+
       <section className="space-y-4">
-        <SectionTitle hint="משמרת קבועה: אותו חדר, אותו יום ואותה משבצת, לשלושה חודשים קלנדריים">הזמנת משמרת חדשה</SectionTitle>
+        <SectionTitle hint="משמרת קבועה: אותו חדר, אותו יום ואותה משבצת, לשלושה חודשים קלנדריים לפחות">הזמנת משמרת חדשה</SectionTitle>
         {!data.eligible ? (
           <p className="card p-5 text-sm text-stone-600" data-testid="not-eligible">
             הזמנת משמרות קבועות זמינה ללקוחות שאושרו לכך על ידי ההנהלה. לבקשת אישור אפשר לפנות אלינו.
           </p>
         ) : (
           <NewShift
+            windows={windows}
             hasCard={data.hasUsableCard}
             mockCardLink={mockCardLink}
             onCreated={(message) => {
@@ -103,7 +110,7 @@ export function ShiftsCenter({ mockCardLink }: { mockCardLink: boolean }) {
 
 // ───────────────────────────── כרטיס משמרת ─────────────────────────────
 
-function ShiftCard({ shift, onChanged, onNotice }: { shift: ShiftView; onChanged: () => void; onNotice: (m: string) => void }) {
+function ShiftCard({ shift, windows, onChanged, onNotice }: { shift: ShiftView; windows: ShiftWindowDef[]; onChanged: () => void; onNotice: (m: string) => void }) {
   const [dialog, setDialog] = useState<"CHANGE" | "CANCEL" | null>(null);
   const st = SHIFT_STATUS_TEXT[shift.status] ?? { label: shift.status, tone: "neutral" as const };
   const canRequest = (shift.status === "ACTIVE" || shift.status === "SUSPENDED") && !shift.openRequest;
@@ -117,8 +124,12 @@ function ShiftCard({ shift, onChanged, onNotice }: { shift: ShiftView; onChanged
             {shift.room.name} · יום {WEEKDAY_NAMES[shift.weekday]} · {windowLabel(shift.windowId)}
           </p>
           <p className="text-sm text-stone-500 mt-1">
-            {dateLabel(shift.startDate)} עד {dateLabel(shift.endDate)} · {shekel(shift.occurrencePriceAgorot)} למופע
+            {dateLabel(shift.startDate)} עד {dateLabel(shift.endDate)} ·{" "}
+            {shift.monthlyPriceAgorot > 0
+              ? `${shekel(shift.monthlyPriceAgorot)} לחודש, ${shekel(shift.totalAgorot)} לשלושה חודשים (כולל מע"מ)`
+              : `${shekel(shift.occurrencePriceAgorot)} למופע`}
           </p>
+          {shift.paymentMode === "MANUAL" && <p className="text-xs text-stone-500 mt-1">תשלום ידני בתיאום עם ההנהלה: אין חיוב אוטומטי, ההנהלה מתעדת כל תשלום שהתקבל.</p>}
         </div>
         <ToneBadge tone={st.tone}>{st.label}</ToneBadge>
       </div>
@@ -129,13 +140,36 @@ function ShiftCard({ shift, onChanged, onNotice }: { shift: ShiftView; onChanged
         </Alert>
       )}
       {shift.status === "PENDING" && <p className="text-sm text-bronze-700">החיוב הראשון בבירור. המשבצות שמורות עד לאישור.</p>}
+      {shift.makeups.length > 0 && (
+        <div className="rounded-xl bg-cream-50 ring-1 ring-cream-200 px-4 py-3 text-sm space-y-2" data-testid="makeups">
+          <p className="font-semibold text-stone-800">
+            שעות חלופיות (הקליניקה נסגרה ביוזמת ההנהלה)
+            {shift.makeupMinutesRemaining > 0 && <> · יתרה: <strong>{minutesLabel(shift.makeupMinutesRemaining)}</strong></>}
+          </p>
+          <ul className="space-y-1 text-stone-600">
+            {shift.makeups.map((m) => (
+              <li key={m.occurrenceId}>
+                {dateLabel(m.date)}: מגיעות {minutesLabel(m.minutesTotal)}
+                {m.state === "OPEN" && m.minutesRemaining < m.minutesTotal && <> · נותרו {minutesLabel(m.minutesRemaining)}</>}
+                {m.expiresAt && m.state === "OPEN" && <> · בתוקף עד {dateLabel(m.expiresAt.slice(0, 10))}</>}
+                {" "}<span className="text-xs text-stone-500">({MAKEUP_STATE_TEXT[m.state] ?? m.state})</span>
+              </li>
+            ))}
+          </ul>
+          {shift.makeupOwed > 0 && (
+            <p className="text-stone-600">
+              את השעות אפשר לממש בהזמנת חדר ב&quot;יתרת שעות&quot; (אישור מהיתרה), או בתיאום עם ההנהלה. אין שינוי בחיוב המשמרת.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="overflow-x-auto">
         <table className="table-base">
           <thead>
             <tr>
-              <th>חודש</th>
-              <th>מופעים</th>
+              <th>מועד חיוב</th>
+              <th>מפגשים בתקופה</th>
               <th>סכום חיוב</th>
               <th>מצב</th>
             </tr>
@@ -145,11 +179,16 @@ function ShiftCard({ shift, onChanged, onNotice }: { shift: ShiftView; onChanged
               const cs = m.chargeStatus ? CHARGE_STATUS_TEXT[m.chargeStatus] : null;
               return (
                 <tr key={m.month}>
-                  <td>{monthLabel(m.month)}</td>
+                  <td className="tabular-nums">{m.dueDate ? dateLabel(m.dueDate) : monthLabel(m.month)}</td>
                   <td className="tabular-nums">{m.count}</td>
                   <td className="tabular-nums">{shekel(m.amountAgorot)}</td>
                   <td>
-                    {cs ? <ToneBadge tone={cs.tone}>{cs.label}</ToneBadge> : <span className="text-stone-400 text-xs">יחויב בתחילת החודש</span>}
+                    {cs ? (
+                      <ToneBadge tone={cs.tone}>{m.manual ? "שולם (ידני)" : cs.label}</ToneBadge>
+                    ) : (
+                      <span className="text-stone-400 text-xs">{shift.paymentMode === "MANUAL" ? "ממתין לתשלום" : "יחויב במועד"}</span>
+                    )}
+                    {m.manual && <span className="block text-xs text-stone-500">התקבל ב-{dateLabel(m.manual.paidOn)}</span>}
                     {m.failureCode && m.chargeStatus === "FAILED" && <span className="block text-xs text-red-600 mt-1">{failureText(m.failureCode)}</span>}
                     {m.graceUntil && m.chargeStatus === "FAILED" && <span className="block text-xs text-stone-500">תקופת חסד עד {dateLabel(m.graceUntil.slice(0, 10))}</span>}
                   </td>
@@ -161,7 +200,8 @@ function ShiftCard({ shift, onChanged, onNotice }: { shift: ShiftView; onChanged
       </div>
       {shift.nextCharge && (
         <p className="text-sm text-stone-600">
-          החיוב הבא: <strong>{shekel(shift.nextCharge.amountAgorot)}</strong> בתחילת {monthLabel(shift.nextCharge.month)}.
+          החיוב הבא: <strong>{shekel(shift.nextCharge.amountAgorot)}</strong>
+          {shift.nextCharge.dueDate ? ` ב-${dateLabel(shift.nextCharge.dueDate)}` : ` בתחילת ${monthLabel(shift.nextCharge.month)}`}.
         </p>
       )}
 
@@ -191,7 +231,7 @@ function ShiftCard({ shift, onChanged, onNotice }: { shift: ShiftView; onChanged
               return (
                 <li key={c.id} className="py-2 flex flex-wrap items-center justify-between gap-2">
                   <span>
-                    {monthLabel(c.month)} · {c.occurrenceCount} מופעים · <strong className="tabular-nums">{shekel(c.amountAgorot)}</strong>
+                    {c.dueDate ? dateLabel(c.dueDate) : monthLabel(c.month)} · <strong className="tabular-nums">{shekel(c.amountAgorot)}</strong>
                     {c.refundedAgorot > 0 && <span className="text-brand-700"> (הוחזרו {shekel(c.refundedAgorot)})</span>}
                   </span>
                   <ToneBadge tone={cs.tone}>{cs.label}</ToneBadge>
@@ -215,10 +255,10 @@ function ShiftCard({ shift, onChanged, onNotice }: { shift: ShiftView; onChanged
       {canRequest && (
         <div className="flex flex-wrap gap-2">
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => setDialog("CHANGE")}>
-            בקשת שינוי
+            פנייה למנהל: שינוי
           </button>
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => setDialog("CANCEL")}>
-            בקשת ביטול
+            פנייה למנהל: ביטול
           </button>
         </div>
       )}
@@ -226,11 +266,12 @@ function ShiftCard({ shift, onChanged, onNotice }: { shift: ShiftView; onChanged
       {dialog && (
         <RequestDialog
           shift={shift}
+          windows={windows}
           kind={dialog}
           onClose={() => setDialog(null)}
           onSent={() => {
             setDialog(null);
-            onNotice("הבקשה נשלחה וממתינה להחלטת מנהל. המשמרת נשארת ללא שינוי עד אז.");
+            onNotice("הפנייה נשלחה וממתינה להחלטת מנהל. המשמרת נשארת ללא שינוי עד אז.");
             onChanged();
           }}
         />
@@ -239,7 +280,7 @@ function ShiftCard({ shift, onChanged, onNotice }: { shift: ShiftView; onChanged
   );
 }
 
-function RequestDialog({ shift, kind, onClose, onSent }: { shift: ShiftView; kind: "CHANGE" | "CANCEL"; onClose: () => void; onSent: () => void }) {
+function RequestDialog({ shift, windows, kind, onClose, onSent }: { shift: ShiftView; windows: ShiftWindowDef[]; kind: "CHANGE" | "CANCEL"; onClose: () => void; onSent: () => void }) {
   const [reason, setReason] = useState("");
   const [roomKey, setRoomKey] = useState("");
   const [weekday, setWeekday] = useState("");
@@ -267,10 +308,11 @@ function RequestDialog({ shift, kind, onClose, onSent }: { shift: ShiftView; kin
   }
 
   return (
-    <Dialog title={kind === "CANCEL" ? "בקשת ביטול משמרת" : "בקשת שינוי משמרת"} labelId={`req-${shift.id}`} onClose={onClose}>
+    <Dialog title={kind === "CANCEL" ? "פנייה למנהל: ביטול משמרת" : "פנייה למנהל: שינוי משמרת"} labelId={`req-${shift.id}`} onClose={onClose}>
       <p className="text-sm text-stone-600">
-        הבקשה <strong>אינה משנה דבר ואינה מבצעת החזר אוטומטי</strong>. היא תיבדק על ידי מנהל, ועד להחלטתו המשמרת והחיובים נשארים כפי שהם.
-        {kind === "CHANGE" && " שינוי נכנס לתוקף רק מחודש שטרם חויב."}
+        המשמרת היא התחייבות לשלושה חודשים, ולכן שינוי או ביטול אפשריים רק באישור מנהל. הפנייה <strong>אינה משנה דבר ואינה מבצעת החזר אוטומטי</strong>:
+        היא תיבדק על ידי מנהל, ועד להחלטתו המשמרת והחיובים נשארים כפי שהם. היעדרות ממפגש אינה מזכה בהחזר או בזיכוי.
+        {kind === "CHANGE" && " שינוי נכנס לתוקף רק מתקופת חיוב שטרם חויבה."}
       </p>
       {kind === "CHANGE" && (
         <div className="grid sm:grid-cols-3 gap-3">
@@ -296,8 +338,8 @@ function RequestDialog({ shift, kind, onClose, onSent }: { shift: ShiftView; kin
             <label className="field-label" htmlFor="rq-win">משבצת</label>
             <select id="rq-win" className="field" value={windowId} onChange={(e) => setWindowId(e.target.value)}>
               <option value="">ללא שינוי</option>
-              {SHIFT_WINDOWS.map((w) => (
-                <option key={w.id} value={w.id}>{windowLabel(w.id)}</option>
+              {windows.filter((w) => w.active).map((w) => (
+                <option key={w.id} value={w.id}>{windowLabelOf(w)}</option>
               ))}
             </select>
           </div>
@@ -319,7 +361,7 @@ function RequestDialog({ shift, kind, onClose, onSent }: { shift: ShiftView; kin
       <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
         <button type="button" className="btn btn-secondary" onClick={onClose} disabled={busy}>חזרה</button>
         <button type="button" className="btn btn-primary" onClick={submit} disabled={busy}>
-          {busy ? "שולח..." : "שליחת בקשה"}
+          {busy ? "שולח..." : "שליחת פנייה"}
         </button>
       </div>
     </Dialog>
@@ -328,10 +370,11 @@ function RequestDialog({ shift, kind, onClose, onSent }: { shift: ShiftView; kin
 
 // ───────────────────────────── הזמנת משמרת חדשה ─────────────────────────────
 
-function NewShift({ hasCard, mockCardLink, onCreated }: { hasCard: boolean; mockCardLink: boolean; onCreated: (message: string) => void }) {
+function NewShift({ windows, hasCard, mockCardLink, onCreated }: { windows: ShiftWindowDef[]; hasCard: boolean; mockCardLink: boolean; onCreated: (message: string) => void }) {
   const [roomKey, setRoomKey] = useState<string>("ROOM3");
   const [weekday, setWeekday] = useState(1);
-  const [windowId, setWindowId] = useState("MORNING");
+  const activeWindows = windows.filter((w) => w.active);
+  const [windowId, setWindowId] = useState(activeWindows[0]?.id ?? "");
   const [startDate, setStartDate] = useState(todayIsoDate());
   const [plan, setPlan] = useState<Preview | null>(null);
   const [password, setPassword] = useState("");
@@ -426,9 +469,9 @@ function NewShift({ hasCard, mockCardLink, onCreated }: { hasCard: boolean; mock
         <div>
           <label className="field-label" htmlFor="ns-window">משבצת</label>
           <select id="ns-window" className={select} value={windowId} onChange={(e) => setWindowId(e.target.value)}>
-            {SHIFT_WINDOWS.map((w) => (
+            {activeWindows.map((w) => (
               <option key={w.id} value={w.id}>
-                {windowLabel(w.id)} · {shekel(occurrencePriceAgorot(w.id))}
+                {windowLabelOf(w)} · {shekel(w.monthlyPriceAgorot)} לחודש
               </option>
             ))}
           </select>
@@ -458,18 +501,18 @@ function NewShift({ hasCard, mockCardLink, onCreated }: { hasCard: boolean; mock
 
           <div className="rounded-xl bg-cream-50 ring-1 ring-cream-200 p-4 text-sm space-y-2">
             <p>
-              תקופה: <strong>{dateLabel(plan.startDate)}</strong> עד <strong>{dateLabel(plan.endDate)}</strong> (שלושה חודשים קלנדריים). מחיר למופע:{" "}
-              <strong>{shekel(plan.priceAgorot)}</strong> (שעה במחיר מוזל של 20%).
+              תקופה: <strong>{dateLabel(plan.startDate)}</strong> עד <strong>{dateLabel(plan.endDate)}</strong> (שלושה חודשים, ללא חידוש אוטומטי). מחיר חודשי קבוע:{" "}
+              <strong>{shekel(plan.monthlyPriceAgorot)}</strong> (כולל מע&quot;מ), בסך הכול <strong>{shekel(plan.totalAgorot)}</strong> לשלושה חודשים.
             </p>
             <ul className="divide-y divide-cream-200">
               {plan.months.map((m) => (
                 <li key={m.month} className="py-2 flex flex-wrap items-center justify-between gap-2">
                   <span>
-                    {monthLabel(m.month)}: {m.count} מופעים
+                    חיוב {dateLabel(m.dueDate)}: {m.count} מפגשים בתקופה
                   </span>
                   <span className="tabular-nums">
                     <strong>{shekel(m.amountAgorot)}</strong>{" "}
-                    <span className="text-xs text-stone-500">{m.isFirst ? "ייגבה מיד באישור" : "ייגבה אוטומטית בתחילת החודש"}</span>
+                    <span className="text-xs text-stone-500">{m.isFirst ? "ייגבה מיד באישור ההזמנה" : "ייגבה אוטומטית במועדו"}</span>
                   </span>
                 </li>
               ))}
@@ -484,16 +527,17 @@ function NewShift({ hasCard, mockCardLink, onCreated }: { hasCard: boolean; mock
                   <span>
                     {dateLabel(o.date)} · {jerusalemTime(o.startTime)}–{jerusalemTime(o.endTime)}
                   </span>
-                  <span>{o.skipReason ? <span className="text-stone-400">{OCCURRENCE_STATUS_TEXT.SKIPPED_CLOSED_DAY} · ללא חיוב</span> : shekel(o.priceAgorot)}</span>
+                  <span className="text-stone-400">{o.skipReason ? `${OCCURRENCE_STATUS_TEXT.SKIPPED_CLOSED_DAY} · שעה חלופית` : "כלול במחיר"}</span>
                 </li>
               ))}
             </ul>
           </details>
 
           <ul className="text-xs text-stone-500 space-y-1 list-disc pr-5">
-            <li>החיוב הראשון כולל רק את המופעים שנותרו בחודש ההתחלה; החיובים הבאים מתבצעים אוטומטית בתחילת כל חודש, לפי מספר המופעים בפועל.</li>
+            <li>שלושה חיובים בדיוק, בסכום קבוע: הראשון מיד באישור ההזמנה (גם אם תאריך ההתחלה עתידי), והשניים הבאים חודש וחודשיים אחרי תאריך ההתחלה. אין חישוב יחסי, וכל המפגשים בתקופה כלולים במחיר.</li>
+            <li>ההזמנה מאושרת רק אחרי תשלום ראשון מוצלח. אם התשלום נכשל המשבצות משתחררות מיד.</li>
             <li>אם חיוב נכשל, תקופת חסד של שבעה ימים. אם החוב לא הוסדר, המשמרת מושעית, המשבצות נשמרות והשימוש בה נעצר עד החלטת מנהל.</li>
-            <li>שינוי או ביטול של משמרת מחייבים בקשה ואישור מנהל. יום שנסגר על ידי ההנהלה אינו מחויב.</li>
+            <li>שינוי או ביטול במהלך התקופה אפשריים רק בפנייה למנהל ובאישורו. היעדרות ממפגש אינה מזכה בהחזר או בזיכוי. אם ההנהלה סוגרת את הקליניקה, תקבלו שעה חלופית.</li>
           </ul>
 
           {plan.conflicts.length === 0 && hasCard && (
@@ -503,7 +547,9 @@ function NewShift({ hasCard, mockCardLink, onCreated }: { hasCard: boolean; mock
                 <input id="ns-password" type="password" dir="ltr" autoComplete="current-password" className="field" value={password} onChange={(e) => setPassword(e.target.value)} />
               </div>
               <button type="button" className="btn btn-primary w-full py-3!" disabled={create.busy || !password} onClick={doCreate}>
-                {create.busy ? "יוצר משמרת..." : `אישור והזמנה · חיוב מיידי ${shekel(plan.firstChargeAgorot)}`}
+                {create.busy
+                  ? "יוצר משמרת..."
+                  : `אישור והזמנה · חיוב מיידי ${shekel(plan.firstChargeAgorot)}`}
                 {!create.busy && <Icon name="arrowLeft" className="w-4 h-4" />}
               </button>
             </div>

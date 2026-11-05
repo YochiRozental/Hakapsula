@@ -28,9 +28,18 @@ export const REFUND_STATE: Record<string, { label: string; tone: "ok" | "pending
   PENDING_UNKNOWN: { label: "נשלח, מצב לא ידוע", tone: "pending" },
 };
 
-export const LEDGER_TYPE: Record<string, string> = { PAYMENT: "תשלום", REFUND: "החזר", DEBT_PAYMENT: "הסדרת חוב", DEBT_WAIVER: "ויתור על חוב" };
+export const LEDGER_TYPE: Record<string, string> = { PAYMENT: "תשלום", MANUAL_PAYMENT: "תשלום ידני (משמרת)", REFUND: "החזר", DEBT_PAYMENT: "הסדרת חוב", DEBT_WAIVER: "ויתור על חוב" };
 
 export const AUDIT_ACTION: Record<string, string> = {
+  "shift_charge.manual_payment": "תשלום ידני נרשם (משמרת)",
+  "shift_charge.manual_overdue": "תשלום ידני לא התקבל במועד",
+  "shift.create_manual": "משמרת נוצרה בתשלום ידני",
+  "shift.suspended_nonpayment": "משמרת הושעתה בגלל אי-תשלום",
+  "shift_makeup.granted": "שעות חלופיות ניתנו",
+  "shift_makeup.scheduled": "שעה חלופית שובצה",
+  "shift_makeup.waived": "ויתור על שעה חלופית",
+  "shift_window.update": "עדכון משבצת משמרת",
+  "shift_window.create": "משבצת משמרת חדשה",
   BOOKING_APPROVED_WITH_DEBT: "אישור הזמנה עם חוב",
   DEBT_SETTLED: "הסדרת חוב",
   DEBT_WAIVED: "ויתור על חוב",

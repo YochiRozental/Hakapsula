@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ROOM_KEYS, ROOM_LABELS } from "@/lib/rooms";
 import {
@@ -66,6 +67,19 @@ export default function BookingPage() {
   const router = useRouter();
   // שער זרימת התשלום: סגור כברירת מחדל (באתר החי תמיד סגור); כשסגור ההזמנה פועלת בדיוק כמו קודם
   const paymentsGate = usePaymentsGate();
+  // משמרות קבועות: הקישור מופיע רק כשהשער פתוח (באתר החי הנתיב מחזיר 404) ורק ללקוח מחובר
+  const [shiftsOpen, setShiftsOpen] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/shifts")
+      .then((res) => {
+        if (!cancelled) setShiftsOpen(res.status === 200);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [roomKey, setRoomKey] = useState<RoomKey>("ROOM1");
   const [date, setDate] = useState(todayIsoDate());
   const [startTime, setStartTime] = useState(DEFAULT_START_TIME);
@@ -243,6 +257,19 @@ export default function BookingPage() {
           ))}
         </ol>
       </BrandHeader>
+
+      {shiftsOpen && (
+        <Link href="/profile/shifts" className="card card-hover flex items-center gap-4 p-4 mb-6" data-testid="shifts-banner">
+          <span className="w-11 h-11 rounded-2xl bg-linear-to-b from-brand-50 to-brand-100 text-brand-600 ring-1 ring-brand-100 flex items-center justify-center shrink-0">
+            <Icon name="calendar" className="w-5 h-5" />
+          </span>
+          <span className="flex-1">
+            <span className="block font-display font-bold text-stone-900">משמרת קבועה במחיר חודשי</span>
+            <span className="block text-sm text-stone-500">אותו חדר, אותו יום ואותן שעות בכל שבוע, לפחות 3 חודשים. למחירון ולהזמנה</span>
+          </span>
+          <Icon name="chevronLeft" className="w-5 h-5 text-stone-400" />
+        </Link>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <section className="card p-5 sm:p-8">

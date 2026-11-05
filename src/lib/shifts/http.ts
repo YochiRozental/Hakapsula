@@ -5,6 +5,7 @@ import type { PaymentProvider } from "@/lib/payments/provider";
 import { isJsonRequest, isSameOriginRequest } from "@/lib/same-origin";
 import { ShiftError } from "@/lib/shifts/errors";
 import { getShiftsProvider } from "@/lib/shifts/gate";
+import { isMockUserAllowed, MOCK_ACCESS_DENIED_MESSAGE } from "@/lib/payments/mock-access";
 
 /** עזרי נתיבי HTTP של משמרות: שער, הרשאות (נבדקות מול המסד, לא מול ה-JWT), הגנת CSRF ומיפוי שגיאות */
 
@@ -18,8 +19,9 @@ type Auth<T> = ({ user: T } & { response?: undefined }) | { response: NextRespon
 export async function requireClient(): Promise<Auth<{ id: string }>> {
   const session = await auth();
   if (!session?.user) return { response: NextResponse.json({ error: "יש להתחבר" }, { status: 401 }) };
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { id: true, role: true, mustChangePassword: true } });
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { id: true, role: true, email: true, mustChangePassword: true } });
   if (!user) return { response: NextResponse.json({ error: "יש להתחבר" }, { status: 401 }) };
+  if (!isMockUserAllowed(user)) return { response: NextResponse.json({ error: MOCK_ACCESS_DENIED_MESSAGE }, { status: 403 }) };
   if (user.role !== "CLIENT") return { response: NextResponse.json({ error: "אין הרשאה" }, { status: 403 }) };
   if (user.mustChangePassword) return { response: NextResponse.json({ error: "יש להחליף סיסמה זמנית קודם" }, { status: 403 }) };
   return { user: { id: user.id } };

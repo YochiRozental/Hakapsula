@@ -8,6 +8,7 @@ import { isIvrPinSetupEnabled } from "@/lib/ivr-pin/flag";
 import { isMockCardEnabled } from "@/lib/payments/mock-card-flag";
 import { MockPaymentProvider } from "@/lib/payments/mock-provider";
 import { getShiftsProvider } from "@/lib/shifts/gate";
+import { isMockUserAllowed } from "@/lib/payments/mock-access";
 import { UserCard } from "@/components/user-card";
 
 export default async function ProfilePage() {
@@ -25,6 +26,8 @@ export default async function ProfilePage() {
     },
   });
   if (!user) redirect("/login");
+  // אתר מותקן עם Mock: כניסות לתשלום ולמשמרות מוצגות רק למשתמשי בדיקה מורשים (נאכף גם בשרת בכל נתיב)
+  const mockAllowed = isMockUserAllowed(user);
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -38,7 +41,7 @@ export default async function ProfilePage() {
         }
       />
       {/* אמצעי תשלום מדומה לבדיקות: מוצג רק כשהדגל פתוח והספק הוא Mock בסביבת sandbox */}
-      {isMockCardEnabled() && getFlowProvider() instanceof MockPaymentProvider && (
+      {mockAllowed && isMockCardEnabled() && getFlowProvider() instanceof MockPaymentProvider && (
         <Link href="/profile/payment-method" className="card card-hover flex items-center gap-4 p-5 mb-6">
           <span className="w-11 h-11 rounded-2xl bg-linear-to-b from-brand-50 to-brand-100 text-brand-600 ring-1 ring-brand-100 flex items-center justify-center shrink-0">
             <Icon name="card" className="w-5 h-5" />
@@ -64,7 +67,7 @@ export default async function ProfilePage() {
         </Link>
       )}
       {/* כניסה ליתרת שעות וחבילות: מוצגת רק כשזרימת התשלום פעילה (סביבת פיתוח); באתר החי אינה מופיעה */}
-      {getFlowProvider() && (
+      {mockAllowed && getFlowProvider() && (
         <Link href="/profile/hours" className="card card-hover flex items-center gap-4 p-5 mb-6">
           <span className="w-11 h-11 rounded-2xl bg-linear-to-b from-brand-50 to-brand-100 text-brand-600 ring-1 ring-brand-100 flex items-center justify-center shrink-0">
             <Icon name="clock" className="w-5 h-5" />
@@ -77,7 +80,7 @@ export default async function ProfilePage() {
         </Link>
       )}
       {/* משמרות קבועות: מוצגות רק כשהשער SHIFTS_ENABLED פתוח (סביבת פיתוח עם ספק Mock) */}
-      {getShiftsProvider() && (
+      {mockAllowed && getShiftsProvider() && (
         <Link href="/profile/shifts" className="card card-hover flex items-center gap-4 p-5 mb-6">
           <span className="w-11 h-11 rounded-2xl bg-linear-to-b from-brand-50 to-brand-100 text-brand-600 ring-1 ring-brand-100 flex items-center justify-center shrink-0">
             <Icon name="calendar" className="w-5 h-5" />

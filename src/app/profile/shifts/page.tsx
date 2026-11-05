@@ -4,6 +4,8 @@ import { PageHeader } from "@/components/ui";
 import { ShiftsCenter } from "@/components/shifts/shifts-center";
 import { isMockCardEnabled } from "@/lib/payments/mock-card-flag";
 import { getShiftsProvider } from "@/lib/shifts/gate";
+import { ShiftWindowsProvider } from "@/components/shifts/windows-provider";
+import { listShiftWindows } from "@/lib/shifts/windows-db";
 
 // השער נקרא ממשתני סביבה בזמן ריצה: אסור להכין את העמוד מראש בזמן build
 export const dynamic = "force-dynamic";
@@ -16,10 +18,13 @@ export default async function ShiftsPage() {
   if (session.user.role === "ADMIN") redirect("/admin/shifts");
   if (session.user.mustChangePassword) redirect("/change-password");
 
+  const windows = await listShiftWindows();
   return (
     <div className="max-w-4xl mx-auto">
       <PageHeader eyebrow="האזור האישי" title="המשמרות שלי" subtitle="משמרות קבועות, חיוב חודשי ובקשות שינוי וביטול" />
-      <ShiftsCenter mockCardLink={isMockCardEnabled()} />
+      <ShiftWindowsProvider windows={windows}>
+        <ShiftsCenter mockCardLink={isMockCardEnabled()} windows={windows} />
+      </ShiftWindowsProvider>
     </div>
   );
 }

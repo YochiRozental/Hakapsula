@@ -24,11 +24,11 @@ export async function PUT(request: Request) {
   try {
     if (body?.closed === true) {
       await replaceDate(date, { closed: true, note });
-      // סגירה מפורשת של יום משפיעה על מופעי משמרות באותו יום (דילוג, ללא חיוב, החזר אם שולם). פעיל רק כשהשער פתוח
-      const shiftsProvider = getShiftsProvider();
-      if (shiftsProvider) {
+      // סגירה מפורשת של יום משפיעה על מופעי משמרות באותו יום (דילוג, והלקוח זכאי לשעה חלופית; בלי החזר).
+      // פעיל רק כשהשער פתוח
+      if (getShiftsProvider()) {
         try {
-          await applyDayClosure({ date, adminId: session.user.id, provider: shiftsProvider });
+          await applyDayClosure({ date, adminId: session.user.id });
         } catch (closureError) {
           console.error("[shifts] day closure effects failed", closureError instanceof Error ? closureError.name : "unknown");
         }

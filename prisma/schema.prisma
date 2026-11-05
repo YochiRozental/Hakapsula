@@ -576,6 +576,19 @@ model PaymentAuthorization {
 // שניים). כל מופע הוא Appointment מאושר (source = SHIFT), ולכן כל מנגנון הזמינות וההתנגשויות הקיים חל עליו כמות שהוא.
 // כל הסכומים באגורות. החיוב החודשי נעשה ע"י ShiftCharge (שורה אחת לכל משמרת ולכל חודש) ובאמצעות Payment.
 
+/// אופן הגבייה של משמרת: AUTO = חיוב אוטומטי באמצעי תשלום שמור; MANUAL = תשלום ידני בתיאום ובאישור מנהל (אין חיוב אוטומטי)
+enum ShiftPaymentMode {
+  AUTO
+  MANUAL
+}
+
+/// שעה חלופית ללקוח כשהקליניקה נסגרה ביוזמת ההנהלה (ללא החזר כספי): ממתינה לתיאום / תואמה / ויתור מפורש
+enum ShiftMakeupStatus {
+  OWED
+  ARRANGED
+  WAIVED
+}
+
 enum ShiftStatus {
   /// נוצרה והמשבצות שמורות, ממתינה לאישור החיוב הראשון (או לבירור מנהל אם מצב החיוב לא ידוע)
   PENDING
@@ -585,6 +598,22 @@ enum ShiftStatus {
   CANCELLED
   /// תקופת המשמרת הסתיימה
   ENDED
+}
+
+/// משבצות המשמרות (שעות ומחיר חודשי), ניתנות לעריכה ע"י מנהל. משמרת שומרת רק את ה-id, ולכן עריכה משפיעה על הזמנות חדשות
+/// ועל שינויים מאושרים בלבד: מופעים וחיובים קיימים נשארים כפי שנקבעו. אין מחיקה (משבצת שאינה בשימוש מושבתת)
+model ShiftWindow {
+  id                 String   @id
+  name               String
+  /// דקות מחצות בשעון ירושלים, בקפיצות של רבע שעה
+  startMinutes       Int
+  endMinutes         Int
+  /// מחיר חודשי כולל מע"מ, באגורות. שקלים שלמים בלבד (מתחלק במדויק ב-4 וב-5 מופעים בחודש)
+  monthlyPriceAgorot Int
+  active             Boolean  @default(true)
+  sortOrder          Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }
 
 model Shift {
@@ -604,8 +633,11 @@ model Shift {
   /// אמצעי התשלום המועדף לחיוב החודשי (חייב להישאר שמיש בכל חיוב)
   paymentMethodId String?
   paymentMethod  PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
-  /// מחיר מופע בעת היצירה (תמונת מצב), באגורות
+  /// מחיר מופע ממוצע (חודשי ÷ 4) בעת היצירה. מידע בלבד: החיוב בפועל הוא סכום מחירי המופעים (ShiftOccurrence.priceAgorot)
   occurrencePriceAgorot Int
+  /// המחיר החודשי של המשבצת בעת היצירה (תמונת מצב), באגורות. 0 = משמרת ישנה שתומחרה לפי מופע
+  monthlyPriceAgorot Int @default(0)
+  paymentMode    ShiftPaymentMode @default(AUTO)
   /// מפתח אידמפוטנטיות ליצירה (לחיצה כפולה/רענון מחזירים את אותה משמרת)
   idempotencyKey String?       @unique
   createdById    String
@@ -651,6 +683,13 @@ model ShiftOccurrence {
   appointment   Appointment?          @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
   /// כמה הוחזר/זוכה על המופע הזה אחרי שנגבה (באגורות)
   refundedAgorot Int                  @default(0)
+  /// שעה חלופית כשהמופע בוטל בגלל סגירה ביוזמת ההנהלה. null = אין זכאות
+  makeupStatus  ShiftMakeupStatus?
+  makeupNote    String?
+  makeupUpdatedAt DateTime?
+  makeupUpdatedById String?
+  /// הזיכוי (Credit) שניתן בדקות על המפגש שבוטל: משך המפגש המלא. זיכוי אחד לכל היותר, ויתרתו מנוהלת במנגנון היתרות הקיים
+  makeupCreditId String? @unique
   createdAt     DateTime              @default(now())
   updatedAt     DateTime              @updatedAt
 
@@ -675,10 +714,16 @@ model ShiftCharge {
   id              String            @id @default(cuid())
   shiftId         String
   shift           Shift             @relation(fields: [shiftId], references: [id], onDelete: Restrict)
-  /// YYYY-MM
+  /// YYYY-MM של מועד החיוב (מפתח ייחודי למשמרת). שלושה חיובים בדיוק: מועד ההתחלה, חודש אחריו, וחודשיים אחריו
   month           String
+  /// מועד החיוב המלא (YYYY-MM-DD), מחושב מתאריך ההתחלה המקורי. null = משמרת ישנה שחויבה לפי חודש קלנדרי
+  dueDate         String?
   amountAgorot    Int
   occurrenceCount Int
+  /// תשלום ידני שאושר ע"י מנהל: הסכום שהתקבל בפועל (אגורות), התאריך שבו התקבל (YYYY-MM-DD) ואסמכתה
+  manualAmountAgorot Int?
+  manualPaidOn    String?
+  manualReference String?
   /// החיוב הראשון (נעשה באישור המשמרת)
   isFirst         Boolean           @default(false)
   status          ShiftChargeStatus @default(PENDING)

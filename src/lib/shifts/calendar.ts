@@ -1,18 +1,11 @@
 import { jerusalemWallInstant } from "@/lib/jerusalem-time";
-import {
-  SHIFT_WINDOWS,
-  findShiftWindow,
-  shiftSessionPriceAgorot,
-  shiftWindowMinutes,
-  type ShiftWindowId,
-} from "@/lib/payments/pricing";
 
 /**
  * חישובי לוח שנה של משמרות קבועות. פונקציות טהורות (בלי מסד נתונים), על תאריכי YYYY-MM-DD של ירושלים.
  *
- * כלל התקופה (החלטה מתועדת): משמרת תקפה לשלושה חודשים קלנדריים, והחודש שבו היא מתחילה הוא הראשון. תאריך הסיום הוא
- * היום האחרון של החודש השלישי. התחלה באמצע חודש משמעה חודש ראשון חלקי: למשל התחלה ב-15.1 מסתיימת ב-31.3. כך יש בדיוק
- * שלושה חודשי חיוב, החיוב הראשון כולל רק את המופעים שנותרו באותו חודש, ואין אף מופע אחרי סוף החודש השלישי.
+ * כלל התקופה (החלטה עסקית סופית): משמרת נמשכת שלושה חודשים מתאריך תחילתה, ומסתיימת ביום שלפני מועד החיוב הרביעי
+ * (למשל התחלה ב-15.2 מסתיימת ב-14.5). אין חידוש. יש בדיוק שלושה חיובים: בתאריך ההתחלה, חודש אחריו וחודשיים אחריו, כל
+ * מועד מחושב ביחס לתאריך ההתחלה המקורי (31.1 -> 28.2 -> 31.3). אין חישוב יחסי: כל המפגשים בתקופה כלולים במחיר החודשי הקבוע.
  */
 
 export const SHIFT_PERIOD_MONTHS = 3;
@@ -22,9 +15,6 @@ export const MAX_START_AHEAD_DAYS = 31;
 
 /** ימי שבוע ששייכים למשמרת: ראשון עד שישי. שבת סגורה */
 export const SHIFT_WEEKDAYS = [0, 1, 2, 3, 4, 5] as const;
-
-export type { ShiftWindowId };
-export { SHIFT_WINDOWS };
 
 const ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
 
@@ -65,22 +55,52 @@ function lastDayOfMonth(y: number, m: number): number {
   return new Date(Date.UTC(y, m, 0)).getUTCDate();
 }
 
-/** הסיום: היום האחרון של החודש השלישי (החודש שבו מתחילים נספר כראשון) */
-export function shiftEndDate(startIso: string): string {
-  const { y, m } = mustParse(startIso);
-  const endMonthIndex = m - 1 + (SHIFT_PERIOD_MONTHS - 1);
-  const endYear = y + Math.floor(endMonthIndex / 12);
-  const endMonth = (endMonthIndex % 12) + 1;
-  return isoOf(endYear, endMonth, lastDayOfMonth(endYear, endMonth));
+/**
+ * מוסיף חודשים קלנדריים לתאריך. אם היום אינו קיים בחודש היעד (למשל 31 בחודש קצר) התוצאה היא היום האחרון של אותו חודש.
+ * תמיד מחשבים ביחס לתאריך ההתחלה המקורי ולא בשרשרת (31.1 -> 28.2 -> 31.3, ולא 28.2 -> 28.3).
+ */
+export function addMonthsClamped(iso: string, months: number): string {
+  const { y, m, d } = mustParse(iso);
+  const index = m - 1 + months;
+  const year = y + Math.floor(index / 12);
+  const month = ((index % 12) + 12) % 12 + 1;
+  return isoOf(year, month, Math.min(d, lastDayOfMonth(year, month)));
 }
 
-/** שלושת מפתחות חודשי החיוב של המשמרת, לפי הסדר */
+/** סיום המשמרת: היום שלפני מועד החיוב הרביעי (תאריך ההתחלה + שלושה חודשים). לא מתחדשת ולא מחויבת אחריו */
+export function shiftEndDate(startIso: string): string {
+  return addDays(addMonthsClamped(startIso, SHIFT_PERIOD_MONTHS), -1);
+}
+
+/** שלושת מועדי החיוב: תאריך ההתחלה, חודש אחריו, וחודשיים אחריו (כל אחד ביחס לתאריך ההתחלה המקורי). אין חיוב רביעי */
+export function billingDueDates(startIso: string): string[] {
+  return Array.from({ length: SHIFT_PERIOD_MONTHS }, (_, i) => addMonthsClamped(startIso, i));
+}
+
+/** שלושת מפתחות החיוב (YYYY-MM של מועד החיוב), לפי הסדר. חודשי מועדי החיוב תמיד שונים זה מזה */
 export function billingMonths(startIso: string): string[] {
-  const { y, m } = mustParse(startIso);
-  return Array.from({ length: SHIFT_PERIOD_MONTHS }, (_, i) => {
-    const idx = m - 1 + i;
-    return `${y + Math.floor(idx / 12)}-${pad((idx % 12) + 1)}`;
-  });
+  return billingDueDates(startIso).map(monthKeyOf);
+}
+
+/** באיזו תקופת חיוב (0, 1 או 2) חל תאריך: התקופה שמתחילה במועד החיוב האחרון שאינו אחרי התאריך */
+export function periodIndexOf(startIso: string, dateIso: string): number {
+  const due = billingDueDates(startIso);
+  let index = 0;
+  for (let i = 0; i < due.length; i++) if (dateIso >= due[i]) index = i;
+  return index;
+}
+
+/** מפתח החיוב (YYYY-MM) של תקופת החיוב שבה חל התאריך */
+export function periodKeyOf(startIso: string, dateIso: string): string {
+  return billingMonths(startIso)[periodIndexOf(startIso, dateIso)];
+}
+
+/** כמה מפגשים (ביום השבוע הנתון) יש בתקופת חיוב שלמה, לפי הלוח האמיתי. תמיד 4 או 5 */
+export function sessionsInPeriod(startIso: string, weekday: number, index: number): number {
+  const due = billingDueDates(startIso);
+  const from = due[index];
+  const to = index + 1 < due.length ? addDays(due[index + 1], -1) : shiftEndDate(startIso);
+  return occurrenceDatesBetween(from, to, weekday).length;
 }
 
 /** כל התאריכים בין fromIso ל-toIso (כולל) שחלים ביום השבוע הנתון. בלי כפילויות ולפי הסדר */
@@ -97,9 +117,6 @@ export function occurrenceDates(startIso: string, weekday: number): string[] {
   return occurrenceDatesBetween(startIso, shiftEndDate(startIso), weekday);
 }
 
-/** היום הראשון של חודש (YYYY-MM -> YYYY-MM-01) */
-export const monthStartIso = (month: string) => `${month}-01`;
-
 export function groupByMonth<T extends { date: string }>(items: T[]): Map<string, T[]> {
   const map = new Map<string, T[]>();
   for (const item of items) {
@@ -110,25 +127,19 @@ export function groupByMonth<T extends { date: string }>(items: T[]): Map<string
 }
 
 /** תחילה וסיום של מופע (רגעים אמיתיים), לפי שעון ירושלים, כולל ימי מעבר שעון */
-export function occurrenceTimes(dateIso: string, windowId: ShiftWindowId): { startTime: Date; endTime: Date } {
-  const w = findShiftWindow(windowId);
-  if (!w) throw new RangeError("משבצת לא קיימת");
-  return { startTime: jerusalemWallInstant(dateIso, w.startMinutes), endTime: jerusalemWallInstant(dateIso, w.endMinutes) };
+export function occurrenceTimes(dateIso: string, window: { startMinutes: number; endMinutes: number }): { startTime: Date; endTime: Date } {
+  return { startTime: jerusalemWallInstant(dateIso, window.startMinutes), endTime: jerusalemWallInstant(dateIso, window.endMinutes) };
 }
 
-export function isShiftWindowId(value: unknown): value is ShiftWindowId {
-  return typeof value === "string" && SHIFT_WINDOWS.some((w) => w.id === value);
-}
-
-/** מחיר מופע באגורות (שעה = 41.60 ₪, מחושב לפי המשך בפועל של המשבצת) */
-export function occurrencePriceAgorot(windowId: ShiftWindowId): number {
-  return shiftSessionPriceAgorot(shiftWindowMinutes(windowId));
-}
-
-/** החיוב החודשי: מספר המופעים בפועל באותו חודש כפול מחיר מופע (מספרים שלמים בלבד) */
-export function monthAmountAgorot(windowId: ShiftWindowId, occurrences: number): number {
-  if (!Number.isInteger(occurrences) || occurrences < 0) throw new RangeError("מספר מופעים לא תקין");
-  return occurrences * occurrencePriceAgorot(windowId);
+/**
+ * מחיר מופע (אגורות) = המחיר החודשי ÷ מספר המפגשים בתקופת החיוב שבה חל המופע (4 או 5). המחיר החודשי הוא בשקלים שלמים,
+ * ולכן החלוקה מדויקת באגורות והתקופה מסתכמת תמיד במחיר החודשי. המחיר אינו משמש לחיוב (החיוב הוא תמיד המחיר החודשי הקבוע)
+ * אלא רק להחזר חלקי שמנהל אישר במפורש (ביטול מאושר).
+ */
+export function occurrencePriceAgorot(monthlyPriceAgorot: number, startIso: string, weekday: number, dateIso: string): number {
+  if (!Number.isInteger(monthlyPriceAgorot) || monthlyPriceAgorot < 0) throw new RangeError("מחיר חודשי לא תקין");
+  const count = sessionsInPeriod(startIso, weekday, periodIndexOf(startIso, dateIso));
+  return count === 0 ? 0 : Math.round(monthlyPriceAgorot / count);
 }
 
 /** תאריך התחלה תקין: פורמט, לא בעבר (לפי היום בירושלים), ולא רחוק מדי קדימה. מחזיר הודעת שגיאה או null */

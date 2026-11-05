@@ -106,7 +106,7 @@ export async function restoreAppointmentBalance(
     return map;
   };
 
-  type Pending = { kind: "package" | "credit"; id: string; minutes: number; expired: boolean };
+  type Pending = { kind: "package" | "credit"; id: string; minutes: number; expired: boolean; forfeited?: boolean };
   const pending: Pending[] = [];
 
   for (const [packageId, rows] of group(pkgRows, (r) => r.packageId)) {
@@ -122,10 +122,13 @@ export async function restoreAppointmentBalance(
     if (minutes <= 0) continue;
     const source = await tx.credit.findFirst({ where: { id: creditId, userId } });
     if (!source) continue;
-    pending.push({ kind: "credit", id: creditId, minutes, expired: source.expiresAt.getTime() <= now.getTime() });
+    // שעה חלופית של משמרת שמנהל ויתר עליה במפורש: הזכאות בוטלה. דקות שנוצלו קודם (גם בניצול חלקי) לא חוזרות לשימוש
+    // בביטול הזמנה, וגם לא הופכות לזיכוי חדש. רושמים החזרה אפסית כדי שהחישוב נטו יישאר אידמפוטנטי
+    const forfeited = source.reason?.startsWith("shift_makeup:") ? (await tx.shiftOccurrence.count({ where: { makeupCreditId: creditId, makeupStatus: "WAIVED" } })) > 0 : false;
+    pending.push({ kind: "credit", id: creditId, minutes, expired: source.expiresAt.getTime() <= now.getTime(), forfeited });
   }
 
-  const expiredTotal = pending.filter((p) => p.expired).reduce((n, p) => n + p.minutes, 0);
+  const expiredTotal = pending.filter((p) => p.expired && !p.forfeited).reduce((n, p) => n + p.minutes, 0);
   let creditId: string | undefined;
   if (expiredTotal > 0) {
     const credit = await tx.credit.create({
@@ -143,8 +146,8 @@ export async function restoreAppointmentBalance(
 
   let restoredMinutes = 0;
   for (const p of pending) {
-    const convertedToCreditId = p.expired ? creditId : undefined;
-    if (!p.expired) {
+    const convertedToCreditId = p.expired && !p.forfeited ? creditId : undefined;
+    if (!p.expired && !p.forfeited) {
       if (p.kind === "package") {
         await tx.hoursPackage.update({ where: { id: p.id }, data: { minutesRemaining: { increment: p.minutes } } });
       } else {
