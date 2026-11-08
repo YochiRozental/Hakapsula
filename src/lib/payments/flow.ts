@@ -48,6 +48,25 @@ export async function requireAdminUser(): Promise<{ user: SessionUser } | { resp
   return { user };
 }
 
+/**
+ * מנהל מחובר + הזמנה שנוצרה על ידי מנהל (source "ADMIN"). מחזיר את ה-userId של ההזמנה עצמה (הלקוח שעבורו
+ * נקבע התור) ולעולם לא את ה-userId של המנהל המחובר — כך שכל פעולה על ההזמנה (תשלום, יתרה, ביטול) משויכת ללקוח הנכון.
+ */
+export async function requireAdminAppointment(
+  appointmentId: string
+): Promise<{ userId: string } | { response: NextResponse }> {
+  const admin = await requireAdminUser();
+  if ("response" in admin) return admin;
+  const appointment = await prisma.appointment.findUnique({
+    where: { id: appointmentId },
+    select: { userId: true, source: true },
+  });
+  if (!appointment || appointment.source !== "ADMIN") {
+    return { response: NextResponse.json({ error: "ההזמנה לא נמצאה" }, { status: 404 }) };
+  }
+  return { userId: appointment.userId };
+}
+
 export function errorResponse(err: unknown) {
   if (err instanceof PaymentFlowError) {
     const status = { NOT_FOUND: 404, FORBIDDEN: 403, EXPIRED: 410, INVALID: 400, CONFLICT: 409, INSUFFICIENT_BALANCE: 409, PLAN_CHANGED: 409, NO_PAYMENT_METHOD: 409, PROVIDER_ERROR: 502 }[err.code];

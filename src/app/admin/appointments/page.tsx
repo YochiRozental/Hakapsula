@@ -11,6 +11,8 @@ import { Alert, EmptyState, Icon, Loading, PageHeader, ROOM_ACCENTS, SectionTitl
 import { Pager, SortableTh, TableFilterBar, useTableFilters } from "@/components/table-filter";
 import { buildListParams, clampPage, type Filter, type FilterField } from "@/lib/table-filters";
 import { jerusalemTodayIso } from "@/lib/jerusalem-time";
+import { usePaymentsGate } from "@/lib/payments/client";
+import { AdminCheckout } from "@/components/payments/admin-checkout";
 
 type Appointment = {
   id: string;
@@ -80,6 +82,7 @@ export default function AdminAppointmentsPage() {
   const [userSearch, setUserSearch] = useState("");
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
   const [selectedUserId, setSelectedUserId] = useState("");
+  const [selectedUserName, setSelectedUserName] = useState("");
   const [newRoomKey, setNewRoomKey] = useState<RoomKey>("ROOM1");
   const [newDate, setNewDate] = useState(todayIsoDate());
   const [newTime, setNewTime] = useState("08:00");
@@ -89,6 +92,9 @@ export default function AdminAppointmentsPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [createSuccess, setCreateSuccess] = useState(false);
+  // החזקה (10 דק') שנוצרה וממתינה להשלמת תשלום/יתרה; כל עוד היא קיימת, הטופס מציג את מסך התשלום במקום השדות
+  const [activeHold, setActiveHold] = useState<{ id: string; customerName: string } | null>(null);
+  const paymentsGate = usePaymentsGate();
 
   // שעות הפעילות של התאריך הנבחר (מקור מרכזי). שבת סגורה לכולם; מחוץ לשעות בימי חול המנהל רשאי לקבוע (חריג)
   const { day: newDayHours } = useDayHours(newDate);
@@ -146,6 +152,15 @@ export default function AdminAppointmentsPage() {
     loadAppointments();
   }
 
+  // דרישה: בלי מנגנון תשלום פעיל אסור לאשר תור בלי תשלום — חוסמים עם הסבר ברור, בלי ליפול חזרה לאישור חינמי
+  const paymentsBlocked = paymentsGate.loaded && !paymentsGate.enabled;
+
+  function closeForm() {
+    setShowForm(false);
+    setActiveHold(null);
+    setFormError(null);
+  }
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
@@ -154,13 +169,18 @@ export default function AdminAppointmentsPage() {
       setFormError("יש לבחור לקוח קיים (חיפוש לפי אימייל או שם)");
       return;
     }
+    if (paymentsBlocked) {
+      setFormError("קביעת תור ידנית דורשת הפעלת מנגנון תשלום. לא ניתן לאשר תור בלי תשלום או ניצול יתרה.");
+      return;
+    }
     setFormSubmitting(true);
 
     const start = combineDateAndTime(newDate, time);
     const end = new Date(start.getTime() + newDuration * 60000);
 
     try {
-      const res = await fetch("/api/admin/appointments", {
+      // יוצרים החזקה בלבד (10 דק'); התור מאושר רק אחרי תשלום/יתרה אמיתיים דרך AdminCheckout למטה
+      const res = await fetch("/api/admin/payments/holds", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -173,15 +193,14 @@ export default function AdminAppointmentsPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setFormError(data.error ?? "שגיאה בקביעת התור");
+        setFormError(
+          res.status === 404
+            ? "קביעת תור ידנית דורשת הפעלת מנגנון תשלום. לא ניתן לאשר תור בלי תשלום או ניצול יתרה."
+            : (data.error ?? "שגיאה ביצירת ההחזקה")
+        );
         return;
       }
-      setShowForm(false);
-      setSelectedUserId("");
-      setUserSearch("");
-      setNewNotes("");
-      setCreateSuccess(true);
-      loadAppointments();
+      setActiveHold({ id: data.appointmentId, customerName: selectedUserName || "הלקוח" });
     } finally {
       setFormSubmitting(false);
     }
@@ -195,7 +214,7 @@ export default function AdminAppointmentsPage() {
         subtitle="צפייה, סינון, ביטול וקביעה ידנית של תורים"
         actions={
           <button
-            onClick={() => setShowForm((v) => !v)}
+            onClick={() => (showForm ? closeForm() : setShowForm(true))}
             className={`btn ${showForm ? "btn-secondary" : "btn-primary"}`}
           >
             <Icon name={showForm ? "x" : "plus"} className="w-4 h-4" />
@@ -215,8 +234,26 @@ export default function AdminAppointmentsPage() {
       />
 
       {showForm && (
-        <form onSubmit={handleCreate} className="card p-5 sm:p-6 space-y-5">
+        <div className="card p-5 sm:p-6 space-y-5">
           <SectionTitle>קביעת תור ידנית</SectionTitle>
+          {activeHold ? (
+            <AdminCheckout
+              appointmentId={activeHold.id}
+              customerName={activeHold.customerName}
+              onConfirmed={() => {
+                setActiveHold(null);
+                setShowForm(false);
+                setSelectedUserId("");
+                setSelectedUserName("");
+                setUserSearch("");
+                setNewNotes("");
+                setCreateSuccess(true);
+                loadAppointments();
+              }}
+              onCancelled={() => setActiveHold(null)}
+            />
+          ) : (
+          <form onSubmit={handleCreate} className="space-y-5">
           <div>
             <label htmlFor="new-user" className="field-label">חיפוש לקוח (שם, אימייל או טלפון)</label>
             <input
@@ -225,6 +262,7 @@ export default function AdminAppointmentsPage() {
               onChange={(e) => {
                 setUserSearch(e.target.value);
                 setSelectedUserId("");
+                setSelectedUserName("");
               }}
               placeholder="לדוגמה: israel@example.com או 0501234567"
               className="field"
@@ -236,6 +274,7 @@ export default function AdminAppointmentsPage() {
                     key={u.id}
                     onClick={() => {
                       setSelectedUserId(u.id);
+                      setSelectedUserName(u.name);
                       setUserSearch(`${u.name} (${u.email ?? u.phone ?? "טלפון"})`);
                       setUserOptions([]);
                       setFormError(null);
@@ -368,12 +407,19 @@ export default function AdminAppointmentsPage() {
             />
           </div>
 
+          {paymentsBlocked && (
+            <Alert tone="error">
+              קביעת תור ידנית דורשת הפעלת מנגנון תשלום (כסף או ניצול יתרה). כרגע מנגנון התשלום אינו פעיל בסביבה זו, ולכן לא ניתן לאשר תור חדש במסך זה.
+            </Alert>
+          )}
           {formError && <Alert tone="error">{formError}</Alert>}
 
-          <button type="submit" disabled={formSubmitting || dayClosed} className="btn btn-primary">
-            {formSubmitting ? "קובע..." : "קביעת תור"}
+          <button type="submit" disabled={formSubmitting || dayClosed || paymentsBlocked} className="btn btn-primary">
+            {formSubmitting ? "יוצר החזקה..." : "קביעת תור"}
           </button>
-        </form>
+          </form>
+          )}
+        </div>
       )}
 
       <div>
