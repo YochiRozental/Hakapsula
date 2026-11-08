@@ -786,6 +786,26 @@ model ShiftChangeRequest {
   @@index([status, createdAt])
 }
 
+// ───────────────────────── גלריית תמונות ─────────────────────────
+// התמונות עצמן מאוחסנות ב-Cloudinary; כאן נשמרים רק המטא-דאטה והסדר. publicId משמש למחיקה מ-Cloudinary.
+
+/// תמונה בגלריית הקליניקות. sortOrder קובע את סדר התצוגה בגלריה הציבורית (קפיצות של 1, לא רציפות בהכרח)
+model GalleryImage {
+  id          String   @id @default(cuid())
+  /// מזהה הנכס ב-Cloudinary (לצורך מחיקה)
+  publicId    String   @unique
+  url         String
+  width       Int?
+  height      Int?
+  title       String?
+  description String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([sortOrder])
+}
+
 enum CronRunStatus {
   RUNNING
   SUCCEEDED

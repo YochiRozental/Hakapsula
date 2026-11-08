@@ -35,6 +35,8 @@ const ICON_PATHS = {
   arrowDown: "M12 5v14M6 13l6 6 6-6",
   chevronsUpDown: "M8 9l4-4 4 4M16 15l-4 4-4-4",
   card: "M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1ZM3 10h18M7 15h4",
+  image: "M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1ZM8.5 10.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM3 17l5.5-5.5a1.5 1.5 0 0 1 2.1 0L13 14M15.5 11.5 21 17",
+  grip: "M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01",
 };
 
 export type IconName = keyof typeof ICON_PATHS;

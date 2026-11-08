@@ -7,7 +7,7 @@ import { signOut, useSession } from "next-auth/react";
 import { Icon, Logo, type IconName } from "@/components/ui";
 
 const linkClass = (active: boolean) =>
-  `flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
+  `flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-semibold transition-colors ${
     active
       ? "bg-linear-to-b from-brand-500 to-brand-700 text-white shadow-brand"
       : "text-stone-600 hover:bg-bronze-50 hover:text-brand-800"
@@ -62,6 +62,12 @@ export function Navbar() {
         label: "דף הבית",
         icon: "home",
         active: pathname === "/" && !contactActive,
+      },
+      {
+        href: "/gallery",
+        label: "גלריה",
+        icon: "image",
+        active: pathname === "/gallery" && !contactActive,
       },
       {
         href: "/hours",
