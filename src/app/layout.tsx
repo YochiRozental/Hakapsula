@@ -17,8 +17,8 @@ const frankRuhl = Frank_Ruhl_Libre({
 });
 
 export const metadata: Metadata = {
-  title: "מערכת ניהול קליניקות | קביעת תורים",
-  description: "מערכת קביעת תורים לחדרי הקליניקה",
+  title: "מערכת ניהול קליניקות | הזמנת קליניקה",
+  description: "מערכת הזמנת קליניקה לחדרי הקליניקה",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

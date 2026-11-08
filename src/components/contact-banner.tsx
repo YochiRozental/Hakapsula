@@ -20,10 +20,10 @@ const CONTACT_DETAILS: {
   {
     icon: "pin",
     label: "כתובת",
-    value: 'הריטב"א, מודיעין עילית',
+    value: "מודיעין עילית",
     href:
       "https://www.google.com/maps/search/?api=1&query=" +
-      encodeURIComponent('הריטב"א, מודיעין עילית'),
+      encodeURIComponent("מודיעין עילית"),
     external: true,
   },
 ];

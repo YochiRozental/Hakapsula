@@ -1,10 +1,10 @@
 import { RoomKey } from "@/generated/prisma/client";
 
 export const ROOM_LABELS: Record<RoomKey, string> = {
-  ROOM1: "חדר 1",
-  ROOM2: "חדר 2",
-  ROOM3: "חדר 3",
-  ROOM4: "חדר 4",
+  ROOM1: "חדר מס' 1",
+  ROOM2: "חדר מס' 2",
+  ROOM3: "חדר מס' 3",
+  ROOM4: "חדר מס' 4",
   WORKSHOP: "חדר סדנאות",
   ROOM1_2: "חדר 1+2 (משולב)",
 };
@@ -22,13 +22,14 @@ export const ROOM_SEED: {
   {
     key: "WORKSHOP",
     name: "חדר סדנאות",
-    description: "חדר עצמאי לסדנאות ומפגשים קבוצתיים",
+    description: "חדר המיועד לסדנאות עד 20 איש מאובזר כנדרש לנוחיותכם",
     isCombo: false,
   },
   {
     key: "ROOM1_2",
     name: "חדר 1+2 (משולב)",
-    description: "חדר 1 וחדר 2 מחוברים לשטח אחד",
+    description:
+      "ניתן להזמין את שני החדרים עם דלת משותפת ביניהם עבור מטפלים הזקוקים לחיבור ביניהם",
     isCombo: true,
   },
 ];

@@ -242,7 +242,7 @@ export default function BookingPage() {
     <div className="max-w-5xl mx-auto">
       <BrandHeader
         eyebrow="הזמנת חדר"
-        title="קביעת תור"
+        title="הזמנת קליניקה"
         subtitle="בחרו חדר, תאריך ושעה — ואנחנו נדאג לשאר"
       >
         <ol className="hidden md:flex items-center gap-2 text-xs text-white/70">
@@ -259,13 +259,22 @@ export default function BookingPage() {
       </BrandHeader>
 
       {shiftsOpen && (
-        <Link href="/profile/shifts" className="card card-hover flex items-center gap-4 p-4 mb-6" data-testid="shifts-banner">
+        <Link
+          href="/profile/shifts"
+          className="card card-hover flex items-center gap-4 p-4 mb-6"
+          data-testid="shifts-banner"
+        >
           <span className="w-11 h-11 rounded-2xl bg-linear-to-b from-brand-50 to-brand-100 text-brand-600 ring-1 ring-brand-100 flex items-center justify-center shrink-0">
             <Icon name="calendar" className="w-5 h-5" />
           </span>
           <span className="flex-1">
-            <span className="block font-display font-bold text-stone-900">משמרת קבועה במחיר חודשי</span>
-            <span className="block text-sm text-stone-500">אותו חדר, אותו יום ואותן שעות בכל שבוע, לפחות 3 חודשים. למחירון ולהזמנה</span>
+            <span className="block font-display font-bold text-stone-900">
+              משמרת קבועה במחיר חודשי
+            </span>
+            <span className="block text-sm text-stone-500">
+              אותו חדר, אותו יום ואותן שעות בכל שבוע, לפחות 3 חודשים. למחירון
+              ולהזמנה
+            </span>
           </span>
           <Icon name="chevronLeft" className="w-5 h-5 text-stone-400" />
         </Link>
@@ -520,7 +529,7 @@ export default function BookingPage() {
                 : "קובע תור..."
               : paymentsGate.enabled
                 ? "המשך לתשלום"
-                : "קביעת תור"}
+                : "הזמנת קליניקה"}
             {!submitting && <Icon name="arrowLeft" className="w-4 h-4" />}
           </button>
         </div>

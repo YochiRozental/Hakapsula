@@ -11,7 +11,12 @@ import { identifyCaller, type CallerIdentity } from "@/ivr/identify";
 import { ROOM_DIGIT_MAP, DURATION_DIGIT_MAP } from "@/ivr/ivr-options";
 import { ROOM_LABELS } from "@/lib/rooms";
 import { DURATION_OPTIONS } from "@/lib/slots";
-import { bookingFile, notRegisteredFile, BOOKING_FILES, NOT_REGISTERED_FILES } from "@/ivr/prompts";
+import {
+  bookingFile,
+  notRegisteredFile,
+  BOOKING_FILES,
+  NOT_REGISTERED_FILES,
+} from "@/ivr/prompts";
 
 /**
  * מבצע read עם ולידציה + ניסיונות חוזרים. אם המתקשר לא נותן קלט תקין אחרי maxAttempts,
@@ -25,7 +30,7 @@ async function readValidated<T>(
   invalidMessage: Msg,
   digits: number,
   noInputMessage: Msg,
-  maxAttempts = 3
+  maxAttempts = 3,
 ): Promise<T> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const messages = attempt === 0 ? [prompt] : [invalidMessage, prompt];
@@ -62,7 +67,11 @@ function resolveTargetDate(day: number, month: number): Date {
   const now = new Date();
   let year = now.getFullYear();
   let candidate = new Date(year, month - 1, day);
-  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayMidnight = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  );
   if (candidate < todayMidnight) {
     year += 1;
     candidate = new Date(year, month - 1, day);
@@ -86,7 +95,9 @@ const EXPLANATION_EXTENSION = "/9/3";
 async function readSpokenName(call: Call): Promise<string> {
   for (let attempt = 0; attempt < 3; attempt++) {
     const prompt = notRegisteredFile(
-      attempt === 0 ? NOT_REGISTERED_FILES.ASK_NAME : NOT_REGISTERED_FILES.ASK_NAME_RETRY
+      attempt === 0
+        ? NOT_REGISTERED_FILES.ASK_NAME
+        : NOT_REGISTERED_FILES.ASK_NAME_RETRY,
     );
     const raw = await call.read([prompt], "stt");
     const name = raw?.trim();
@@ -105,7 +116,7 @@ async function readNewPin(call: Call): Promise<string> {
       parsePin,
       notRegisteredFile(NOT_REGISTERED_FILES.INVALID_PIN),
       4,
-      notRegisteredFile(NOT_REGISTERED_FILES.NO_INPUT)
+      notRegisteredFile(NOT_REGISTERED_FILES.NO_INPUT),
     );
     const confirmPin = await readValidated(
       call,
@@ -113,7 +124,7 @@ async function readNewPin(call: Call): Promise<string> {
       parsePin,
       notRegisteredFile(NOT_REGISTERED_FILES.INVALID_PIN),
       4,
-      notRegisteredFile(NOT_REGISTERED_FILES.NO_INPUT)
+      notRegisteredFile(NOT_REGISTERED_FILES.NO_INPUT),
     );
     if (pin === confirmPin) return pin;
   }
@@ -124,7 +135,7 @@ async function readNewPin(call: Call): Promise<string> {
 /**
  * קולט שם + קוד סודי ויוצר משתמש חדש (בסטטוס PENDING - ממתין לאישור מנהל, כברירת המחדל בסכימה).
  * מניח שהמתקשר כבר ביקש להירשם (הכוונה נעשית לפני הקריאה לכאן).
- * מודיע למתקשר שההרשמה ממתינה לאישור ומנתק - לא ממשיכים ישירות לקביעת תור.
+ * מודיע למתקשר שההרשמה ממתינה לאישור ומנתק - לא ממשיכים ישירות להזמנת קליניקה.
  */
 async function performRegistration(call: Call, phone: string) {
   const name = await readSpokenName(call);
@@ -135,28 +146,52 @@ async function performRegistration(call: Call, phone: string) {
   const passwordHash = await unusablePasswordHash();
 
   try {
-    await prisma.user.create({ data: { name, phone, passwordHash, ivrPinHash, ivrPinUpdatedAt: new Date() } });
+    await prisma.user.create({
+      data: {
+        name,
+        phone,
+        passwordHash,
+        ivrPinHash,
+        ivrPinUpdatedAt: new Date(),
+      },
+    });
   } catch {
-    return call.id_list_message([notRegisteredFile(NOT_REGISTERED_FILES.REGISTRATION_ERROR)]);
+    return call.id_list_message([
+      notRegisteredFile(NOT_REGISTERED_FILES.REGISTRATION_ERROR),
+    ]);
   }
-  return call.id_list_message([notRegisteredFile(NOT_REGISTERED_FILES.REGISTRATION_PENDING)]);
+  return call.id_list_message([
+    notRegisteredFile(NOT_REGISTERED_FILES.REGISTRATION_PENDING),
+  ]);
 }
 
-async function runBookingDialog(call: Call, user: { id: string; name: string }) {
+async function runBookingDialog(
+  call: Call,
+  user: { id: string; name: string },
+) {
   // השם נקרא בהקראת TTS אחת רציפה עם "שלום" (ולא כקטע קול נפרד בין שני קבצים מוקלטים) - כך הוא נשמע טבעי ולא מובלע
   const roomDigit = await call.read(
     [text(`שלום ${user.name}`), bookingFile(BOOKING_FILES.ROOM_MENU)],
     "tap",
-    { max_digits: 1, min_digits: 1, digits_allowed: [1, 2, 3, 4], sec_wait: 10 }
+    {
+      max_digits: 1,
+      min_digits: 1,
+      digits_allowed: [1, 2, 3, 4],
+      sec_wait: 10,
+    },
   );
   const roomKey = ROOM_DIGIT_MAP[roomDigit];
 
-  const dateDigit = await call.read([bookingFile(BOOKING_FILES.DATE_MENU)], "tap", {
-    max_digits: 1,
-    min_digits: 1,
-    digits_allowed: [1, 2, 3, 4],
-    sec_wait: 10,
-  });
+  const dateDigit = await call.read(
+    [bookingFile(BOOKING_FILES.DATE_MENU)],
+    "tap",
+    {
+      max_digits: 1,
+      min_digits: 1,
+      digits_allowed: [1, 2, 3, 4],
+      sec_wait: 10,
+    },
+  );
 
   let targetDate: Date;
   if (dateDigit === "4") {
@@ -166,13 +201,17 @@ async function runBookingDialog(call: Call, user: { id: string; name: string }) 
       parseDdMm,
       bookingFile(BOOKING_FILES.INVALID_DATE),
       4,
-      bookingFile(BOOKING_FILES.NO_INPUT)
+      bookingFile(BOOKING_FILES.NO_INPUT),
     );
     targetDate = resolveTargetDate(day, month);
   } else {
     const now = new Date();
     const offset = { "1": 0, "2": 1, "3": 2 }[dateDigit] ?? 0;
-    targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+    targetDate = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + offset,
+    );
   }
 
   const { hour, minute } = await readValidated(
@@ -181,15 +220,19 @@ async function runBookingDialog(call: Call, user: { id: string; name: string }) 
     parseHhMm,
     bookingFile(BOOKING_FILES.INVALID_TIME),
     4,
-    bookingFile(BOOKING_FILES.NO_INPUT)
+    bookingFile(BOOKING_FILES.NO_INPUT),
   );
 
-  const durationDigit = await call.read([bookingFile(BOOKING_FILES.DURATION_MENU)], "tap", {
-    max_digits: 1,
-    min_digits: 1,
-    digits_allowed: [1, 2, 3, 4, 5, 6, 7],
-    sec_wait: 10,
-  });
+  const durationDigit = await call.read(
+    [bookingFile(BOOKING_FILES.DURATION_MENU)],
+    "tap",
+    {
+      max_digits: 1,
+      min_digits: 1,
+      digits_allowed: [1, 2, 3, 4, 5, 6, 7],
+      sec_wait: 10,
+    },
+  );
   const durationMinutes = DURATION_DIGIT_MAP[durationDigit];
 
   const startTime = new Date(
@@ -197,7 +240,7 @@ async function runBookingDialog(call: Call, user: { id: string; name: string }) 
     targetDate.getMonth(),
     targetDate.getDate(),
     hour,
-    minute
+    minute,
   );
   const endTime = new Date(startTime.getTime() + durationMinutes * 60000);
 
@@ -210,16 +253,17 @@ async function runBookingDialog(call: Call, user: { id: string; name: string }) 
   // הודעת אישור זו נכשלה שוב ושוב כשהורכבה משרשור ארוך של 12 קטעי קול נפרדים (קבצים+טקסט מתחלפים).
   // חוזרים לתבנית היחידה שהוכחה כעובדת בפועל בקו האמיתי: משפט TTS אחד + קובץ מוקלט אחד (בדיוק כמו הברכה).
   const roomLabel = ROOM_LABELS[roomKey];
-  const durationLabel = DURATION_OPTIONS.find((o) => o.minutes === durationMinutes)?.label ?? "";
+  const durationLabel =
+    DURATION_OPTIONS.find((o) => o.minutes === durationMinutes)?.label ?? "";
   const confirmDigit = await call.read(
     [
       text(
-        `נקבע תור ל${roomLabel}, בתאריך ${startTime.getDate()} ל${startTime.getMonth() + 1}, בשעה ${hour} ${minute}, למשך ${durationLabel}`
+        `נקבע תור ל${roomLabel}, בתאריך ${startTime.getDate()} ל${startTime.getMonth() + 1}, בשעה ${hour} ${minute}, למשך ${durationLabel}`,
       ),
       bookingFile(BOOKING_FILES.CONFIRM_SUFFIX),
     ],
     "tap",
-    { max_digits: 1, min_digits: 1, digits_allowed: [1, 2], sec_wait: 10 }
+    { max_digits: 1, min_digits: 1, digits_allowed: [1, 2], sec_wait: 10 },
   );
 
   if (confirmDigit !== "1") {
@@ -238,15 +282,20 @@ async function runBookingDialog(call: Call, user: { id: string; name: string }) 
       source: "IVR",
     });
   } catch (err) {
-    const message = err instanceof BookingError ? err.message : "אירעה שגיאה בקביעת התור, נסו שוב מאוחר יותר";
+    const message =
+      err instanceof BookingError
+        ? err.message
+        : "אירעה שגיאה בקביעת התור, נסו שוב מאוחר יותר";
     return call.id_list_message([text(message)]);
   }
   return call.id_list_message([bookingFile(BOOKING_FILES.SUCCESS)]);
 }
 
 /** הודעות שאין להן קובץ מוקלט בפאנל (מספר חסוי, תקלה) — נשארות טקסט עד שיוקלטו קבצים ייעודיים */
-const PRIVATE_NUMBER_TEXT = "לא ניתן לזהות את מספר הטלפון שממנו התקשרתם. אנא התקשרו שוב ממספר גלוי. תודה ולהתראות";
-const SYSTEM_FAULT_TEXT = "אירעה תקלה זמנית במערכת. אנא נסו שוב מאוחר יותר. תודה ולהתראות";
+const PRIVATE_NUMBER_TEXT =
+  "לא ניתן לזהות את מספר הטלפון שממנו התקשרתם. אנא התקשרו שוב ממספר גלוי. תודה ולהתראות";
+const SYSTEM_FAULT_TEXT =
+  "אירעה תקלה זמנית במערכת. אנא נסו שוב מאוחר יותר. תודה ולהתראות";
 
 /** זיהוי המתקשר — החיפוש היחיד ב-IVR. בוחר רק id/name/status, לעולם לא את passwordHash */
 function identifyCurrentCaller(call: Call) {
@@ -255,19 +304,27 @@ function identifyCurrentCaller(call: Call) {
       where: { phone: { endsWith: last9 } },
       select: { id: true, name: true, status: true },
       take: 2,
-    })
+    }),
   );
 }
 
 /** מסיים את השיחה בהודעה מתאימה למצבי הזיהוי שאינם מובילים לשלוחה: חסוי / תקלה / ממתין / חסום */
-function endCallForIdentity(call: Call, identity: Extract<CallerIdentity, { kind: "PRIVATE" | "ERROR" | "PENDING" | "BLOCKED" }>) {
+function endCallForIdentity(
+  call: Call,
+  identity: Extract<
+    CallerIdentity,
+    { kind: "PRIVATE" | "ERROR" | "PENDING" | "BLOCKED" }
+  >,
+) {
   switch (identity.kind) {
     case "PRIVATE":
       return call.id_list_message([text(PRIVATE_NUMBER_TEXT)]);
     case "ERROR":
       return call.id_list_message([text(SYSTEM_FAULT_TEXT)]);
     case "PENDING":
-      return call.id_list_message([bookingFile(BOOKING_FILES.PENDING_APPROVAL)]);
+      return call.id_list_message([
+        bookingFile(BOOKING_FILES.PENDING_APPROVAL),
+      ]);
     case "BLOCKED":
       return call.id_list_message([bookingFile(BOOKING_FILES.BLOCKED)]);
   }
@@ -315,17 +372,21 @@ export async function handleNotRegisteredCall(call: Call) {
   if (identity.kind === "APPROVED") return call.go_to_folder(MEMBERS_EXTENSION);
   if (identity.kind !== "NOT_FOUND") return endCallForIdentity(call, identity);
 
-  const choice = await call.read([notRegisteredFile(NOT_REGISTERED_FILES.MAIN_MENU)], "tap", {
-    max_digits: 1,
-    min_digits: 1,
-    digits_allowed: [1, 2, 3],
-    sec_wait: 10,
-  });
+  const choice = await call.read(
+    [notRegisteredFile(NOT_REGISTERED_FILES.MAIN_MENU)],
+    "tap",
+    {
+      max_digits: 1,
+      min_digits: 1,
+      digits_allowed: [1, 2, 3],
+      sec_wait: 10,
+    },
+  );
 
   if (choice === "2") return call.go_to_folder(EXPLANATION_EXTENSION);
   if (choice !== "1") return call.hangup();
 
-  // performRegistration מסיימת את השיחה בעצמה (הודעת המתנה לאישור, או שגיאה) - לא ממשיכים לקביעת תור.
+  // performRegistration מסיימת את השיחה בעצמה (הודעת המתנה לאישור, או שגיאה) - לא ממשיכים להזמנת קליניקה.
   // נשמר המספר המנורמל והמאומת מהזיהוי, לא call.phone הגולמי
   return performRegistration(call, identity.phone);
 }

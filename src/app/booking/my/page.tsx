@@ -4,7 +4,16 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ROOM_LABELS } from "@/lib/rooms";
 import { api, durationText, usePaymentsGate } from "@/lib/payments/client";
-import { Alert, EmptyState, Icon, Loading, PageHeader, RoomTile, RoomVisual, SectionTitle } from "@/components/ui";
+import {
+  Alert,
+  EmptyState,
+  Icon,
+  Loading,
+  PageHeader,
+  RoomTile,
+  RoomVisual,
+  SectionTitle,
+} from "@/components/ui";
 import type { RoomKey } from "@/generated/prisma/client";
 
 type Appointment = {
@@ -43,7 +52,11 @@ export default function MyAppointmentsPage() {
     try {
       if (paymentsGate.enabled) {
         // זרימת התשלום פעילה: הביטול עובר דרך המסלול שמטפל בהחזר כספי ובהחזרת דקות לפי כלל 24 השעות
-        const r = await api<{ outcome?: string; minutesRestored?: number; creditedMinutes?: number }>(`/api/payments/bookings/${id}/cancel`, { body: {} });
+        const r = await api<{
+          outcome?: string;
+          minutesRestored?: number;
+          creditedMinutes?: number;
+        }>(`/api/payments/bookings/${id}/cancel`, { body: {} });
         if (!r.ok) {
           setError(r.data.error ?? "שגיאה בביטול התור");
           return;
@@ -51,10 +64,18 @@ export default function MyAppointmentsPage() {
         const d = r.data;
         const parts: string[] = [];
         if (d.outcome === "REFUNDED") parts.push("התשלום בכסף הוחזר.");
-        if (d.minutesRestored) parts.push(`${durationText(d.minutesRestored)} הוחזרו ליתרה.`);
-        if (d.creditedMinutes) parts.push(`${durationText(d.creditedMinutes)} הומרו לזיכוי תקף 30 יום (החבילה המקורית פגה).`);
-        if (d.outcome === "CANCELLED_NO_REFUND") parts.push("הביטול בוצע פחות מ-24 שעות לפני ההתחלה, ולכן אין החזר אוטומטי. ניתן לפנות למנהל בבקשת חריג.");
-        if (d.outcome === "CANCELLED_REFUND_PENDING") parts.push("ההחזר הכספי בטיפול.");
+        if (d.minutesRestored)
+          parts.push(`${durationText(d.minutesRestored)} הוחזרו ליתרה.`);
+        if (d.creditedMinutes)
+          parts.push(
+            `${durationText(d.creditedMinutes)} הומרו לזיכוי תקף 30 יום (החבילה המקורית פגה).`,
+          );
+        if (d.outcome === "CANCELLED_NO_REFUND")
+          parts.push(
+            "הביטול בוצע פחות מ-24 שעות לפני ההתחלה, ולכן אין החזר אוטומטי. ניתן לפנות למנהל בבקשת חריג.",
+          );
+        if (d.outcome === "CANCELLED_REFUND_PENDING")
+          parts.push("ההחזר הכספי בטיפול.");
         setNotice(["התור בוטל.", ...parts].join(" "));
         load();
         return;
@@ -72,15 +93,17 @@ export default function MyAppointmentsPage() {
   }
 
   const upcoming = appointments?.filter(
-    (a) => a.status === "CONFIRMED" && new Date(a.endTime).getTime() >= (now ?? 0)
+    (a) =>
+      a.status === "CONFIRMED" && new Date(a.endTime).getTime() >= (now ?? 0),
   );
   const past = appointments?.filter(
-    (a) => a.status === "CANCELLED" || new Date(a.endTime).getTime() < (now ?? 0)
+    (a) =>
+      a.status === "CANCELLED" || new Date(a.endTime).getTime() < (now ?? 0),
   );
 
   const timeRange = (a: Appointment) =>
     `${new Date(a.startTime).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })} – ${new Date(
-      a.endTime
+      a.endTime,
     ).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}`;
 
   return (
@@ -92,7 +115,7 @@ export default function MyAppointmentsPage() {
         actions={
           <Link href="/booking" className="btn btn-primary">
             <Icon name="plus" className="w-4 h-4" />
-            קביעת תור
+            הזמנת קליניקה
           </Link>
         }
       />
@@ -117,18 +140,30 @@ export default function MyAppointmentsPage() {
             {upcoming && upcoming.length > 0 ? (
               <ul className="space-y-3">
                 {upcoming.map((a) => (
-                  <li key={a.id} className="card card-hover p-3 sm:p-4 flex flex-wrap items-center gap-4">
-                    <RoomVisual roomKey={a.room.key} className="w-24 h-20 sm:w-28 sm:h-20 rounded-2xl shrink-0 ring-1 ring-cream-200" />
+                  <li
+                    key={a.id}
+                    className="card card-hover p-3 sm:p-4 flex flex-wrap items-center gap-4"
+                  >
+                    <RoomVisual
+                      roomKey={a.room.key}
+                      className="w-24 h-20 sm:w-28 sm:h-20 rounded-2xl shrink-0 ring-1 ring-cream-200"
+                    />
                     <div className="flex-1 min-w-40">
-                      <p className="font-display text-lg font-bold text-stone-900">{ROOM_LABELS[a.room.key]}</p>
+                      <p className="font-display text-lg font-bold text-stone-900">
+                        {ROOM_LABELS[a.room.key]}
+                      </p>
                       <p className="text-sm text-stone-500 tabular-nums mt-0.5">
                         {new Date(a.startTime).toLocaleDateString("he-IL")}
                         {" · "}
                         {timeRange(a)}
                       </p>
-                      {a.notes && <p className="text-sm text-stone-400 mt-1">{a.notes}</p>}
+                      {a.notes && (
+                        <p className="text-sm text-stone-400 mt-1">{a.notes}</p>
+                      )}
                     </div>
-                    <span className="badge bg-brand-50 text-brand-700 ring-1 ring-brand-100">קרוב</span>
+                    <span className="badge bg-brand-50 text-brand-700 ring-1 ring-brand-100">
+                      קרוב
+                    </span>
                     <button
                       onClick={() => handleCancel(a.id)}
                       disabled={cancellingId === a.id}
@@ -149,16 +184,29 @@ export default function MyAppointmentsPage() {
               <SectionTitle>היסטוריה</SectionTitle>
               <ul className="card divide-y divide-cream-100 overflow-hidden">
                 {past.map((a) => (
-                  <li key={a.id} className="px-4 sm:px-5 py-3 text-sm flex items-center gap-3">
-                    <RoomTile roomKey={a.room.key} className="w-9 h-9 opacity-70 [&>svg]:w-4 [&>svg]:h-4" />
+                  <li
+                    key={a.id}
+                    className="px-4 sm:px-5 py-3 text-sm flex items-center gap-3"
+                  >
+                    <RoomTile
+                      roomKey={a.room.key}
+                      className="w-9 h-9 opacity-70 [&>svg]:w-4 [&>svg]:h-4"
+                    />
                     <span className="flex-1 text-stone-600 tabular-nums">
-                      <span className="font-semibold text-stone-700">{ROOM_LABELS[a.room.key]}</span> ·{" "}
-                      {new Date(a.startTime).toLocaleDateString("he-IL")}{" "}
-                      {new Date(a.startTime).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
+                      <span className="font-semibold text-stone-700">
+                        {ROOM_LABELS[a.room.key]}
+                      </span>{" "}
+                      · {new Date(a.startTime).toLocaleDateString("he-IL")}{" "}
+                      {new Date(a.startTime).toLocaleTimeString("he-IL", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
                     </span>
                     <span
                       className={`badge ${
-                        a.status === "CANCELLED" ? "bg-red-50 text-red-600" : "bg-cream-100 text-stone-500"
+                        a.status === "CANCELLED"
+                          ? "bg-red-50 text-red-600"
+                          : "bg-cream-100 text-stone-500"
                       }`}
                     >
                       {a.status === "CANCELLED" ? "בוטל" : "הסתיים"}

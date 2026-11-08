@@ -2,14 +2,41 @@
 
 import { useEffect, useState } from "react";
 import { ROOM_KEYS, ROOM_LABELS } from "@/lib/rooms";
-import { buildTimeOptions, combineDateAndTime, todayIsoDate, DURATION_OPTIONS } from "@/lib/slots";
-import { fitsOpening, isClosedDate, parseTimeOption } from "@/lib/opening-hours";
+import {
+  buildTimeOptions,
+  combineDateAndTime,
+  todayIsoDate,
+  DURATION_OPTIONS,
+} from "@/lib/slots";
+import {
+  fitsOpening,
+  isClosedDate,
+  parseTimeOption,
+} from "@/lib/opening-hours";
 import { useDayHours } from "@/lib/use-day-hours";
 import { DayHours } from "@/components/hours-summary";
 import type { RoomKey } from "@/generated/prisma/client";
-import { Alert, EmptyState, Icon, Loading, PageHeader, ROOM_ACCENTS, SectionTitle } from "@/components/ui";
-import { Pager, SortableTh, TableFilterBar, useTableFilters } from "@/components/table-filter";
-import { buildListParams, clampPage, type Filter, type FilterField } from "@/lib/table-filters";
+import {
+  Alert,
+  EmptyState,
+  Icon,
+  Loading,
+  PageHeader,
+  ROOM_ACCENTS,
+  SectionTitle,
+} from "@/components/ui";
+import {
+  Pager,
+  SortableTh,
+  TableFilterBar,
+  useTableFilters,
+} from "@/components/table-filter";
+import {
+  buildListParams,
+  clampPage,
+  type Filter,
+  type FilterField,
+} from "@/lib/table-filters";
 import { jerusalemTodayIso } from "@/lib/jerusalem-time";
 import { usePaymentsGate } from "@/lib/payments/client";
 import { AdminCheckout } from "@/components/payments/admin-checkout";
@@ -22,10 +49,20 @@ type Appointment = {
   notes: string | null;
   source: "WEB" | "IVR" | "ADMIN" | "SHIFT";
   room: { key: RoomKey; name: string };
-  user: { id: string; name: string; email: string | null; phone: string | null };
+  user: {
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+  };
 };
 
-type UserOption = { id: string; name: string; email: string | null; phone: string | null };
+type UserOption = {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+};
 
 const TIME_OPTIONS = buildTimeOptions();
 const PAGE_SIZE = 50;
@@ -68,7 +105,9 @@ const FILTER_FIELDS: FilterField[] = [
 /** ברירת המחדל כמו קודם: תורי היום. אפשר להסיר את התגית כדי לראות את כל התורים */
 function defaultFilters(): Record<string, Filter> {
   const today = jerusalemTodayIso();
-  return { startTime: { key: "startTime", op: "between", value: today, value2: today } };
+  return {
+    startTime: { key: "startTime", op: "between", value: today, value2: today },
+  };
 }
 
 export default function AdminAppointmentsPage() {
@@ -93,7 +132,10 @@ export default function AdminAppointmentsPage() {
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [createSuccess, setCreateSuccess] = useState(false);
   // החזקה (10 דק') שנוצרה וממתינה להשלמת תשלום/יתרה; כל עוד היא קיימת, הטופס מציג את מסך התשלום במקום השדות
-  const [activeHold, setActiveHold] = useState<{ id: string; customerName: string } | null>(null);
+  const [activeHold, setActiveHold] = useState<{
+    id: string;
+    customerName: string;
+  } | null>(null);
   const paymentsGate = usePaymentsGate();
 
   // שעות הפעילות של התאריך הנבחר (מקור מרכזי). שבת סגורה לכולם; מחוץ לשעות בימי חול המנהל רשאי לקבוע (חריג)
@@ -102,7 +144,12 @@ export default function AdminAppointmentsPage() {
   // יום סגור (שבת, או יום שהוגדר כסגור בשעות הפעילות) חוסם גם מנהל; שעות מחוץ לפעילות בימי פעילות — מותר למנהל
   const dayClosed = saturdayClosed || !!newDayHours?.closed;
   const insideHours = (t: string) =>
-    !!newDayHours && fitsOpening(newDayHours, parseTimeOption(t), parseTimeOption(t) + newDuration);
+    !!newDayHours &&
+    fitsOpening(
+      newDayHours,
+      parseTimeOption(t),
+      parseTimeOption(t) + newDuration,
+    );
   const openOptions = TIME_OPTIONS.filter(insideHours);
   const outsideOptions = TIME_OPTIONS.filter((t) => !insideHours(t));
   // כל עוד המנהל לא בחר שעה בעצמו — ברירת המחדל היא תחילת החלון הפתוח הראשון (כשיש)
@@ -111,15 +158,24 @@ export default function AdminAppointmentsPage() {
 
   // הסינון מתבצע בשרת על כל התורים, לא רק על העמוד הנוכחי
   function loadAppointments() {
-    const params = buildListParams({ search: applied.search, filters: applied.filters, sort, page, pageSize: PAGE_SIZE });
+    const params = buildListParams({
+      search: applied.search,
+      filters: applied.filters,
+      sort,
+      page,
+      pageSize: PAGE_SIZE,
+    });
     fetch(`/api/admin/appointments?${params}`)
       .then((res) => res.json())
       .then((data) => {
-        setAppointments(Array.isArray(data?.appointments) ? data.appointments : []);
+        setAppointments(
+          Array.isArray(data?.appointments) ? data.appointments : [],
+        );
         const nextTotal = typeof data?.total === "number" ? data.total : 0;
         setTotal(nextTotal);
         // אחרי מחיקה/ביטול/סינון העמוד עלול לא להתקיים — חוזרים לעמוד התקין האחרון
-        if (clampPage(page, nextTotal, PAGE_SIZE) !== page) setPage(clampPage(page, nextTotal, PAGE_SIZE));
+        if (clampPage(page, nextTotal, PAGE_SIZE) !== page)
+          setPage(clampPage(page, nextTotal, PAGE_SIZE));
       });
   }
 
@@ -170,7 +226,9 @@ export default function AdminAppointmentsPage() {
       return;
     }
     if (paymentsBlocked) {
-      setFormError("קביעת תור ידנית דורשת הפעלת מנגנון תשלום. לא ניתן לאשר תור בלי תשלום או ניצול יתרה.");
+      setFormError(
+        "הזמנת קליניקה ידנית דורשת הפעלת מנגנון תשלום. לא ניתן לאשר תור בלי תשלום או ניצול יתרה.",
+      );
       return;
     }
     setFormSubmitting(true);
@@ -195,12 +253,15 @@ export default function AdminAppointmentsPage() {
       if (!res.ok) {
         setFormError(
           res.status === 404
-            ? "קביעת תור ידנית דורשת הפעלת מנגנון תשלום. לא ניתן לאשר תור בלי תשלום או ניצול יתרה."
-            : (data.error ?? "שגיאה ביצירת ההחזקה")
+            ? "הזמנת קליניקה ידנית דורשת הפעלת מנגנון תשלום. לא ניתן לאשר תור בלי תשלום או ניצול יתרה."
+            : (data.error ?? "שגיאה ביצירת ההחזקה"),
         );
         return;
       }
-      setActiveHold({ id: data.appointmentId, customerName: selectedUserName || "הלקוח" });
+      setActiveHold({
+        id: data.appointmentId,
+        customerName: selectedUserName || "הלקוח",
+      });
     } finally {
       setFormSubmitting(false);
     }
@@ -218,7 +279,7 @@ export default function AdminAppointmentsPage() {
             className={`btn ${showForm ? "btn-secondary" : "btn-primary"}`}
           >
             <Icon name={showForm ? "x" : "plus"} className="w-4 h-4" />
-            {showForm ? "ביטול" : "קביעת תור ידנית"}
+            {showForm ? "ביטול" : "הזמנת קליניקה ידנית"}
           </button>
         }
       />
@@ -235,7 +296,7 @@ export default function AdminAppointmentsPage() {
 
       {showForm && (
         <div className="card p-5 sm:p-6 space-y-5">
-          <SectionTitle>קביעת תור ידנית</SectionTitle>
+          <SectionTitle>הזמנת קליניקה ידנית</SectionTitle>
           {activeHold ? (
             <AdminCheckout
               appointmentId={activeHold.id}
@@ -253,171 +314,203 @@ export default function AdminAppointmentsPage() {
               onCancelled={() => setActiveHold(null)}
             />
           ) : (
-          <form onSubmit={handleCreate} className="space-y-5">
-          <div>
-            <label htmlFor="new-user" className="field-label">חיפוש לקוח (שם, אימייל או טלפון)</label>
-            <input
-              id="new-user"
-              value={userSearch}
-              onChange={(e) => {
-                setUserSearch(e.target.value);
-                setSelectedUserId("");
-                setSelectedUserName("");
-              }}
-              placeholder="לדוגמה: israel@example.com או 0501234567"
-              className="field"
-            />
-            {userOptions.length > 0 && !selectedUserId && (
-              <ul className="mt-1.5 card shadow-lift divide-y divide-cream-100 max-h-48 overflow-auto">
-                {userOptions.map((u) => (
-                  <li
-                    key={u.id}
-                    onClick={() => {
-                      setSelectedUserId(u.id);
-                      setSelectedUserName(u.name);
-                      setUserSearch(`${u.name} (${u.email ?? u.phone ?? "טלפון"})`);
-                      setUserOptions([]);
-                      setFormError(null);
-                    }}
-                    className="px-4 py-2.5 text-sm hover:bg-brand-50 cursor-pointer"
-                  >
-                    <span className="font-semibold text-stone-800">{u.name}</span>
-                    <span className="text-stone-500"> · {u.email ?? u.phone ?? "—"}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {selectedUserId && (
-              <p className="text-xs text-brand-700 font-semibold mt-1.5 flex items-center gap-1">
-                <Icon name="check" className="w-3.5 h-3.5" />
-                לקוח נבחר
-              </p>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div>
-              <label htmlFor="new-room" className="field-label">חדר</label>
-              <select
-                id="new-room"
-                value={newRoomKey}
-                onChange={(e) => setNewRoomKey(e.target.value as RoomKey)}
-                className="field"
-              >
-                {ROOM_KEYS.map((key) => (
-                  <option key={key} value={key}>
-                    {ROOM_LABELS[key]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="new-duration" className="field-label">משך</label>
-              <select
-                id="new-duration"
-                value={newDuration}
-                onChange={(e) => setNewDuration(Number(e.target.value))}
-                className="field"
-              >
-                {DURATION_OPTIONS.map((opt) => (
-                  <option key={opt.minutes} value={opt.minutes}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="new-date" className="field-label">תאריך</label>
-              <input
-                id="new-date"
-                type="date"
-                value={newDate}
-                onChange={(e) => {
-                  setNewDate(e.target.value);
-                  setTimeTouched(false);
-                }}
-                className="field"
-              />
-            </div>
-            <div>
-              <label htmlFor="new-time" className="field-label">שעה</label>
-              <select
-                id="new-time"
-                value={time}
-                onChange={(e) => {
-                  setNewTime(e.target.value);
-                  setTimeTouched(true);
-                }}
-                disabled={dayClosed}
-                className="field"
-              >
-                {dayClosed ? (
-                  <option value={time}>{time}</option>
-                ) : (
-                  <>
-                    {openOptions.length > 0 && (
-                      <optgroup label="בשעות הפעילות">
-                        {openOptions.map((t) => (
-                          <option key={t} value={t}>
-                            {t}
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                    <optgroup label="מחוץ לשעות הפעילות (חריג מנהל)">
-                      {outsideOptions.map((t) => (
-                        <option key={t} value={t}>
-                          {t} · מחוץ לפעילות
-                        </option>
-                      ))}
-                    </optgroup>
-                  </>
+            <form onSubmit={handleCreate} className="space-y-5">
+              <div>
+                <label htmlFor="new-user" className="field-label">
+                  חיפוש לקוח (שם, אימייל או טלפון)
+                </label>
+                <input
+                  id="new-user"
+                  value={userSearch}
+                  onChange={(e) => {
+                    setUserSearch(e.target.value);
+                    setSelectedUserId("");
+                    setSelectedUserName("");
+                  }}
+                  placeholder="לדוגמה: israel@example.com או 0501234567"
+                  className="field"
+                />
+                {userOptions.length > 0 && !selectedUserId && (
+                  <ul className="mt-1.5 card shadow-lift divide-y divide-cream-100 max-h-48 overflow-auto">
+                    {userOptions.map((u) => (
+                      <li
+                        key={u.id}
+                        onClick={() => {
+                          setSelectedUserId(u.id);
+                          setSelectedUserName(u.name);
+                          setUserSearch(
+                            `${u.name} (${u.email ?? u.phone ?? "טלפון"})`,
+                          );
+                          setUserOptions([]);
+                          setFormError(null);
+                        }}
+                        className="px-4 py-2.5 text-sm hover:bg-brand-50 cursor-pointer"
+                      >
+                        <span className="font-semibold text-stone-800">
+                          {u.name}
+                        </span>
+                        <span className="text-stone-500">
+                          {" "}
+                          · {u.email ?? u.phone ?? "—"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 )}
-              </select>
-            </div>
-          </div>
-
-          <div className="rounded-xl bg-cream-50 ring-1 ring-cream-200 px-4 py-3 space-y-2" aria-live="polite">
-            <p className="text-sm font-semibold text-stone-600">שעות הפעילות בתאריך הנבחר:</p>
-            {dayClosed ? (
-              <p className="text-sm font-semibold text-red-700">
-                {saturdayClosed ? "יום שבת סגור" : "היום הוגדר כסגור"} — לא ניתן לקבוע בו תור, גם למנהל.
-              </p>
-            ) : newDayHours ? (
-              <>
-                <DayHours day={newDayHours} />
-                {selectedOutside && (
-                  <p className="text-sm font-semibold text-amber-800">
-                    השעה שנבחרה מחוץ לשעות הפעילות. כמנהל אפשר לקבוע בה תור (חריג).
+                {selectedUserId && (
+                  <p className="text-xs text-brand-700 font-semibold mt-1.5 flex items-center gap-1">
+                    <Icon name="check" className="w-3.5 h-3.5" />
+                    לקוח נבחר
                   </p>
                 )}
-              </>
-            ) : (
-              <p className="text-sm text-stone-500">טוען...</p>
-            )}
-          </div>
+              </div>
 
-          <div>
-            <label htmlFor="new-notes" className="field-label">הערות</label>
-            <input
-              id="new-notes"
-              value={newNotes}
-              onChange={(e) => setNewNotes(e.target.value)}
-              className="field"
-            />
-          </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <label htmlFor="new-room" className="field-label">
+                    חדר
+                  </label>
+                  <select
+                    id="new-room"
+                    value={newRoomKey}
+                    onChange={(e) => setNewRoomKey(e.target.value as RoomKey)}
+                    className="field"
+                  >
+                    {ROOM_KEYS.map((key) => (
+                      <option key={key} value={key}>
+                        {ROOM_LABELS[key]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="new-duration" className="field-label">
+                    משך
+                  </label>
+                  <select
+                    id="new-duration"
+                    value={newDuration}
+                    onChange={(e) => setNewDuration(Number(e.target.value))}
+                    className="field"
+                  >
+                    {DURATION_OPTIONS.map((opt) => (
+                      <option key={opt.minutes} value={opt.minutes}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="new-date" className="field-label">
+                    תאריך
+                  </label>
+                  <input
+                    id="new-date"
+                    type="date"
+                    value={newDate}
+                    onChange={(e) => {
+                      setNewDate(e.target.value);
+                      setTimeTouched(false);
+                    }}
+                    className="field"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="new-time" className="field-label">
+                    שעה
+                  </label>
+                  <select
+                    id="new-time"
+                    value={time}
+                    onChange={(e) => {
+                      setNewTime(e.target.value);
+                      setTimeTouched(true);
+                    }}
+                    disabled={dayClosed}
+                    className="field"
+                  >
+                    {dayClosed ? (
+                      <option value={time}>{time}</option>
+                    ) : (
+                      <>
+                        {openOptions.length > 0 && (
+                          <optgroup label="בשעות הפעילות">
+                            {openOptions.map((t) => (
+                              <option key={t} value={t}>
+                                {t}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        <optgroup label="מחוץ לשעות הפעילות (חריג מנהל)">
+                          {outsideOptions.map((t) => (
+                            <option key={t} value={t}>
+                              {t} · מחוץ לפעילות
+                            </option>
+                          ))}
+                        </optgroup>
+                      </>
+                    )}
+                  </select>
+                </div>
+              </div>
 
-          {paymentsBlocked && (
-            <Alert tone="error">
-              קביעת תור ידנית דורשת הפעלת מנגנון תשלום (כסף או ניצול יתרה). כרגע מנגנון התשלום אינו פעיל בסביבה זו, ולכן לא ניתן לאשר תור חדש במסך זה.
-            </Alert>
-          )}
-          {formError && <Alert tone="error">{formError}</Alert>}
+              <div
+                className="rounded-xl bg-cream-50 ring-1 ring-cream-200 px-4 py-3 space-y-2"
+                aria-live="polite"
+              >
+                <p className="text-sm font-semibold text-stone-600">
+                  שעות הפעילות בתאריך הנבחר:
+                </p>
+                {dayClosed ? (
+                  <p className="text-sm font-semibold text-red-700">
+                    {saturdayClosed ? "יום שבת סגור" : "היום הוגדר כסגור"} — לא
+                    ניתן לקבוע בו תור, גם למנהל.
+                  </p>
+                ) : newDayHours ? (
+                  <>
+                    <DayHours day={newDayHours} />
+                    {selectedOutside && (
+                      <p className="text-sm font-semibold text-amber-800">
+                        השעה שנבחרה מחוץ לשעות הפעילות. כמנהל אפשר לקבוע בה תור
+                        (חריג).
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm text-stone-500">טוען...</p>
+                )}
+              </div>
 
-          <button type="submit" disabled={formSubmitting || dayClosed || paymentsBlocked} className="btn btn-primary">
-            {formSubmitting ? "יוצר החזקה..." : "קביעת תור"}
-          </button>
-          </form>
+              <div>
+                <label htmlFor="new-notes" className="field-label">
+                  הערות
+                </label>
+                <input
+                  id="new-notes"
+                  value={newNotes}
+                  onChange={(e) => setNewNotes(e.target.value)}
+                  className="field"
+                />
+              </div>
+
+              {paymentsBlocked && (
+                <Alert tone="error">
+                  הזמנת קליניקה ידנית דורשת הפעלת מנגנון תשלום (כסף או ניצול
+                  יתרה). כרגע מנגנון התשלום אינו פעיל בסביבה זו, ולכן לא ניתן
+                  לאשר תור חדש במסך זה.
+                </Alert>
+              )}
+              {formError && <Alert tone="error">{formError}</Alert>}
+
+              <button
+                type="submit"
+                disabled={formSubmitting || dayClosed || paymentsBlocked}
+                className="btn btn-primary"
+              >
+                {formSubmitting ? "יוצר החזקה..." : "הזמנת קליניקה"}
+              </button>
+            </form>
           )}
         </div>
       )}
@@ -427,55 +520,108 @@ export default function AdminAppointmentsPage() {
           <Loading />
         ) : appointments.length === 0 ? (
           <EmptyState>
-            {filterState.active.length > 0 || applied.search ? "לא נמצאו תורים התואמים לחיפוש ולמסננים." : "אין תורים עדיין."}
+            {filterState.active.length > 0 || applied.search
+              ? "לא נמצאו תורים התואמים לחיפוש ולמסננים."
+              : "אין תורים עדיין."}
           </EmptyState>
         ) : (
           <div className="card overflow-x-auto">
             <table className="table-base">
               <thead>
                 <tr>
-                  <SortableTh label="תאריך" sortKey="startTime" state={filterState} />
+                  <SortableTh
+                    label="תאריך"
+                    sortKey="startTime"
+                    state={filterState}
+                  />
                   <th>שעה</th>
                   <SortableTh label="חדר" sortKey="room" state={filterState} />
-                  <SortableTh label="לקוח" sortKey="userName" state={filterState} />
-                  <SortableTh label="טלפון" sortKey="userPhone" state={filterState} />
-                  <SortableTh label="מקור" sortKey="source" state={filterState} />
-                  <SortableTh label="סטטוס" sortKey="status" state={filterState} />
+                  <SortableTh
+                    label="לקוח"
+                    sortKey="userName"
+                    state={filterState}
+                  />
+                  <SortableTh
+                    label="טלפון"
+                    sortKey="userPhone"
+                    state={filterState}
+                  />
+                  <SortableTh
+                    label="מקור"
+                    sortKey="source"
+                    state={filterState}
+                  />
+                  <SortableTh
+                    label="סטטוס"
+                    sortKey="status"
+                    state={filterState}
+                  />
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {appointments.map((a) => (
-                  <tr key={a.id} className={a.status === "CANCELLED" ? "opacity-55" : ""}>
+                  <tr
+                    key={a.id}
+                    className={a.status === "CANCELLED" ? "opacity-55" : ""}
+                  >
                     <td className="whitespace-nowrap tabular-nums text-stone-600">
-                      {new Date(a.startTime).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                      {new Date(a.startTime).toLocaleDateString("he-IL", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                      })}
                     </td>
                     <td className="whitespace-nowrap font-semibold text-stone-800 tabular-nums">
-                      {new Date(a.startTime).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
+                      {new Date(a.startTime).toLocaleTimeString("he-IL", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
                       {" – "}
-                      {new Date(a.endTime).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
+                      {new Date(a.endTime).toLocaleTimeString("he-IL", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
                     </td>
                     <td className="whitespace-nowrap">
                       <span className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${ROOM_ACCENTS[a.room.key].dot}`} />
+                        <span
+                          className={`w-2 h-2 rounded-full ${ROOM_ACCENTS[a.room.key].dot}`}
+                        />
                         {ROOM_LABELS[a.room.key]}
                       </span>
                     </td>
                     <td>
-                      <span className="font-semibold text-stone-800">{a.user.name}</span>
-                      <div className="text-xs text-stone-400">{a.user.email ?? "—"}</div>
+                      <span className="font-semibold text-stone-800">
+                        {a.user.name}
+                      </span>
+                      <div className="text-xs text-stone-400">
+                        {a.user.email ?? "—"}
+                      </div>
                     </td>
-                    <td className="tabular-nums whitespace-nowrap text-stone-600">{a.user.phone ?? "—"}</td>
+                    <td className="tabular-nums whitespace-nowrap text-stone-600">
+                      {a.user.phone ?? "—"}
+                    </td>
                     <td>
                       <span className="badge bg-cream-100 text-stone-600">
-                        {a.source === "WEB" ? "אתר" : a.source === "ADMIN" ? "ניהול" : a.source === "SHIFT" ? "משמרת" : "IVR"}
+                        {a.source === "WEB"
+                          ? "אתר"
+                          : a.source === "ADMIN"
+                            ? "ניהול"
+                            : a.source === "SHIFT"
+                              ? "משמרת"
+                              : "IVR"}
                       </span>
                     </td>
                     <td>
                       {a.status === "CONFIRMED" ? (
-                        <span className="badge bg-brand-50 text-brand-700">מאושר</span>
+                        <span className="badge bg-brand-50 text-brand-700">
+                          מאושר
+                        </span>
                       ) : (
-                        <span className="badge bg-red-50 text-red-600">מבוטל</span>
+                        <span className="badge bg-red-50 text-red-600">
+                          מבוטל
+                        </span>
                       )}
                     </td>
                     <td>
@@ -495,7 +641,14 @@ export default function AdminAppointmentsPage() {
             </table>
           </div>
         )}
-        {total !== null && <Pager page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} />}
+        {total !== null && (
+          <Pager
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={total}
+            onPage={setPage}
+          />
+        )}
       </div>
     </div>
   );

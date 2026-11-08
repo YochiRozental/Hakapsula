@@ -2,9 +2,21 @@ import Link from "next/link";
 import { Icon, LogoMark, type IconName } from "@/components/ui";
 
 const FEATURES: { icon: IconName; title: string; text: string }[] = [
-  { icon: "door", title: "מגוון חדרים", text: "חדר 1, חדר 2, חדר הסדנאות, או חדר 1+2 המשולב." },
-  { icon: "calendar", title: "קביעה בקלות", text: "בוחרים חדר, תאריך ושעה — והתור נקבע." },
-  { icon: "calendarCheck", title: "התורים שלך במקום אחד", text: "צפייה בתורים הקרובים וביטול בלחיצה." },
+  {
+    icon: "door",
+    title: "מגוון חדרים",
+    text: "",
+  },
+  {
+    icon: "calendar",
+    title: "הליך הזמנת קליניקה בקלות",
+    text: "בוחרים חדר, תאריך ושעה - ויש לכם קליניקה מאובזרת ונעימה .",
+  },
+  {
+    icon: "calendarCheck",
+    title: "ההזמנות שלך במקום אחד",
+    text: "צפייה בתורים הקרובים וביטול בלחיצה.",
+  },
 ];
 
 export default function Home() {
@@ -26,8 +38,12 @@ export default function Home() {
                 <LogoMark className="w-16 h-16 sm:w-20 sm:h-20" />
               </span>
               <div>
-                <p className="font-display text-3xl sm:text-4xl font-bold">הקפסולה</p>
-                <p className="text-sm text-bronze-200 tracking-wide mt-1">הבית שלך לפגישות עסקיות</p>
+                <p className="font-display text-3xl sm:text-4xl font-bold">
+                  הקפסולה
+                </p>
+                <p className="text-sm text-bronze-200 tracking-wide mt-1">
+                  הבית שלך לפגישות עסקיות
+                </p>
               </div>
             </div>
             <h1 className="font-display text-4xl sm:text-6xl font-bold leading-[1.1] mb-6">
@@ -36,12 +52,17 @@ export default function Home() {
               לפגישות שלך
             </h1>
             <p className="text-white/80 text-lg leading-relaxed mb-8 max-w-md">
-              ברוכים הבאים למערכת קביעת התורים. קבעו תור בקלות לחדר 1, חדר 2, חדר הסדנאות, או לחדר 1+2
-              המשולב. אפשר לעיין בחדרים ובזמינות ללא הרשמה — ההתחברות נדרשת רק בעת הזמנת החדר.
+              קליניקות יפיפיהות ומאובזרות, במודל השכרה גמיש אנו מספקים פתרון
+              אולטמטיבי למטפלים, יועצים, מאמנים ולכל מי שזקוק למרחב נעים ומזמין
+              לפגישות שקטות. מעוניינים בשעה קבועה או בכרטיסיה? החל מ 25 ש”ח לשעה
+              במסלולים הקבועים, ומ 57 לשעה בכרטיסיות הרשמו כאן וניצור איתכם קשר
             </p>
             <div className="flex flex-wrap items-center gap-3">
-              <Link href="/booking" className="btn btn-bronze px-7! py-3! text-base!">
-                קביעת תור
+              <Link
+                href="/booking"
+                className="btn btn-bronze px-7! py-3! text-base!"
+              >
+                להזמנת קליניקה
                 <Icon name="arrowLeft" className="w-4 h-4" />
               </Link>
               <Link
@@ -71,7 +92,9 @@ export default function Home() {
             <span className="w-12 h-12 rounded-2xl bg-linear-to-b from-bronze-50 to-bronze-100 text-bronze-600 ring-1 ring-bronze-200 shadow-sm flex items-center justify-center mb-5">
               <Icon name={f.icon} className="w-6 h-6" />
             </span>
-            <h2 className="font-display text-lg font-bold text-stone-900 mb-1.5">{f.title}</h2>
+            <h2 className="font-display text-lg font-bold text-stone-900 mb-1.5">
+              {f.title}
+            </h2>
             <p className="text-sm text-stone-500 leading-relaxed">{f.text}</p>
           </div>
         ))}

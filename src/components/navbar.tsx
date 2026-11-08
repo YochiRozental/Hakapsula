@@ -71,7 +71,7 @@ export function Navbar() {
       },
       {
         href: "/booking",
-        label: "קביעת תור",
+        label: "הזמנת קליניקה",
         icon: "calendar",
         active: pathname === "/booking" && !contactActive,
       },

@@ -2,11 +2,16 @@ import { NextResponse } from "next/server";
 import type { RoomKey } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { holdRoom } from "@/lib/payments/booking-payment";
-import { errorResponse, getFlowProvider, notFound, requireAdminUser } from "@/lib/payments/flow";
+import {
+  errorResponse,
+  getFlowProvider,
+  notFound,
+  requireAdminUser,
+} from "@/lib/payments/flow";
 import { CONFLICTING_ROOM_KEYS } from "@/lib/rooms";
 
 /**
- * מנהל יוצר החזקה זמנית (10 דקות) לחדר, עבור לקוח קיים שנבחר — כצעד ראשון בקביעת תור ידנית שממשיכה
+ * מנהל יוצר החזקה זמנית (10 דקות) לחדר, עבור לקוח קיים שנבחר — כצעד ראשון הזמנת קליניקה ידנית שממשיכה
  * לתשלום (לא תור מאושר מיד). משך גמיש (בניגוד להזמנת לקוח רגילה שמוגבלת לשעה), כפי שהטופס הידני מאפשר.
  */
 export async function POST(request: Request) {
@@ -27,15 +32,30 @@ export async function POST(request: Request) {
     Number.isNaN(start.getTime()) ||
     Number.isNaN(end.getTime())
   ) {
-    return NextResponse.json({ error: "חסרים פרטים לקביעת התור" }, { status: 400 });
+    return NextResponse.json(
+      { error: "חסרים פרטים לקביעת התור" },
+      { status: 400 },
+    );
   }
 
-  const customer = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
-  if (!customer) return NextResponse.json({ error: "הלקוח לא נמצא" }, { status: 404 });
+  const customer = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true },
+  });
+  if (!customer)
+    return NextResponse.json({ error: "הלקוח לא נמצא" }, { status: 404 });
 
   try {
-    const notes = typeof body?.notes === "string" ? body.notes.slice(0, 500) : undefined;
-    const hold = await holdRoom({ userId, roomKey, startTime: start, endTime: end, notes, source: "ADMIN" });
+    const notes =
+      typeof body?.notes === "string" ? body.notes.slice(0, 500) : undefined;
+    const hold = await holdRoom({
+      userId,
+      roomKey,
+      startTime: start,
+      endTime: end,
+      notes,
+      source: "ADMIN",
+    });
     return NextResponse.json(
       {
         appointmentId: hold.id,
@@ -44,7 +64,7 @@ export async function POST(request: Request) {
         endTime: hold.endTime,
         holdExpiresAt: hold.holdExpiresAt,
       },
-      { status: 201 }
+      { status: 201 },
     );
   } catch (err) {
     return errorResponse(err);
