@@ -308,6 +308,15 @@ function ClockDialog({
               </span>
             );
           })}
+          {hoursOnly && (
+            <span className="flex items-center gap-1">
+              <span className="font-display text-4xl font-bold text-stone-400">:</span>
+              {/* הדקות קבועות ל-00 ואינן ניתנות לעריכה; מוצג כטקסט קבוע כדי להשלים את התצוגה ל-HH:00 */}
+              <span className="w-20 text-center font-display text-4xl font-bold tabular-nums rounded-2xl px-1 py-1 text-stone-400 select-none">
+                00
+              </span>
+            </span>
+          )}
         </div>
 
         <div className="rounded-2xl bg-cream-50 ring-1 ring-cream-200 p-3 mx-auto w-fit max-w-full" dir="ltr">
