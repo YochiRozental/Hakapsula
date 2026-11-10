@@ -1,12 +1,12 @@
 import { RoomKey } from "@/generated/prisma/client";
 
 export const ROOM_LABELS: Record<RoomKey, string> = {
-  ROOM1: "חדר מס' 1",
-  ROOM2: "חדר מס' 2",
-  ROOM3: "חדר מס' 3",
-  ROOM4: "חדר מס' 4",
-  WORKSHOP: "חדר סדנאות",
-  ROOM1_2: "חדר 1+2 (משולב)",
+  ROOM1: "קפסולה 1",
+  ROOM2: "קפסולה 2",
+  ROOM3: "קפסולה 3",
+  ROOM4: "קפסולה 4",
+  WORKSHOP: "קפסולת סדנאות",
+  ROOM1_2: "קפסולה 1+2 (משולב)",
 };
 
 export const ROOM_SEED: {
@@ -15,19 +15,39 @@ export const ROOM_SEED: {
   description: string;
   isCombo: boolean;
 }[] = [
-  { key: "ROOM1", name: "חדר 1", description: "חדר טיפולים 1", isCombo: false },
-  { key: "ROOM2", name: "חדר 2", description: "חדר טיפולים 2", isCombo: false },
-  { key: "ROOM3", name: "חדר 3", description: "חדר טיפולים 3", isCombo: false },
-  { key: "ROOM4", name: "חדר 4", description: "חדר טיפולים 4", isCombo: false },
+  {
+    key: "ROOM1",
+    name: "קפסולה 1",
+    description: "קפסולה טיפולים 1",
+    isCombo: false,
+  },
+  {
+    key: "ROOM2",
+    name: "קפסולה 2",
+    description: "קפסולה טיפולים 2",
+    isCombo: false,
+  },
+  {
+    key: "ROOM3",
+    name: "קפסולה 3",
+    description: "קפסולה טיפולים 3",
+    isCombo: false,
+  },
+  {
+    key: "ROOM4",
+    name: "קפסולה 4",
+    description: "קפסולה טיפולים 4",
+    isCombo: false,
+  },
   {
     key: "WORKSHOP",
-    name: "חדר סדנאות",
-    description: "חדר המיועד לסדנאות עד 20 איש מאובזר כנדרש לנוחיותכם",
+    name: "קפסולת סדנאות",
+    description: "קפסולה המיועדת לסדנאות עד 20 איש מאובזר כנדרש לנוחיותכם",
     isCombo: false,
   },
   {
     key: "ROOM1_2",
-    name: "חדר 1+2 (משולב)",
+    name: "קפסולה 1+2 (משולב)",
     description:
       "ניתן להזמין את שני החדרים עם דלת משותפת ביניהם עבור מטפלים הזקוקים לחיבור ביניהם",
     isCombo: true,
