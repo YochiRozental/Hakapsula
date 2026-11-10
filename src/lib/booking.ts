@@ -8,12 +8,23 @@ import type { BookingSource, Prisma, RoomKey } from "@/generated/prisma/client";
 
 export { BookingError } from "@/lib/booking-error";
 
-function validateTimeRange(startTime: Date, endTime: Date) {
+/** שעון ירושלים נמצא תמיד בהפרש של מספר שעות שלם מ-UTC, כך שבדיקת הדקות/שניות ב-UTC שקולה לבדיקתן בשעון ירושלים */
+function isOnTheHour(date: Date) {
+  return date.getUTCMinutes() === 0 && date.getUTCSeconds() === 0 && date.getUTCMilliseconds() === 0;
+}
+
+function validateTimeRange(startTime: Date, endTime: Date, source: BookingSource) {
   if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
     throw new BookingError("תאריך/שעה לא תקינים");
   }
   if (endTime <= startTime) {
     throw new BookingError("שעת הסיום חייבת להיות אחרי שעת ההתחלה");
+  }
+  // שעות עגולות בלבד נאכפות רק באתר הלקוחות (WEB): שם המשתמש בוחר שעת התחלה בלבד, תמיד לשעה אחת עגולה (ר' /api/appointments
+  // ו-/api/payments/holds, שמוודאים כבר היום משך של בדיוק WEB_BOOKING_DURATION_MINUTES — כך שעת הסיום עגולה ממילא).
+  // ניהול, IVR ושעה חלופית למשמרת (source ADMIN/IVR) ממשיכים לתמוך בכל דקה ובכל משך, כפי שהיה.
+  if (source === "WEB" && !isOnTheHour(startTime)) {
+    throw new BookingError("שעת ההתחלה חייבת להיות שעה עגולה (בלי דקות)");
   }
   const durationMinutes = (endTime.getTime() - startTime.getTime()) / 60000;
   if (durationMinutes < MIN_DURATION_MINUTES) {
@@ -74,7 +85,7 @@ export async function createAppointment(params: {
 }) {
   const { userId, roomKey, startTime, endTime, notes, source = "WEB" } = params;
 
-  validateTimeRange(startTime, endTime);
+  validateTimeRange(startTime, endTime, source);
   // שבת סגורה לכולם (כולל מנהל) ושעות הפעילות נאכפות — לפני כל גישה למסד
   await assertBookable(startTime, endTime, source, userId);
 
@@ -164,7 +175,7 @@ export async function createBookingHold(params: {
 }) {
   const { userId, roomKey, startTime, endTime, notes, source = "WEB", now = new Date() } = params;
 
-  validateTimeRange(startTime, endTime);
+  validateTimeRange(startTime, endTime, source);
   await assertBookable(startTime, endTime, source, userId);
 
   await ensureRooms();

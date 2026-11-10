@@ -27,6 +27,8 @@ type ClockTimePickerProps = {
   inline?: boolean;
   /** שעות התחלה (בדקות מחצות) שאינן זמינות: מוצגות מוחלשות ואינן ניתנות לבחירה */
   unavailable?: (minutes: number) => boolean;
+  /** שעות עגולות בלבד: אין שדה/חוגה לבחירת דקות, הערך תמיד בדקה 00 */
+  hoursOnly?: boolean;
 };
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -57,10 +59,13 @@ export function ClockTimePicker({
   label = "בחירת שעה",
   inline = false,
   unavailable,
+  hoursOnly = false,
 }: ClockTimePickerProps) {
   const [open, setOpen] = useState(false);
   const autoId = useId();
   const fieldId = id ?? autoId;
+  // שעות עגולות בלבד: אין תוקף לדקה אחרת מ-00, ללא תלות ב-stepMinutes שהועבר
+  const step = hoursOnly ? 60 : stepMinutes;
 
   if (inline) {
     return (
@@ -71,7 +76,8 @@ export function ClockTimePicker({
         inputId={fieldId}
         minMinutes={minMinutes}
         maxMinutes={maxMinutes}
-        stepMinutes={stepMinutes}
+        stepMinutes={step}
+        hoursOnly={hoursOnly}
         unavailable={unavailable}
         onConfirm={onChange}
       />
@@ -99,7 +105,8 @@ export function ClockTimePicker({
             label={label}
             minMinutes={minMinutes}
             maxMinutes={maxMinutes}
-            stepMinutes={stepMinutes}
+            stepMinutes={step}
+            hoursOnly={hoursOnly}
             unavailable={unavailable}
             onCancel={() => setOpen(false)}
             onConfirm={(v) => {
@@ -120,12 +127,14 @@ function ClockDialog({
   maxMinutes,
   stepMinutes,
   unavailable,
+  hoursOnly = false,
   inline = false,
   inputId,
   onCancel,
   onConfirm,
 }: {
   unavailable?: (minutes: number) => boolean;
+  hoursOnly?: boolean;
   inline?: boolean;
   inputId?: string;
   value: string;
@@ -141,7 +150,8 @@ function ClockDialog({
   const [stateM, setM] = useState(initial.m);
   // במצב קבוע הערך שייך להורה (מקור אמת יחיד); בחלון — טיוטה עד אישור
   const h = inline ? initial.h : stateH;
-  const m = inline ? initial.m : stateM;
+  // שעות עגולות בלבד: הדקה קבועה ל-00, ואין מושג דקות בממשק
+  const m = hoursOnly ? 0 : inline ? initial.m : stateM;
   const [mode, setMode] = useState<Mode>("hours");
   // מה שהמשתמש מקליד כרגע בשדה (עד שהוא תקין ומוחל); null = מציגים את הערך הנבחר
   const [typed, setTyped] = useState<Record<Mode, string | null>>({ hours: null, minutes: null });
@@ -209,7 +219,7 @@ function ClockDialog({
     setTyped((t) => ({ ...t, [key]: raw }));
     // הקלדה שלמה: שתי ספרות, או ספרה ראשונה שאי אפשר להשלים (שעה 3–9, דקות 6–9)
     const complete = raw.length === 2 || Number(raw) > (key === "hours" ? 2 : 5);
-    if (complete && commitTyped(key, raw) && key === "hours") {
+    if (complete && commitTyped(key, raw) && key === "hours" && !hoursOnly) {
       setMode("minutes");
       fieldRefs.minutes.current?.focus();
     }
@@ -257,7 +267,7 @@ function ClockDialog({
   const content = (
     <>
         <div className="flex items-center justify-center gap-1 mb-4" dir="ltr">
-          {(["hours", "minutes"] as const).map((key, i) => {
+          {(hoursOnly ? (["hours"] as const) : (["hours", "minutes"] as const)).map((key, i) => {
             const raw = typed[key];
             const invalid = raw !== null && raw.length > 0 && !typedValid(key, raw);
             return (
@@ -316,7 +326,7 @@ function ClockDialog({
             onPointerUp={() => {
               if (!dragging.current) return;
               dragging.current = false;
-              if (mode === "hours") setMode("minutes");
+              if (!hoursOnly && mode === "hours") setMode("minutes");
             }}
             onPointerCancel={() => {
               dragging.current = false;
@@ -325,16 +335,18 @@ function ClockDialog({
             <circle cx={CENTER} cy={CENTER} r={CENTER - 2} fill="#fff" stroke="var(--color-cream-300)" />
             <circle cx={CENTER} cy={CENTER} r={INNER_R + 20} fill="none" stroke="var(--color-cream-200)" strokeDasharray="2 4" />
 
-            {/* מחוג לא פעיל */}
-            <line
-              x1={CENTER}
-              y1={CENTER}
-              x2={(mode === "hours" ? minuteTip : hourTip).x}
-              y2={(mode === "hours" ? minuteTip : hourTip).y}
-              stroke="var(--color-bronze-300)"
-              strokeWidth={2}
-              strokeLinecap="round"
-            />
+            {/* מחוג לא פעיל (רק כשיש מצב דקות) */}
+            {!hoursOnly && (
+              <line
+                x1={CENTER}
+                y1={CENTER}
+                x2={(mode === "hours" ? minuteTip : hourTip).x}
+                y2={(mode === "hours" ? minuteTip : hourTip).y}
+                stroke="var(--color-bronze-300)"
+                strokeWidth={2}
+                strokeLinecap="round"
+              />
+            )}
             {/* מחוג פעיל */}
             <line
               x1={CENTER}
@@ -349,7 +361,7 @@ function ClockDialog({
             <circle cx={CENTER} cy={CENTER} r={4.5} fill="var(--color-brand-600)" />
             <circle cx={CENTER} cy={CENTER} r={1.8} fill="var(--color-bronze-300)" />
 
-            {mode === "hours"
+            {hoursOnly || mode === "hours"
               ? marks.map(({ num, pos }) => {
                   const disabled = !hourHasOption(num);
                   const selected = num === h;

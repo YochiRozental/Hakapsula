@@ -40,8 +40,8 @@ type BusyInterval = {
 };
 
 const durationMinutes = WEB_BOOKING_DURATION_MINUTES;
-// בשעון מוצגות כל השעות (כל 5 דקות); אלו שאינן זמינות לפי שעות הפעילות של המסלול מוצגות מוחלשות
-const CLOCK_STEP_MINUTES = 5;
+// בשעון מוצגות שעות עגולות בלבד (בלי דקות); אלו שאינן זמינות לפי שעות הפעילות של המסלול מוצגות מוחלשות
+const CLOCK_STEP_MINUTES = 60;
 const MIN_START_MINUTES = 0;
 const MAX_START_MINUTES = 24 * 60 - durationMinutes;
 const DEFAULT_START_TIME = formatMinutes(8 * 60);
@@ -460,6 +460,7 @@ export default function BookingPage() {
                 minMinutes={MIN_START_MINUTES}
                 maxMinutes={MAX_START_MINUTES}
                 stepMinutes={CLOCK_STEP_MINUTES}
+                hoursOnly
                 unavailable={(m) => unavailableReason(m) !== null}
               />
             </section>
