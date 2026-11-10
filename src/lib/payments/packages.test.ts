@@ -126,7 +126,7 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
 
   async function seedPackage(userId: string, minutes: number, expiresAt = new Date(Date.now() + 365 * DAY)) {
     return prisma.hoursPackage.create({
-      data: { userId, hours: 5, pricePaidAgorot: 19500, minutesTotal: minutes, minutesRemaining: minutes, expiresAt },
+      data: { userId, hours: 5, pricePaidAgorot: 30000, minutesTotal: minutes, minutesRemaining: minutes, expiresAt },
     });
   }
 
@@ -155,7 +155,7 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
 
   // ───────────── רכישת חבילות ─────────────
 
-  test("רכישת כל אחת מחמש החבילות: מחיר מהטבלה, דקות, תוקף שנה וקשר לתשלום ולרוכש", async () => {
+  test("רכישת כל אחת משלוש החבילות: מחיר מהטבלה, דקות, תוקף שנה וקשר לתשלום ולרוכש", async () => {
     for (const option of pricing.HOURS_PACKAGES) {
       const { started, res } = await buy(userA, option.hours);
       assert.equal(res.outcome, "PACKAGE_ACTIVATED");
@@ -175,8 +175,8 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
       assert.equal(pkg.minutesRemaining, option.hours * 60);
       assert.equal(pkg.expiresAt.getTime(), pricing.packageExpiry(pkg.purchasedAt).getTime());
     }
-    assert.equal(await prisma.hoursPackage.count({ where: { userId: userA } }), 5);
-    assert.equal(await remaining(userA), (5 + 10 + 20 + 50 + 100) * 60);
+    assert.equal(await prisma.hoursPackage.count({ where: { userId: userA } }), 3);
+    assert.equal(await remaining(userA), (5 + 10 + 20) * 60);
   });
 
   test("תשלום רכישה שנכשל או בוטל או שלא הושלם לא יוצר יתרה", async () => {
@@ -239,14 +239,28 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
     assert.equal(await prisma.payment.count({}), 0);
   });
 
+  test("כרטיסיות 50/100 שעות הוסרו מהמכירה: אין אפשרות לרכוש אותן מחדש", async () => {
+    for (const hours of pricing.LEGACY_HOURS_PACKAGES.map((p) => p.hours)) {
+      await assert.rejects(() => pkgs.startPackagePurchase({ userId: userA, hours, clientKey: nextKey(), provider }), { code: "INVALID" }, String(hours));
+    }
+    assert.equal(await prisma.payment.count({}), 0);
+    // אך יתרה קיימת מרכישה היסטורית (למשל 100 שעות) ממשיכה לפעול במלואה: אינה תלויה ב-HOURS_PACKAGES כלל
+    const legacy = await prisma.hoursPackage.create({
+      data: { userId: userA, hours: 100, pricePaidAgorot: 275600, minutesTotal: 100 * 60, minutesRemaining: 100 * 60, expiresAt: new Date(Date.now() + 365 * DAY) },
+    });
+    const h = await hold(userA, "ROOM3", 10);
+    assert.equal((await confirmFromBalance(userA, h.id)).outcome, "CONFIRMED");
+    assert.equal((await prisma.hoursPackage.findUniqueOrThrow({ where: { id: legacy.id } })).minutesRemaining, 100 * 60 - 60);
+  });
+
   test("אי אפשר לעקוף: סכום פגוע לא מפעיל חבילה, ותשלום לא אמיתי לא יוצר יתרה", async () => {
-    const started = await pkgs.startPackagePurchase({ userId: userA, hours: 100, clientKey: nextKey(), provider });
+    const started = await pkgs.startPackagePurchase({ userId: userA, hours: 20, clientKey: nextKey(), provider });
     await provider.completeCheckout(started.providerPaymentId!, "success");
-    // השורה אצלנו שונתה (למשל 100 שעות ב-195 ₪): לא מפעילים
-    await prisma.payment.update({ where: { id: started.paymentId }, data: { amountAgorot: 19500 } });
+    // השורה אצלנו שונתה (למשל 20 שעות במחיר חבילת ה-5 שעות): לא מפעילים
+    await prisma.payment.update({ where: { id: started.paymentId }, data: { amountAgorot: 30000 } });
     assert.equal((await pkgs.finalizePackagePayment({ paymentId: started.paymentId, provider })).outcome, "AMOUNT_MISMATCH");
     assert.equal(await prisma.hoursPackage.count({}), 0);
-    await prisma.payment.update({ where: { id: started.paymentId }, data: { amountAgorot: 275600 } });
+    await prisma.payment.update({ where: { id: started.paymentId }, data: { amountAgorot: 100000 } });
 
     // תשלום sandbox לא נפתר מול ספק אחר
     await prisma.payment.update({ where: { id: started.paymentId }, data: { environment: "LIVE" } });
@@ -306,7 +320,7 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
     const b = await hold(userA, "ROOM3", 10, 45);
     await confirmFromBalance(userA, b.id);
     assert.equal(await remaining(userA), 240);
-    assert.equal(pricing.regularPriceAgorot(15), 1300);
+    assert.equal(pricing.regularPriceAgorot(15), 1875);
   });
 
   test("החבילה שפוקעת ראשונה מנוצלת ראשונה (וגם זיכוי שפוקע ראשון)", async () => {
@@ -333,7 +347,7 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
     await seedPackage(userA, 600, new Date(Date.now() - 1000));
     const h = await hold(userA, "ROOM3", 10);
     const quote = await svc.quoteHold({ appointmentId: h.id, userId: userA });
-    assert.deepEqual([quote.packageMinutes, quote.cashAgorot], [0, 5200]);
+    assert.deepEqual([quote.packageMinutes, quote.cashAgorot], [0, 7500]);
     await assert.rejects(() => confirmFromBalance(userA, h.id), { code: "INSUFFICIENT_BALANCE" });
     assert.equal(await remaining(userA), 600);
     assert.equal((await apptOf(h.id)).status, "PENDING_PAYMENT");
@@ -408,17 +422,17 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
 
   // ───────────── תשלום משולב ─────────────
 
-  test("תשלום משולב: 30 דקות מחבילה ו-26 ₪ בכסף, והניכוי רק אחרי שהתשלום אומת", async () => {
+  test("תשלום משולב: 30 דקות מחבילה ו-37.5 ₪ בכסף, והניכוי רק אחרי שהתשלום אומת", async () => {
     await seedPackage(userA, 30);
     const h = await hold(userA, "ROOM3", 10);
     const quote = await svc.quoteHold({ appointmentId: h.id, userId: userA });
-    assert.deepEqual([quote.packageMinutes, quote.cashAgorot, quote.fullyCoveredByBalance], [30, 2600, false]);
+    assert.deepEqual([quote.packageMinutes, quote.cashAgorot, quote.fullyCoveredByBalance], [30, 3750, false]);
 
     const started = await svc.startBookingPayment({ appointmentId: h.id, userId: userA, provider });
-    assert.equal(started.amountAgorot, 2600);
+    assert.equal(started.amountAgorot, 3750);
     assert.equal(started.packageMinutes, 30);
     const pay = await payOf(started.paymentId);
-    assert.deepEqual([pay.amountAgorot, pay.packageMinutes], [2600, 30]);
+    assert.deepEqual([pay.amountAgorot, pay.packageMinutes], [3750, 30]);
     assert.equal(await remaining(userA), 30, "לפני אימות התשלום לא מנכים");
     assert.equal((await svc.finalizeBookingPayment({ paymentId: started.paymentId, provider })).outcome, "PENDING");
     assert.equal(await remaining(userA), 30);
@@ -428,7 +442,7 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
 
     assert.equal(await remaining(userA), 0);
     const appt = await apptOf(h.id);
-    assert.deepEqual([appt.status, appt.paymentStatus, appt.paidFromBalanceMinutes, appt.paidCashAgorot], ["CONFIRMED", "PAID", 30, 2600]);
+    assert.deepEqual([appt.status, appt.paymentStatus, appt.paidFromBalanceMinutes, appt.paidCashAgorot], ["CONFIRMED", "PAID", 30, 3750]);
     const [pu] = await usageOf(h.id);
     assert.deepEqual(pu.map((u) => [u.kind, u.minutes]), [["CONSUME", 30]]);
     // אימות חוזר/כפול לא מנכה שוב
@@ -466,7 +480,7 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
     assert.equal(await prisma.packageUsage.count({}), 0);
     assert.equal((await apptOf(h.id)).status, "CANCELLED");
     const refunds = await prisma.refund.findMany({ where: { paymentId: started.paymentId } });
-    assert.deepEqual(refunds.map((r) => [r.status, r.amountAgorot]), [["SUCCEEDED", 2600]]);
+    assert.deepEqual(refunds.map((r) => [r.status, r.amountAgorot]), [["SUCCEEDED", 3750]]);
   });
 
   test("אימות תשלום משולב מקביל לאישור מיתרה על אותה יתרה: רק אחד מנצל אותה, והשני לא מאבד כסף", async () => {
@@ -474,7 +488,7 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
       await wipe();
       provider = newProvider();
       await seedPackage(userA, 30);
-      const combined = await hold(userA, "ROOM3", 10, 60); // 30 מהיתרה + 26 ₪
+      const combined = await hold(userA, "ROOM3", 10, 60); // 30 מהיתרה + 37.5 ₪
       const started = await svc.startBookingPayment({ appointmentId: combined.id, userId: userA, provider });
       assert.equal(started.packageMinutes, 30);
       await provider.completeCheckout(started.providerPaymentId, "success");
@@ -498,14 +512,14 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
         assert.equal((fin as PromiseFulfilledResult<{ outcome: string }>).value.outcome, "BALANCE_CHANGED_REFUNDED");
         assert.equal(conf.status, "fulfilled");
         assert.equal((await apptOf(combined.id)).status, "CANCELLED");
-        assert.equal((await provider.getPaymentStatus(started.providerPaymentId)).refundedAgorot, 2600);
+        assert.equal((await provider.getPaymentStatus(started.providerPaymentId)).refundedAgorot, 3750);
       }
     }
   });
 
   test("שינוי יתרה בזמן התשלום: הכסף מוחזר, ההזמנה מבוטלת, בלי ניכוי חלקי ובלי יתרה שלילית", async () => {
     await seedPackage(userA, 30);
-    const combined = await hold(userA, "ROOM3", 10, 60); // 30 מהיתרה + 26 ₪
+    const combined = await hold(userA, "ROOM3", 10, 60); // 30 מהיתרה + 37.5 ₪
     const started = await svc.startBookingPayment({ appointmentId: combined.id, userId: userA, provider });
     assert.equal(started.packageMinutes, 30);
 
@@ -522,21 +536,21 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
     assert.equal((await apptOf(other.id)).status, "CONFIRMED");
     assert.equal(await prisma.packageUsage.count({ where: { appointmentId: combined.id } }), 0);
     const refund = await prisma.refund.findFirstOrThrow({ where: { paymentId: started.paymentId } });
-    assert.deepEqual([refund.status, refund.amountAgorot], ["SUCCEEDED", 2600]);
+    assert.deepEqual([refund.status, refund.amountAgorot], ["SUCCEEDED", 3750]);
   });
 
   test("שינוי יתרה לפני התשלום: התוכנית מתעדכנת, התשלום הישן מבוטל ונפתח חדש בסכום הנכון", async () => {
     await seedPackage(userA, 30);
     const h = await hold(userA, "ROOM3", 10, 60);
     const first = await svc.startBookingPayment({ appointmentId: h.id, userId: userA, provider });
-    assert.deepEqual([first.amountAgorot, first.packageMinutes], [2600, 30]);
+    assert.deepEqual([first.amountAgorot, first.packageMinutes], [3750, 30]);
 
     const other = await hold(userA, "ROOM4", 10, 30);
     await confirmFromBalance(userA, other.id);
 
     const second = await svc.startBookingPayment({ appointmentId: h.id, userId: userA, provider });
     assert.notEqual(second.paymentId, first.paymentId);
-    assert.deepEqual([second.amountAgorot, second.packageMinutes], [5200, 0]);
+    assert.deepEqual([second.amountAgorot, second.packageMinutes], [7500, 0]);
     assert.equal((await payOf(first.paymentId)).status, "CANCELLED");
     assert.equal((await provider.getPaymentStatus(first.providerPaymentId)).status, "CANCELLED");
     assert.equal(await prisma.payment.count({ where: { appointmentId: h.id, status: "PENDING" } }), 1);
@@ -551,7 +565,7 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
     const h = await hold(userA, "ROOM3", 10, 30); // מכוסה במלואה
     // לקוח בלי שימוש ביתרה פותח תשלום בכסף, ואז עובר ליתרה
     const cash = await svc.startBookingPayment({ appointmentId: h.id, userId: userA, provider, useBalance: false });
-    assert.equal(cash.amountAgorot, 2600);
+    assert.equal(cash.amountAgorot, 3750);
     await confirmFromBalance(userA, h.id);
     assert.equal((await payOf(cash.paymentId)).status, "CANCELLED");
     assert.equal(await remaining(userA), 0);
@@ -605,7 +619,7 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
     assert.equal(res.outcome, "REFUNDED");
     assert.equal(res.minutesRestored, 30);
     assert.equal((await prisma.hoursPackage.findUniqueOrThrow({ where: { id: pkg.id } })).minutesRemaining, 30);
-    assert.equal((await provider.getPaymentStatus(started.providerPaymentId)).refundedAgorot, 2600);
+    assert.equal((await provider.getPaymentStatus(started.providerPaymentId)).refundedAgorot, 3750);
     assert.equal(await prisma.refund.count({ where: { paymentId: started.paymentId } }), 1);
     assert.equal((await apptOf(h.id)).paymentStatus, "REFUNDED");
   });
@@ -658,13 +672,13 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
     await assert.rejects(() => svc.approveCancellationRefund({ appointmentId: h.id, adminId: userB, provider }), { code: "FORBIDDEN" });
     const approved = await svc.approveCancellationRefund({ appointmentId: h.id, adminId, provider, now: late });
     assert.equal(approved.minutesRestored, 30);
-    assert.equal(approved.refund?.amountAgorot, 2600);
+    assert.equal(approved.refund?.amountAgorot, 3750);
     assert.equal((await prisma.hoursPackage.findUniqueOrThrow({ where: { id: pkg.id } })).minutesRemaining, 30);
 
     const second = await svc.approveCancellationRefund({ appointmentId: h.id, adminId, provider, now: late });
     assert.equal(second.minutesRestored, 0);
     assert.equal(await prisma.refund.count({}), 1);
-    assert.equal((await provider.getPaymentStatus(started.providerPaymentId)).refundedAgorot, 2600);
+    assert.equal((await provider.getPaymentStatus(started.providerPaymentId)).refundedAgorot, 3750);
     assert.equal((await prisma.hoursPackage.findUniqueOrThrow({ where: { id: pkg.id } })).minutesRemaining, 30);
   });
 
@@ -701,7 +715,7 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
     const mk = (hour: number) => svc.createAdminBookingWithDebt({ adminId, userId: userA, roomKey: "ROOM3", ...slot(hour) });
 
     const early = await mk(10);
-    assert.equal(early.debt?.amountAgorot, 5200);
+    assert.equal(early.debt?.amountAgorot, 7500);
     const e = await svc.cancelBooking({
       appointmentId: early.appointment.id,
       requester: { id: userA, role: "CLIENT" },
@@ -869,8 +883,8 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
     assert.equal(d.holdActive, true);
     assert.equal(d.holdExpiresAt, h.holdExpiresAt!.toISOString());
     assert.ok(Math.abs(Date.parse(d.serverNow) - Date.now()) < 5000);
-    assert.deepEqual([d.fullPriceAgorot, d.availableBalanceMinutes, d.durationMinutes], [5200, 30, 60]);
-    assert.deepEqual(d.plan, { packageMinutes: 30, cashAgorot: 2600, fullyCoveredByBalance: false });
+    assert.deepEqual([d.fullPriceAgorot, d.availableBalanceMinutes, d.durationMinutes], [7500, 30, 60]);
+    assert.deepEqual(d.plan, { packageMinutes: 30, cashAgorot: 3750, fullyCoveredByBalance: false });
     assert.equal(d.payment, null);
 
     await assert.rejects(() => views.getHoldDetails(h.id, userB), { code: "NOT_FOUND" });
@@ -883,12 +897,12 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
     // תשלום משולב שהסתיים באישור: החלוקה מוצגת מהשרת
     const started = await svc.startBookingPayment({ appointmentId: h.id, userId: userA, provider });
     const pending = await views.getHoldDetails(h.id, userA);
-    assert.deepEqual([pending.payment?.status, pending.payment?.amountAgorot, pending.payment?.packageMinutes], ["PENDING", 2600, 30]);
+    assert.deepEqual([pending.payment?.status, pending.payment?.amountAgorot, pending.payment?.packageMinutes], ["PENDING", 3750, 30]);
     assert.equal(pending.payment?.providerPaymentId, started.providerPaymentId);
     await provider.completeCheckout(started.providerPaymentId, "success");
     await svc.finalizeBookingPayment({ paymentId: started.paymentId, provider });
     const done = await views.getHoldDetails(h.id, userA);
-    assert.deepEqual([done.status, done.paidFromBalanceMinutes, done.paidCashAgorot, done.holdActive], ["CONFIRMED", 30, 2600, false]);
+    assert.deepEqual([done.status, done.paidFromBalanceMinutes, done.paidCashAgorot, done.holdActive], ["CONFIRMED", 30, 3750, false]);
   });
 
   test("פרטי החזקה אחרי תשלום מאוחר: ההחזר מופיע ולא מוסתר", async () => {
@@ -898,7 +912,7 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
     await svc.finalizeBookingPayment({ paymentId: started.paymentId, provider, now: new Date(Date.now() + 11 * MIN) });
     const d = await views.getHoldDetails(h.id, userA);
     assert.equal(d.status, "CANCELLED");
-    assert.deepEqual([d.payment?.status, d.payment?.refundedAgorot], ["SUCCEEDED", 5200]);
+    assert.deepEqual([d.payment?.status, d.payment?.refundedAgorot], ["SUCCEEDED", 7500]);
   });
 
   test("היסטוריה: רכישות, תשלומים, ניצול, החזרת דקות, זיכויים והחזרים של המשתמש בלבד", async () => {
@@ -925,8 +939,8 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
       assert.ok(kinds.has(k as never), `חסר ${k}`);
     }
     const purchase = entries.find((e) => e.kind === "PACKAGE_PURCHASE")!;
-    assert.deepEqual([purchase.hours, purchase.amountAgorot, purchase.status], [5, 19500, "SUCCEEDED"]);
-    assert.equal(entries.find((e) => e.kind === "REFUND")?.amountAgorot, 5200);
+    assert.deepEqual([purchase.hours, purchase.amountAgorot, purchase.status], [5, 30000, "SUCCEEDED"]);
+    assert.equal(entries.find((e) => e.kind === "REFUND")?.amountAgorot, 7500);
     assert.equal(entries.find((e) => e.kind === "MINUTES_USED")?.minutes, 60);
     assert.ok(entries.every((e, i) => i === 0 || entries[i - 1].at >= e.at), "ממוין מהחדש לישן");
 

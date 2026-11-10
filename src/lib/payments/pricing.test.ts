@@ -11,10 +11,10 @@ import {
 } from "@/lib/payments/pricing";
 import { creditExpiry, isAutoRefundEligible } from "@/lib/payments/policy";
 
-test("regular price: 52 per hour, 13 per quarter hour", () => {
-  assert.equal(regularPriceAgorot(15), 1300);
-  assert.equal(regularPriceAgorot(60), 5200);
-  assert.equal(regularPriceAgorot(90), 7800);
+test("regular price: 75 per hour, 18.75 per quarter hour", () => {
+  assert.equal(regularPriceAgorot(15), 1875);
+  assert.equal(regularPriceAgorot(60), 7500);
+  assert.equal(regularPriceAgorot(90), 11250);
   assert.throws(() => regularPriceAgorot(20), RangeError);
   assert.throws(() => regularPriceAgorot(0), RangeError);
 });
@@ -22,10 +22,10 @@ test("regular price: 52 per hour, 13 per quarter hour", () => {
 test("package prices match the price list and are cheaper than regular", () => {
   assert.deepEqual(
     HOURS_PACKAGES.map((p) => [p.hours, p.priceAgorot]),
-    [[5, 19500], [10, 36400], [20, 67600], [50, 143000], [100, 275600]]
+    [[5, 30000], [10, 55000], [20, 100000]]
   );
   for (const p of HOURS_PACKAGES) assert.ok(packageSavingsAgorot(p) > 0);
-  assert.equal(packageSavingsAgorot(HOURS_PACKAGES[0]), 5 * 5200 - 19500);
+  assert.equal(packageSavingsAgorot(HOURS_PACKAGES[0]), 5 * 7500 - 30000);
 });
 
 test("package expires one year after purchase, leap day clamped", () => {
@@ -77,13 +77,13 @@ test("booking split combines package balance with regular payment", () => {
   const split = splitBookingPrice(60, pkgs, now);
   assert.equal(split.packageMinutes, 45);
   assert.equal(split.regularMinutes, 15);
-  assert.equal(split.regularPriceAgorot, 1300);
+  assert.equal(split.regularPriceAgorot, 1875);
 
   const full = splitBookingPrice(30, pkgs, now);
   assert.equal(full.regularPriceAgorot, 0);
 
   const none = splitBookingPrice(60, [], now);
-  assert.equal(none.regularPriceAgorot, 5200);
+  assert.equal(none.regularPriceAgorot, 7500);
 });
 
 test("cancellation: no automatic refund within 24h of start, unless admin exception", () => {

@@ -918,6 +918,35 @@ describe("משמרות קבועות וחיוב חודשי: מול PostgreSQL מ�
     assert.deepEqual([moved.room.key, moved.windowId], ["ROOM1", "NOON"]);
   });
 
+  test("בקשת שינוי שאינה כוללת מעבר משבצת ממשיכה לתמחר לפי המחיר שכבר אושר, גם אם מחיר המשבצת נערך במקום אחרי ההזמנה; מעבר מפורש למשבצת אחרת כן מתמחר לפיה", async () => {
+    const shiftId = await createOk(ids.a); // בוקר (MORNING), 480 ₪
+    const windows = await windowsDb.listShiftWindows();
+    const edited = windows.map((w) => ({
+      id: w.id, name: w.name, startMinutes: w.startMinutes, endMinutes: w.endMinutes, monthlyPriceShekel: w.monthlyPriceAgorot / 100, active: w.active,
+    }));
+    // עריכה במקום (לא יצירת משבצת חדשה): אותו id ("MORNING"), מחיר אחר. זו בדיוק התרחיש שה-bug המקורי היה פגיע בו
+    edited.find((w) => w.id === "MORNING")!.monthlyPriceShekel = 999;
+    await windowsDb.saveShiftWindows({ adminId: ids.admin, windows: edited });
+
+    // בקשת שינוי שאינה נוגעת למשבצת (רק חדר) אושרה; המחיר חייב להישאר המקורי (480), לא 999 שנערך במקום
+    const roomOnly = await life.createShiftRequest({ userId: ids.a, shiftId, kind: "CHANGE", proposed: { roomKey: "ROOM4" } });
+    const res1 = await life.decideShiftRequest({ requestId: roomOnly.id, adminId: ids.admin, decision: "APPROVE", provider, now: new Date("2027-02-20T09:00:00Z") });
+    assert.equal(res1.status, "APPROVED");
+    const afterRoomChange = await prisma.shift.findUniqueOrThrow({ where: { id: shiftId }, include: { room: true, occurrences: true } });
+    assert.deepEqual([afterRoomChange.room.key, afterRoomChange.windowId, afterRoomChange.monthlyPriceAgorot, afterRoomChange.occurrencePriceAgorot], ["ROOM4", "MORNING", MONTHLY, Math.round(MONTHLY / 4)]);
+    assert.ok(
+      afterRoomChange.occurrences.filter((o) => o.status === "SCHEDULED").every((o) => o.priceAgorot === Math.round(MONTHLY / 4) || o.priceAgorot === Math.round(MONTHLY / 5)),
+      "מחיר המופעים שנוצרו מחדש בשינוי עדיין לפי 480, לא 999"
+    );
+
+    // מעבר מפורש למשבצת אחרת (NOON): זו אישור מפורש למחיר החדש, ולכן כן חל
+    const toNoon = await life.createShiftRequest({ userId: ids.a, shiftId, kind: "CHANGE", proposed: { windowId: "NOON" } });
+    const res2 = await life.decideShiftRequest({ requestId: toNoon.id, adminId: ids.admin, decision: "APPROVE", provider, now: new Date("2027-02-21T09:00:00Z") });
+    assert.equal(res2.status, "APPROVED");
+    const afterWindowChange = await prisma.shift.findUniqueOrThrow({ where: { id: shiftId } });
+    assert.deepEqual([afterWindowChange.windowId, afterWindowChange.monthlyPriceAgorot], ["NOON", 52500]);
+  });
+
   test("שמירת משבצות: חפיפה, אי-פעילות מלאה ושעות לא תקינות נדחות; הוספת משבצת חדשה נרשמת; משבצת שהוסרה מהרשימה מושבתת ולא נמחקת", async () => {
     const current = (await windowsDb.listShiftWindows()).map((w) => ({
       id: w.id, name: w.name, startMinutes: w.startMinutes, endMinutes: w.endMinutes, monthlyPriceShekel: w.monthlyPriceAgorot / 100, active: w.active,

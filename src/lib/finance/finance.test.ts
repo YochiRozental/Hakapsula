@@ -171,7 +171,7 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
     const d = new Date(Date.now() + 5 * DAY);
     while (d.getUTCDay() === 6 || d.getUTCDay() === 5) d.setUTCDate(d.getUTCDate() + 1); // שבת סגורה; שישי עלול להיות מקוצר
     const date = d.toISOString().slice(0, 10);
-    return { userId, roomKey: "ROOM2" as const, date, start: "10:00", durationMinutes: 60, adminId: ids.admin, confirm: true, expectedDebtAgorot: 5200, ...over };
+    return { userId, roomKey: "ROOM2" as const, date, start: "10:00", durationMinutes: 60, adminId: ids.admin, confirm: true, expectedDebtAgorot: 7500, ...over };
   };
   async function openDebt(userId = ids.a, over: Partial<Parameters<typeof debtBooking.approveBookingWithDebt>[0]> = {}) {
     const res = await debtBooking.approveBookingWithDebt(debtBookingInput(userId, over));
@@ -207,26 +207,26 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
   });
 
   test("תמונת מצב: נגבה בפועל, חוב שטרם נגבה, החזרים וויתורים מופרדים; לא מחושב מהזמנות", async () => {
-    await paidBooking(ids.a); // 5200 ש"ח? 60 דק' = 4 רבעים
+    await paidBooking(ids.a); // 7500 ש"ח? 60 דק' = 4 רבעים
     const debtId = await openDebt(ids.b);
     await debts.waiveDebt({ debtId, adminId: ids.admin, amountAgorot: 1000, reason: "ויתור חלקי", clientKey: key() });
     const o = await overview.getFinanceOverview({}, true);
-    assert.equal(o.collected.grossAgorot, 5200);
-    assert.equal(o.collected.netAgorot, 5200);
+    assert.equal(o.collected.grossAgorot, 7500);
+    assert.equal(o.collected.netAgorot, 7500);
     assert.equal(o.debts.openCount, 1);
-    assert.equal(o.debts.openAgorot, 4200);
+    assert.equal(o.debts.openAgorot, 6500);
     assert.equal(o.debts.waivedAgorot, 1000);
-    assert.equal(o.outstandingNotCollectedAgorot, 4200);
+    assert.equal(o.outstandingNotCollectedAgorot, 6500);
     // ההזמנה עם החוב אינה נספרת ככסף שנגבה
-    assert.equal(o.collected.grossAgorot, 5200);
+    assert.equal(o.collected.grossAgorot, 7500);
     // כל התשלום כאן דרך ספק ה-Mock (SANDBOX): לא נכלל בהכנסה האמיתית, וה-note משקף זאת
-    assert.equal(o.collected.sandboxGrossAgorot, 5200);
+    assert.equal(o.collected.sandboxGrossAgorot, 7500);
     assert.equal(o.collected.liveGrossAgorot, 0);
     assert.match(o.environmentNote, /Mock/);
   });
 
   test("תשלומי SANDBOX (Mock) לעולם לא נכללים ב-liveGrossAgorot, גם כשיש גם תשלום LIVE אמיתי", async () => {
-    await paidBooking(ids.a); // תשלום Mock, SANDBOX, 5200
+    await paidBooking(ids.a); // תשלום Mock, SANDBOX, 7500
     const hold = await payBooking.holdRoom({ userId: ids.b, roomKey: "ROOM4", ...slot(), source: "ADMIN" });
     // תשלום LIVE: נוצר ישירות במסד (עדיין אין ספק LIVE ממומש בקוד), כדי לבדוק את ההפרדה בתמונת המצב
     await prisma.payment.create({
@@ -243,10 +243,10 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
       },
     });
     const o = await overview.getFinanceOverview({}, true);
-    assert.equal(o.collected.sandboxGrossAgorot, 5200, "תשלום ה-Mock נספר כפעילות דמה בלבד");
+    assert.equal(o.collected.sandboxGrossAgorot, 7500, "תשלום ה-Mock נספר כפעילות דמה בלבד");
     assert.equal(o.collected.liveGrossAgorot, 9000, "רק תשלום ה-LIVE נחשב הכנסה אמיתית");
-    assert.equal(o.collected.providerGrossAgorot, 5200 + 9000, "המעקב התפעולי הכולל ממשיך לשקף את שני הספקים");
-    assert.equal(o.collected.grossAgorot, 5200 + 9000);
+    assert.equal(o.collected.providerGrossAgorot, 7500 + 9000, "המעקב התפעולי הכולל ממשיך לשקף את שני הספקים");
+    assert.equal(o.collected.grossAgorot, 7500 + 9000);
     assert.match(o.environmentNote, /LIVE/);
   });
 
@@ -260,13 +260,13 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
     const list = await debts.listDebts({ userId: ids.a });
     assert.equal(list.length, 1);
     assert.equal(list[0].status, "OPEN");
-    assert.equal(list[0].remainingAgorot, 5200);
+    assert.equal(list[0].remainingAgorot, 7500);
     assert.equal(list[0].source.kind, "BOOKING");
   });
 
   test("4. הסדרת חוב: נדרשת אסמכתה ואישור מפורש; הסדרה מלאה סוגרת כ'שולם בפועל'; חזרה על אותה פעולה אינה מכפילה", async () => {
     const debtId = await openDebt();
-    const base = { debtId, adminId: ids.admin, amountAgorot: 5200, reference: "REC-1001", confirmedExternalPayment: true, clientKey: key() };
+    const base = { debtId, adminId: ids.admin, amountAgorot: 7500, reference: "REC-1001", confirmedExternalPayment: true, clientKey: key() };
     await rejects(debts.settleDebtExternal({ ...base, reference: "" }), "INVALID");
     await rejects(debts.settleDebtExternal({ ...base, confirmedExternalPayment: false }), "INVALID");
     await rejects(debts.settleDebtExternal({ ...base, clientKey: "x" }), "INVALID");
@@ -274,7 +274,7 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
 
     const a = await debts.settleDebtExternal(base);
     assert.equal(a.debt.status, "PAID");
-    assert.equal(a.debt.paidAgorot, 5200);
+    assert.equal(a.debt.paidAgorot, 7500);
     assert.ok(a.debt.resolvedAt);
     const again = await debts.settleDebtExternal(base);
     assert.equal(again.replayed, true);
@@ -291,7 +291,7 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
     await rejects(debts.waiveDebt({ debtId, adminId: ids.admin, reason: "", clientKey: key() }), "INVALID");
     const res = await debts.waiveDebt({ debtId, adminId: ids.admin, reason: "הלקוח זכאי להנחה", clientKey: key() });
     assert.equal(res.debt.status, "WAIVED");
-    assert.equal(res.debt.waivedAgorot, 5200);
+    assert.equal(res.debt.waivedAgorot, 7500);
     assert.equal(res.debt.paidAgorot, 0);
     assert.ok(await prisma.debt.findUnique({ where: { id: debtId } }), "החוב לא נמחק");
     const view = (await debts.getDebt(debtId))!;
@@ -305,15 +305,15 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
     await debts.settleDebtExternal({ debtId, adminId: ids.admin, amountAgorot: 2000, reference: "TRF-77", confirmedExternalPayment: true, clientKey: key() });
     let d = (await debts.getDebt(debtId))!;
     assert.equal(d.status, "OPEN");
-    assert.equal(d.remainingAgorot, 3200);
-    await rejects(debts.settleDebtExternal({ debtId, adminId: ids.admin, amountAgorot: 3201, reference: "TRF-78", confirmedExternalPayment: true, clientKey: key() }), "INVALID");
-    await rejects(debts.waiveDebt({ debtId, adminId: ids.admin, amountAgorot: 3201, reason: "יותר מדי", clientKey: key() }), "INVALID");
+    assert.equal(d.remainingAgorot, 5500);
+    await rejects(debts.settleDebtExternal({ debtId, adminId: ids.admin, amountAgorot: 5501, reference: "TRF-78", confirmedExternalPayment: true, clientKey: key() }), "INVALID");
+    await rejects(debts.waiveDebt({ debtId, adminId: ids.admin, amountAgorot: 5501, reason: "יותר מדי", clientKey: key() }), "INVALID");
     await rejects(debts.settleDebtExternal({ debtId, adminId: ids.admin, amountAgorot: -5, reference: "TRF-79", confirmedExternalPayment: true, clientKey: key() }), "INVALID");
     await debts.waiveDebt({ debtId, adminId: ids.admin, reason: "מחילה על היתרה", clientKey: key() });
     d = (await debts.getDebt(debtId))!;
     assert.equal(d.status, "WAIVED");
     assert.equal(d.paidAgorot, 2000);
-    assert.equal(d.waivedAgorot, 3200);
+    assert.equal(d.waivedAgorot, 5500);
     assert.equal(d.remainingAgorot, 0);
     // רשת ביטחון במסד: גם עדכון ישיר שחורג נחסם
     await assert.rejects(prisma.$executeRaw`UPDATE "Debt" SET "paidAgorot" = "amountAgorot" + 1 WHERE id = ${debtId}`);
@@ -382,8 +382,8 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
 
   test("9. אישור הזמנה עם חוב: הצגת סכומים, אישור מפורש וסכום צפוי, יצירה אטומית עם ביקורת; ללא עקיפת זמינות", async () => {
     const quote = await debtBooking.quoteDebtBooking(debtBookingInput(ids.a));
-    assert.equal(quote.bookingAmountAgorot, 5200);
-    assert.equal(quote.debtAgorot, 5200);
+    assert.equal(quote.bookingAmountAgorot, 7500);
+    assert.equal(quote.debtAgorot, 7500);
     assert.equal(quote.available, true);
     await rejects(debtBooking.approveBookingWithDebt(debtBookingInput(ids.a, { confirm: false })), "INVALID");
     await rejects(debtBooking.approveBookingWithDebt(debtBookingInput(ids.a, { expectedDebtAgorot: 100 })), "CONFLICT");
@@ -395,7 +395,7 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
     assert.equal(appt.status, "CONFIRMED");
     assert.equal(appt.paymentStatus, "DEBT");
     const debt = await prisma.debt.findUniqueOrThrow({ where: { id: res.debtId! } });
-    assert.equal(debt.amountAgorot, 5200);
+    assert.equal(debt.amountAgorot, 7500);
     assert.equal(debt.createdById, ids.admin);
     const entry = await prisma.auditLog.findFirstOrThrow({ where: { action: "BOOKING_APPROVED_WITH_DEBT", entityId: debt.id } });
     assert.equal(entry.adminId, ids.admin);
@@ -435,8 +435,8 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
     const res = await payBooking.cancelBooking({ appointmentId: paid.appointmentId, requester: { id: ids.a, role: "CLIENT" }, provider });
     assert.equal(res.outcome, "REFUNDED");
     const o = await overview.getFinanceOverview({}, false);
-    assert.equal(o.collected.grossAgorot, 5200);
-    assert.equal(o.collected.refundedAgorot, 5200);
+    assert.equal(o.collected.grossAgorot, 7500);
+    assert.equal(o.collected.refundedAgorot, 7500);
     assert.equal(o.collected.netAgorot, 0);
     assert.equal(o.refunds.doneCount, 1);
     assert.equal((await overview.getLedger({ type: "REFUND" }))[0].status, "SUCCEEDED");
@@ -450,7 +450,7 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
     assert.equal(cancelled.outcome, "CANCELLED_NO_REFUND");
     const queue = await refunds.listRefundExceptions();
     assert.equal(queue.length, 1);
-    assert.equal(queue[0].refundableAgorot, 5200);
+    assert.equal(queue[0].refundableAgorot, 7500);
 
     await rejects(refunds.decideRefundException({ appointmentId: a.appointmentId, adminId: ids.admin, provider, decision: "APPROVE", reason: "" }), "INVALID");
     const ok = await refunds.decideRefundException({ appointmentId: a.appointmentId, adminId: ids.admin, provider, decision: "APPROVE", reason: "אירוע רפואי מתועד" });
@@ -475,9 +475,9 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
     const first = await refunds.issueAdminRefund({ paymentId: paid.paymentId, adminId: ids.admin, provider, amountAgorot: 2000, reason: "פיצוי חלקי", clientKey: key(), exception: true });
     assert.equal(first.status, "SUCCEEDED");
     assert.equal((await prisma.appointment.findUniqueOrThrow({ where: { id: paid.appointmentId } })).paymentStatus, "PAID");
-    await rejects(refunds.issueAdminRefund({ paymentId: paid.paymentId, adminId: ids.admin, provider, amountAgorot: 3201, reason: "יותר מדי", clientKey: key() }), "INVALID");
+    await rejects(refunds.issueAdminRefund({ paymentId: paid.paymentId, adminId: ids.admin, provider, amountAgorot: 5501, reason: "יותר מדי", clientKey: key() }), "INVALID");
     await rejects(refunds.issueAdminRefund({ paymentId: paid.paymentId, adminId: ids.admin, provider, amountAgorot: 100, reason: "", clientKey: key() }), "INVALID");
-    const rest = await refunds.issueAdminRefund({ paymentId: paid.paymentId, adminId: ids.admin, provider, amountAgorot: 3200, reason: "יתרת ההחזר", clientKey: key() });
+    const rest = await refunds.issueAdminRefund({ paymentId: paid.paymentId, adminId: ids.admin, provider, amountAgorot: 5500, reason: "יתרת ההחזר", clientKey: key() });
     assert.equal(rest.status, "SUCCEEDED");
     assert.equal((await prisma.appointment.findUniqueOrThrow({ where: { id: paid.appointmentId } })).paymentStatus, "REFUNDED");
     assert.equal((await prisma.mockProviderRecord.findUnique({ where: { key: `pay:${(await prisma.payment.findUniqueOrThrow({ where: { id: paid.paymentId } })).providerPaymentId}` } }))!.data && true, true);
@@ -489,18 +489,18 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
   test("13. החזר כפול: אותו מפתח = החזר אחד; מפתחות שונים ובמקביל לא חורגים מהסכום ששולם", async () => {
     const paid = await paidBooking(ids.a);
     const k = key();
-    const r1 = await refunds.issueAdminRefund({ paymentId: paid.paymentId, adminId: ids.admin, provider, amountAgorot: 5200, reason: "החזר מלא", clientKey: k });
-    const r2 = await refunds.issueAdminRefund({ paymentId: paid.paymentId, adminId: ids.admin, provider, amountAgorot: 5200, reason: "החזר מלא", clientKey: k });
+    const r1 = await refunds.issueAdminRefund({ paymentId: paid.paymentId, adminId: ids.admin, provider, amountAgorot: 7500, reason: "החזר מלא", clientKey: k });
+    const r2 = await refunds.issueAdminRefund({ paymentId: paid.paymentId, adminId: ids.admin, provider, amountAgorot: 7500, reason: "החזר מלא", clientKey: k });
     assert.equal(r1.refundId, r2.refundId);
     assert.equal(r2.replayed, true);
     assert.equal(await prisma.refund.count({ where: { paymentId: paid.paymentId } }), 1);
     await rejects(refunds.issueAdminRefund({ paymentId: paid.paymentId, adminId: ids.admin, provider, amountAgorot: 100, reason: "עוד", clientKey: key() }), "INVALID");
 
     const paid2 = await paidBooking(ids.b);
-    const par = await Promise.allSettled(Array.from({ length: 5 }, () => refunds.issueAdminRefund({ paymentId: paid2.paymentId, adminId: ids.admin, provider, amountAgorot: 5200, reason: "מקבילי", clientKey: key() })));
+    const par = await Promise.allSettled(Array.from({ length: 5 }, () => refunds.issueAdminRefund({ paymentId: paid2.paymentId, adminId: ids.admin, provider, amountAgorot: 7500, reason: "מקבילי", clientKey: key() })));
     assert.equal(par.filter((r) => r.status === "fulfilled").length, 1);
     const total = (await prisma.refund.aggregate({ where: { paymentId: paid2.paymentId, status: { not: "FAILED" } }, _sum: { amountAgorot: true } }))._sum.amountAgorot;
-    assert.equal(total, 5200);
+    assert.equal(total, 7500);
   });
 
   test("14. כשל ספק: דחייה ודאית = נכשל (והתקרה מתפנה); שגיאה לא ידועה = ממתין בבירור, ללא ניסיון חוזר עיוור", async () => {
@@ -508,11 +508,11 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
     MockPaymentProvider.prototype.refund = async () => {
       throw new PaymentStateError("rejected");
     };
-    const failed = await refunds.issueAdminRefund({ paymentId: paid.paymentId, adminId: ids.admin, provider, amountAgorot: 5200, reason: "ניסיון", clientKey: key() });
+    const failed = await refunds.issueAdminRefund({ paymentId: paid.paymentId, adminId: ids.admin, provider, amountAgorot: 7500, reason: "ניסיון", clientKey: key() });
     assert.equal(failed.status, "FAILED");
     assert.equal((await prisma.refund.findUniqueOrThrow({ where: { id: failed.refundId } })).status, "FAILED");
     MockPaymentProvider.prototype.refund = savedRefund;
-    const retry = await refunds.issueAdminRefund({ paymentId: paid.paymentId, adminId: ids.admin, provider, amountAgorot: 5200, reason: "ניסיון חוזר מתועד", clientKey: key() });
+    const retry = await refunds.issueAdminRefund({ paymentId: paid.paymentId, adminId: ids.admin, provider, amountAgorot: 7500, reason: "ניסיון חוזר מתועד", clientKey: key() });
     assert.equal(retry.status, "SUCCEEDED");
 
     const paid2 = await paidBooking(ids.b);
@@ -521,7 +521,7 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
       calls++;
       throw new Error("network timeout");
     };
-    const unknownRes = await refunds.issueAdminRefund({ paymentId: paid2.paymentId, adminId: ids.admin, provider, amountAgorot: 5200, reason: "תקלת רשת", clientKey: key() });
+    const unknownRes = await refunds.issueAdminRefund({ paymentId: paid2.paymentId, adminId: ids.admin, provider, amountAgorot: 7500, reason: "תקלת רשת", clientKey: key() });
     assert.equal(unknownRes.status, "UNKNOWN");
     assert.equal(calls, 1);
     assert.equal((await prisma.refund.findUniqueOrThrow({ where: { id: unknownRes.refundId } })).status, "PENDING");
@@ -543,7 +543,7 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
     const v = await refunds.verifyRefund({ refundId: unknownRes.refundId, adminId: ids.admin, provider });
     assert.equal(v.conclusion, "NOT_REFUNDED");
     assert.equal((await prisma.refund.findUniqueOrThrow({ where: { id: unknownRes.refundId } })).status, "FAILED");
-    const again = await refunds.issueAdminRefund({ paymentId: paid2.paymentId, adminId: ids.admin, provider, amountAgorot: 5200, reason: "אחרי אימות", clientKey: key() });
+    const again = await refunds.issueAdminRefund({ paymentId: paid2.paymentId, adminId: ids.admin, provider, amountAgorot: 7500, reason: "אחרי אימות", clientKey: key() });
     assert.equal(again.status, "SUCCEEDED");
   });
 
@@ -553,7 +553,7 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
       await savedRefund.call(this, input);
       throw new Error("response lost");
     };
-    const res = await refunds.issueAdminRefund({ paymentId: paid.paymentId, adminId: ids.admin, provider, amountAgorot: 5200, reason: "אבדה תשובה", clientKey: key() });
+    const res = await refunds.issueAdminRefund({ paymentId: paid.paymentId, adminId: ids.admin, provider, amountAgorot: 7500, reason: "אבדה תשובה", clientKey: key() });
     assert.equal(res.status, "UNKNOWN");
     MockPaymentProvider.prototype.refund = savedRefund;
     await rejects(refunds.resolveRefundManually({ refundId: res.refundId, adminId: ids.admin, provider, outcome: "FAILED", evidence: "" }), "INVALID");
@@ -570,20 +570,20 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
     const req = await pkgs.requestPackageCancellation({ userId: ids.a, packageId: pkg.id, reason: "לא צריך" });
     const pending = await pkgCancel.listCancellationRequests();
     assert.equal(pending[0].package.minutesConsumed, 0);
-    assert.equal(pending[0].package.refundableAgorot, 19500);
+    assert.equal(pending[0].package.refundableAgorot, 30000);
     assert.equal((await prisma.hoursPackage.findUniqueOrThrow({ where: { id: pkg.id } })).minutesRemaining, 300);
 
     await rejects(pkgCancel.decideCancellationRequest({ requestId: req.id, adminId: ids.admin, provider, decision: "APPROVE", reason: "" }), "INVALID");
-    await rejects(pkgCancel.decideCancellationRequest({ requestId: req.id, adminId: ids.admin, provider, decision: "APPROVE", reason: "אישור", refundAgorot: 19501 }), "INVALID");
+    await rejects(pkgCancel.decideCancellationRequest({ requestId: req.id, adminId: ids.admin, provider, decision: "APPROVE", reason: "אישור", refundAgorot: 30001 }), "INVALID");
     assert.equal((await prisma.packageCancellationRequest.findUniqueOrThrow({ where: { id: req.id } })).status, "PENDING");
 
-    const done = await pkgCancel.decideCancellationRequest({ requestId: req.id, adminId: ids.admin, provider, decision: "APPROVE", reason: "ביטול בתוך תקופת הניסיון", refundAgorot: 19500 });
+    const done = await pkgCancel.decideCancellationRequest({ requestId: req.id, adminId: ids.admin, provider, decision: "APPROVE", reason: "ביטול בתוך תקופת הניסיון", refundAgorot: 30000 });
     assert.equal(done.refundStatus, "SUCCEEDED");
     const after = await prisma.hoursPackage.findUniqueOrThrow({ where: { id: pkg.id } });
     assert.equal(after.minutesRemaining, 0);
     assert.ok(after.cancelledAt);
-    assert.equal((await prisma.refund.findUniqueOrThrow({ where: { id: done.refundId! } })).amountAgorot, 19500);
-    await rejects(pkgCancel.decideCancellationRequest({ requestId: req.id, adminId: ids.admin2, provider, decision: "APPROVE", reason: "שוב", refundAgorot: 19500 }), "CONFLICT");
+    assert.equal((await prisma.refund.findUniqueOrThrow({ where: { id: done.refundId! } })).amountAgorot, 30000);
+    await rejects(pkgCancel.decideCancellationRequest({ requestId: req.id, adminId: ids.admin2, provider, decision: "APPROVE", reason: "שוב", refundAgorot: 30000 }), "CONFLICT");
     assert.equal(await prisma.refund.count({ where: { paymentId: pkg.paymentId! } }), 1);
     // הלקוח לא יכול לנצל יתרה מחבילה שבוטלה
     await assert.rejects(bookFromBalance(ids.a));
@@ -598,7 +598,7 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
     const row = (await pkgCancel.listCancellationRequests())[0];
     assert.equal(row.package.minutesConsumed, 60);
     assert.equal(row.package.minutesRemaining, 240);
-    assert.equal(row.package.proportionalValueOfRemainingAgorot, 15600); // מידע בלבד
+    assert.equal(row.package.proportionalValueOfRemainingAgorot, 24000); // מידע בלבד
     const done = await pkgCancel.decideCancellationRequest({ requestId: req.id, adminId: ids.admin, provider, decision: "APPROVE", reason: "החזר חלקי לפי שיקול דעת", refundAgorot: 10000 });
     assert.equal(done.forfeitedMinutes, 240);
     assert.equal((await prisma.refund.findFirstOrThrow({ where: { paymentId: pkg.paymentId! } })).amountAgorot, 10000);
@@ -675,7 +675,7 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
     // תשלום ממתין שנקטע לפני שנשמר מזהה הספק
     const hold2 = await payBooking.holdRoom({ userId: ids.b, roomKey: "ROOM1", ...slot(), source: "ADMIN" });
     const orphan = await prisma.payment.create({
-      data: { userId: ids.b, appointmentId: hold2.id, purpose: "BOOKING", amountAgorot: 5200, status: "PENDING", environment: "SANDBOX", provider: "mock", idempotencyKey: `booking:${hold2.id}:1`, createdAt: new Date(Date.now() - 2 * HOUR) },
+      data: { userId: ids.b, appointmentId: hold2.id, purpose: "BOOKING", amountAgorot: 7500, status: "PENDING", environment: "SANDBOX", provider: "mock", idempotencyKey: `booking:${hold2.id}:1`, createdAt: new Date(Date.now() - 2 * HOUR) },
     });
     const queue = await unknown.listUnknown(new Date(), false);
     assert.deepEqual(queue.payments.map((p) => p.id).sort(), [started.paymentId, orphan.id].sort());

@@ -195,7 +195,7 @@ describe("תשלום על הזמנה והחזקת חדרים: מול PostgreSQL 
 
   test("תשלום מוצלח מאשר את ההזמנה רק אחרי אימות מהספק, והחדר נשאר חסום", async () => {
     const { hold: h, started } = await holdAndStart(userA, "ROOM3", 10);
-    assert.equal(started.amountAgorot, 5200);
+    assert.equal(started.amountAgorot, 7500);
 
     // עד שהספק לא אישר, אין אישור (גם אם קוראים לאימות שוב ושוב)
     assert.equal((await svc.finalizeBookingPayment({ paymentId: started.paymentId, provider })).outcome, "PENDING");
@@ -253,13 +253,13 @@ describe("תשלום על הזמנה והחזקת חדרים: מול PostgreSQL 
     const refunds = await prisma.refund.findMany({ where: { paymentId: started.paymentId } });
     assert.equal(refunds.length, 1);
     assert.equal(refunds[0].status, "SUCCEEDED");
-    assert.equal(refunds[0].amountAgorot, 5200);
-    assert.equal((await provider.getPaymentStatus(started.providerPaymentId)).refundedAgorot, 5200);
+    assert.equal(refunds[0].amountAgorot, 7500);
+    assert.equal((await provider.getPaymentStatus(started.providerPaymentId)).refundedAgorot, 7500);
 
     // הפעלה חוזרת לא מחזירה פעמיים
     assert.equal((await svc.finalizeBookingPayment({ paymentId: started.paymentId, provider, now: afterExpiry })).outcome, "LATE_REFUNDED");
     assert.equal(await prisma.refund.count({ where: { paymentId: started.paymentId } }), 1);
-    assert.equal((await provider.getPaymentStatus(started.providerPaymentId)).refundedAgorot, 5200);
+    assert.equal((await provider.getPaymentStatus(started.providerPaymentId)).refundedAgorot, 7500);
 
     // והחדר פנוי למשתמש אחר
     await hold(userB, "ROOM3", 10);
@@ -375,7 +375,7 @@ describe("תשלום על הזמנה והחזקת חדרים: מול PostgreSQL 
     const h = await hold(userA, "ROOM3", 10);
     const pay = await prisma.payment.create({
       data: {
-        userId: userA, appointmentId: h.id, purpose: "BOOKING", amountAgorot: 5200, status: "PENDING",
+        userId: userA, appointmentId: h.id, purpose: "BOOKING", amountAgorot: 7500, status: "PENDING",
         environment: "SANDBOX", provider: "mock", idempotencyKey: `booking:${h.id}:1`,
       },
     });
@@ -410,7 +410,7 @@ describe("תשלום על הזמנה והחזקת חדרים: מול PostgreSQL 
     await prisma.payment.update({ where: { id: started.paymentId }, data: { amountAgorot: 100 } });
     assert.equal((await svc.finalizeBookingPayment({ paymentId: started.paymentId, provider })).outcome, "AMOUNT_MISMATCH");
     assert.equal((await apptOf(h.id)).status, "PENDING_PAYMENT");
-    await prisma.payment.update({ where: { id: started.paymentId }, data: { amountAgorot: 5200 } });
+    await prisma.payment.update({ where: { id: started.paymentId }, data: { amountAgorot: 7500 } });
 
     // תשלום sandbox לא נפתר מול ספק שאינו sandbox
     await prisma.payment.update({ where: { id: started.paymentId }, data: { environment: "LIVE" } });
@@ -426,14 +426,14 @@ describe("תשלום על הזמנה והחזקת חדרים: מול PostgreSQL 
     // האילוצים במסד: לא ניתן ליצור תשלום הזמנה שני ממתין/מוצלח לאותה הזמנה
     await assert.rejects(
       () => prisma.payment.create({
-        data: { userId: userA, appointmentId: h.id, purpose: "BOOKING", amountAgorot: 5200, status: "PENDING", environment: "SANDBOX", provider: "mock", idempotencyKey: "dup-pending" },
+        data: { userId: userA, appointmentId: h.id, purpose: "BOOKING", amountAgorot: 7500, status: "PENDING", environment: "SANDBOX", provider: "mock", idempotencyKey: "dup-pending" },
       }),
       /Unique|unique/
     );
     assert.equal((await svc.finalizeBookingPayment({ paymentId: started.paymentId, provider })).outcome, "CONFIRMED");
     await assert.rejects(
       () => prisma.payment.create({
-        data: { userId: userA, appointmentId: h.id, purpose: "BOOKING", amountAgorot: 5200, status: "SUCCEEDED", environment: "SANDBOX", provider: "mock", idempotencyKey: "dup-success" },
+        data: { userId: userA, appointmentId: h.id, purpose: "BOOKING", amountAgorot: 7500, status: "SUCCEEDED", environment: "SANDBOX", provider: "mock", idempotencyKey: "dup-success" },
       }),
       /Unique|unique/
     );
@@ -456,7 +456,7 @@ describe("תשלום על הזמנה והחזקת חדרים: מול PostgreSQL 
     assert.equal(res.appointment.status, "CONFIRMED");
     assert.equal(res.appointment.paymentStatus, "DEBT");
     assert.equal(res.appointment.source, "ADMIN");
-    assert.equal(res.debt?.amountAgorot, 5200);
+    assert.equal(res.debt?.amountAgorot, 7500);
     assert.equal(res.debt?.status, "OPEN");
     assert.equal(res.debt?.createdById, adminId);
     assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: userA } })).status, "APPROVED");
@@ -500,7 +500,7 @@ describe("תשלום על הזמנה והחזקת חדרים: מול PostgreSQL 
     const appt = await apptOf(h.id);
     assert.equal(appt.status, "CANCELLED");
     assert.equal(appt.paymentStatus, "REFUNDED");
-    assert.equal((await provider.getPaymentStatus(started.providerPaymentId)).refundedAgorot, 5200);
+    assert.equal((await provider.getPaymentStatus(started.providerPaymentId)).refundedAgorot, 7500);
     assert.equal((await svc.cancelBooking({ appointmentId: h.id, requester: { id: userA, role: "CLIENT" }, provider })).outcome, "ALREADY_CANCELLED");
     assert.equal(await prisma.refund.count({ where: { paymentId: started.paymentId } }), 1);
   });
@@ -517,7 +517,7 @@ describe("תשלום על הזמנה והחזקת חדרים: מול PostgreSQL 
     assert.equal(approved.refund?.status, "SUCCEEDED");
     await svc.approveCancellationRefund({ appointmentId: h.id, adminId, provider });
     assert.equal(await prisma.refund.count({ where: { paymentId: started.paymentId } }), 1);
-    assert.equal((await provider.getPaymentStatus(started.providerPaymentId)).refundedAgorot, 5200);
+    assert.equal((await provider.getPaymentStatus(started.providerPaymentId)).refundedAgorot, 7500);
     assert.equal((await apptOf(h.id)).paymentStatus, "REFUNDED");
   });
 
@@ -555,7 +555,7 @@ describe("תשלום על הזמנה והחזקת חדרים: מול PostgreSQL 
 
     assert.equal((await payOf(b.started.paymentId)).status, "SUCCEEDED");
     assert.equal((await apptOf(b.hold.id)).status, "CANCELLED");
-    assert.equal((await provider.getPaymentStatus(b.started.providerPaymentId)).refundedAgorot, 5200);
+    assert.equal((await provider.getPaymentStatus(b.started.providerPaymentId)).refundedAgorot, 7500);
 
     assert.equal((await svc.expireStaleHolds({ provider })).expired, 0);
   });

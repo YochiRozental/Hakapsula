@@ -516,8 +516,15 @@ export async function decideShiftRequest(params: {
   if (newRoomKey === shift.room.key && newWeekday === shift.weekday && newWindow === shift.windowId) {
     throw new ShiftError("הבקשה אינה משנה דבר", "INVALID");
   }
+  // המחיר משתנה רק כשהבקשה כוללת מעבר מפורש למשבצת אחרת (אישור מפורש של המנהל למחיר החדש). שינוי חדר/יום בלבד
+  // ממשיך לתמחר לפי המחיר שהמשמרת כבר התחייבה אליו, גם אם מחיר המשבצת (windowId הנוכחי) נערך מאז ההזמנה
+  const windowChanged = request.proposedWindowId !== null;
+  const effectiveMonthlyPriceAgorot = windowChanged ? windowDef.monthlyPriceAgorot : shift.monthlyPriceAgorot;
 
-  const planned = await planOccurrences({ userId: shift.userId, roomKey: newRoomKey, weekday: newWeekday, windowId: newWindow, from, to: shift.endDate, startDate: shift.startDate, allowInactiveWindow: newWindow === shift.windowId }, db).catch((err) => {
+  const planned = await planOccurrences(
+    { userId: shift.userId, roomKey: newRoomKey, weekday: newWeekday, windowId: newWindow, from, to: shift.endDate, startDate: shift.startDate, allowInactiveWindow: newWindow === shift.windowId, priceOverrideAgorot: windowChanged ? undefined : effectiveMonthlyPriceAgorot },
+    db
+  ).catch((err) => {
     if (err instanceof ShiftError && err.message === "אין מופעים בתקופה שנבחרה") return { occurrences: [], conflicts: [], window: windowDef };
     throw err;
   });
@@ -554,7 +561,7 @@ export async function decideShiftRequest(params: {
     }
     await tx.shift.update({
       where: { id: shift.id },
-      data: { roomId: newRoom.id, weekday: newWeekday, windowId: newWindow, occurrencePriceAgorot: Math.round(windowDef.monthlyPriceAgorot / 4), monthlyPriceAgorot: windowDef.monthlyPriceAgorot },
+      data: { roomId: newRoom.id, weekday: newWeekday, windowId: newWindow, occurrencePriceAgorot: Math.round(effectiveMonthlyPriceAgorot / 4), monthlyPriceAgorot: effectiveMonthlyPriceAgorot },
     });
     return planned.occurrences.filter((o) => !o.skipReason).length;
   });

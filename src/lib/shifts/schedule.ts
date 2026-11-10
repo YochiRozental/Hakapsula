@@ -71,6 +71,11 @@ export interface PlanInput {
   paymentMode?: "AUTO" | "MANUAL";
   /** שינוי מאושר של משמרת קיימת רשאי להמשיך להשתמש במשבצת שהושבתה מאז (לא מזמינים אותה מחדש ללקוחות) */
   allowInactiveWindow?: boolean;
+  /**
+   * מחיר חודשי לתמחור המופעים, במקום מחיר המשבצת הנוכחי (ראו decideShiftRequest): שינוי מאושר שאינו כולל מעבר
+   * מפורש למשבצת אחרת ממשיך לתמחר לפי המחיר שהלקוח כבר התחייב אליו, גם אם מחיר המשבצת עצמה נערך מאז.
+   */
+  priceOverrideAgorot?: number;
 }
 
 /** תכנון הלוח של משמרת חדשה: מאמת את הקלט, ומתכנן מתאריך ההתחלה ועד סוף שלושת החודשים. לא כולל זמינות החדר (ראו findRoomConflicts) */
@@ -90,7 +95,7 @@ export async function planOccurrences(
   input: Omit<PlanInput, "startDate"> & { from: string; to: string; /** תאריך ההתחלה המקורי של המשמרת (קובע את תקופות החיוב) */ startDate: string },
   db: PrismaClient = defaultDb
 ): Promise<{ occurrences: PlannedOccurrence[]; conflicts: ShiftConflict[]; window: ShiftWindowDef }> {
-  const { userId, roomKey, weekday, windowId, from, to, startDate, allowInactiveWindow } = input;
+  const { userId, roomKey, weekday, windowId, from, to, startDate, allowInactiveWindow, priceOverrideAgorot } = input;
 
   if (!ROOM_KEYS.includes(roomKey)) throw new ShiftError("חדר לא קיים", "INVALID");
   if (!SHIFT_WEEKDAYS.includes(weekday as (typeof SHIFT_WEEKDAYS)[number])) throw new ShiftError("יום בשבוע לא תקין (אין משמרות בשבת)", "INVALID");
@@ -112,7 +117,7 @@ export async function planOccurrences(
       month: periodKeyOf(startDate, date),
       startTime,
       endTime,
-      priceAgorot: occurrencePriceAgorot(shiftWindow.monthlyPriceAgorot, startDate, weekday, date),
+      priceAgorot: occurrencePriceAgorot(priceOverrideAgorot ?? shiftWindow.monthlyPriceAgorot, startDate, weekday, date),
     };
     const day = resolveDay(windows, date);
     if (day.closed) {

@@ -5,8 +5,8 @@
 
 export const SLOT_MINUTES = 15;
 
-export const REGULAR_HOURLY_AGOROT = 5200; // 52 ₪ לשעה
-export const REGULAR_QUARTER_HOUR_AGOROT = 1300; // 13 ₪ לכל 15 דקות
+export const REGULAR_QUARTER_HOUR_AGOROT = 1875; // 18.75 ₪ לכל 15 דקות
+export const REGULAR_HOURLY_AGOROT = REGULAR_QUARTER_HOUR_AGOROT * 4; // 75 ₪ לשעה
 
 export function assertQuarterHours(minutes: number) {
   if (!Number.isInteger(minutes) || minutes <= 0 || minutes % SLOT_MINUTES !== 0) {
@@ -21,11 +21,17 @@ export function regularPriceAgorot(minutes: number): number {
 }
 
 // ---- חבילות שעות ----
+// מחירון נוכחי, זמין לרכישה חדשה. חבילות שהוסרו מהמכירה (אך עדיין נתמכות במלואן ליתרות קיימות, כי אינן תלויות
+// ברשימה הזו בכלל — ראו HoursPackage.pricePaidAgorot/minutesRemaining) מתועדות ב-LEGACY_HOURS_PACKAGES בלבד.
 
 export const HOURS_PACKAGES = [
-  { hours: 5, priceAgorot: 19500 },
-  { hours: 10, priceAgorot: 36400 },
-  { hours: 20, priceAgorot: 67600 },
+  { hours: 5, priceAgorot: 30000 },
+  { hours: 10, priceAgorot: 55000 },
+  { hours: 20, priceAgorot: 100000 },
+] as const;
+
+/** הוסרו מהמכירה (לא ניתנות לרכישה חדשה דרך findHoursPackage). תיעוד בלבד — יתרות שכבר נרכשו אינן תלויות כאן */
+export const LEGACY_HOURS_PACKAGES = [
   { hours: 50, priceAgorot: 143000 },
   { hours: 100, priceAgorot: 275600 },
 ] as const;

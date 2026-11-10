@@ -113,7 +113,7 @@ describe("הזמנה ותשלום בטלפון: IVR אמיתי מקצה לקצה
 
   const seedPackage = (userId: string, minutes: number) =>
     prisma.hoursPackage.create({
-      data: { userId, hours: 5, pricePaidAgorot: 19500, minutesTotal: minutes, minutesRemaining: minutes, expiresAt: new Date(Date.now() + 300 * DAY) },
+      data: { userId, hours: 5, pricePaidAgorot: 30000, minutesTotal: minutes, minutesRemaining: minutes, expiresAt: new Date(Date.now() + 300 * DAY) },
     });
   const remaining = async (userId: string) => (await prisma.hoursPackage.aggregate({ where: { userId }, _sum: { minutesRemaining: true } }))._sum.minutesRemaining ?? 0;
   const addCard = async (userId: string) => {
@@ -205,7 +205,7 @@ describe("הזמנה ותשלום בטלפון: IVR אמיתי מקצה לקצה
     const s = new Session(PHONES.u1);
     const menu = await s.toMenu();
     assert.match(menu, /מכסה את כל ההזמנה/);
-    assert.match(menu, /52 שקלים/);
+    assert.match(menu, /75 שקלים/);
     assert.match(menu, /עשר דקות/);
     assert.equal((await counts()).holds, 1, "נוצרה החזקה לפני התשלום");
     assert.equal(await remaining(ids.u1), 300, "אין ניכוי עד האישור");
@@ -229,32 +229,32 @@ describe("הזמנה ותשלום בטלפון: IVR אמיתי מקצה לקצה
     const s = new Session(PHONES.u1);
     const menu = await s.toMenu();
     assert.match(menu, /סביבת בדיקות/);
-    assert.match(menu, /יחויבו 52 שקלים בכרטיס השמור המסתיים ב 4 2 4 2/);
+    assert.match(menu, /יחויבו 75 שקלים בכרטיס השמור המסתיים ב 4 2 4 2/);
     assert.match(await s.answer("1"), /הקוד הטלפוני/);
-    assert.match(await s.answer(PIN), /חויבו 52 שקלים/);
+    assert.match(await s.answer(PIN), /חויבו 75 שקלים/);
 
     const c = await counts();
     assert.deepEqual([c.confirmed, c.holds, c.payments, c.succeeded, c.providerPays], [1, 0, 1, 1, 1]);
     const pay = await prisma.payment.findFirstOrThrow({});
-    assert.deepEqual([pay.amountAgorot, pay.environment, pay.provider, pay.purpose], [5200, "SANDBOX", "mock", "BOOKING"]);
+    assert.deepEqual([pay.amountAgorot, pay.environment, pay.provider, pay.purpose], [7500, "SANDBOX", "mock", "BOOKING"]);
     assert.ok(pay.paymentMethodId);
     const appt = await prisma.appointment.findFirstOrThrow({});
-    assert.deepEqual([appt.status, appt.paymentStatus, appt.paidCashAgorot, appt.paidFromBalanceMinutes], ["CONFIRMED", "PAID", 5200, 0]);
+    assert.deepEqual([appt.status, appt.paymentStatus, appt.paidCashAgorot, appt.paidFromBalanceMinutes], ["CONFIRMED", "PAID", 7500, 0]);
   });
 
-  test("תשלום משולב: ההפרש מוצג, הקוד נדרש, חיוב Mock של 26 ₪ וניכוי 30 דקות באישור", async () => {
+  test("תשלום משולב: ההפרש מוצג, הקוד נדרש, חיוב Mock של 37.5 ₪ וניכוי 30 דקות באישור", async () => {
     await addCard(ids.u1);
     await seedPackage(ids.u1, 30);
     const s = new Session(PHONES.u1);
     const menu = await s.toMenu();
-    assert.match(menu, /ינוצלו 30 דקות מהיתרה ויחויבו 26 שקלים/);
+    assert.match(menu, /ינוצלו 30 דקות מהיתרה ויחויבו 37 שקלים ו50 אגורות/);
     assert.equal(await remaining(ids.u1), 30);
     await s.answer("1");
     const final = await s.answer(PIN);
-    assert.match(final, /חויבו 26 שקלים/);
+    assert.match(final, /חויבו 37 שקלים ו50 אגורות/);
     assert.match(final, /נוצלו 30 דקות מהיתרה/);
     const appt = await prisma.appointment.findFirstOrThrow({});
-    assert.deepEqual([appt.status, appt.paidFromBalanceMinutes, appt.paidCashAgorot], ["CONFIRMED", 30, 2600]);
+    assert.deepEqual([appt.status, appt.paidFromBalanceMinutes, appt.paidCashAgorot], ["CONFIRMED", 30, 3750]);
     assert.equal(await remaining(ids.u1), 0);
     assert.equal((await prisma.payment.findFirstOrThrow({})).packageMinutes, 30);
   });
