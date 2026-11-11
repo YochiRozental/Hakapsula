@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { ROOM_KEYS, ROOM_LABELS } from "@/lib/rooms";
 import {
   activityMatches,
-  ACTIVITY_LABELS,
   explainUnavailable,
   formatMinutes,
   formatWindow,
@@ -19,7 +18,6 @@ import {
 } from "@/lib/slots";
 import { MonthCalendar } from "@/components/month-calendar";
 import { ClockTimePicker } from "@/components/clock-time-picker";
-import { ActivityBadge } from "@/components/hours-summary";
 import { useDayHours } from "@/lib/use-day-hours";
 import { probeGate, usePaymentsGate } from "@/lib/payments/client";
 import {
@@ -148,15 +146,20 @@ export default function BookingPage() {
       if (startMinutes < now.getHours() * 60 + now.getMinutes())
         return "השעה כבר עברה";
     }
-    return explainUnavailable(
+    const reason = explainUnavailable(
       dayHours,
       startMinutes,
       startMinutes + durationMinutes,
       track ?? undefined,
     );
+    return reason ? "המועד אינו זמין להזמנה" : null;
   };
   const selectedReason = unavailableReason(parseTimeOption(startTime));
   const dayWindows = dayHours?.windows ?? [];
+  // רק המועדים הפנויים עבור המשתמש (לפי המסלול שלו) — בלי לחשוף את החלוקה הפנימית
+  const availableWindows = dayWindows.filter((w) =>
+    activityMatches(w.activity, track ?? undefined),
+  );
 
   const endTimeLabel = formatMinutes(
     parseTimeOption(startTime) + durationMinutes,
@@ -392,15 +395,6 @@ export default function BookingPage() {
               >
                 שעת התחלה
               </SectionTitle>
-              {userTrack && (
-                <p className="mb-5 flex items-center gap-2 text-sm rounded-xl bg-cream-50 ring-1 ring-cream-200 px-3.5 py-2.5">
-                  <ActivityBadge activity={userTrack} />
-                  <span className="text-stone-600">
-                    מוצגות לך השעות המתאימות למסלול {ACTIVITY_LABELS[userTrack]}
-                    .
-                  </span>
-                </p>
-              )}
               <div
                 className="mb-5 text-sm rounded-xl bg-cream-50 ring-1 ring-cream-200 px-3.5 py-3 space-y-2"
                 aria-live="polite"
@@ -410,45 +404,26 @@ export default function BookingPage() {
                 </p>
                 {!dayHours ? (
                   <p className="text-stone-500">טוען...</p>
-                ) : dayWindows.length === 0 ? (
-                  <p className="text-red-600">
-                    {explainUnavailable(dayHours, 0, 1, track ?? undefined)}
-                  </p>
+                ) : availableWindows.length === 0 ? (
+                  <p className="text-red-600">אין מועדים פנויים ביום זה</p>
                 ) : (
                   <ul className="space-y-1.5">
-                    {dayWindows.map((w, i) => {
-                      const fits = activityMatches(
-                        w.activity,
-                        track ?? undefined,
-                      );
-                      return (
-                        <li
-                          key={i}
-                          className={`flex flex-wrap items-baseline justify-between gap-x-3 ${fits ? "text-stone-800" : "text-stone-400"}`}
-                        >
-                          <span
-                            className="tabular-nums font-semibold"
-                            dir="ltr"
-                          >
-                            {formatWindow(w)}
-                          </span>
-                          <span className="flex items-center gap-2 text-xs">
-                            <ActivityBadge activity={w.activity} />
-                            {!fits && track && (
-                              <span>
-                                לא מתאים למסלול {ACTIVITY_LABELS[track]}
-                              </span>
-                            )}
-                          </span>
-                        </li>
-                      );
-                    })}
+                    {availableWindows.map((w, i) => (
+                      <li
+                        key={i}
+                        className="flex flex-wrap items-baseline justify-between gap-x-3 text-stone-800"
+                      >
+                        <span className="tabular-nums font-semibold" dir="ltr">
+                          {formatWindow(w)}
+                        </span>
+                      </li>
+                    ))}
                   </ul>
                 )}
                 <p className="text-xs text-stone-500">
-                  שעות וחלונות באפור אינם מתאימים למסלול שנבחר (או שכבר עברו).
-                  {userTrack === null &&
-                    " התחברו כדי להזמין — ההזמנה תתאים אוטומטית למסלול שלכם."}
+                  {userTrack === null
+                    ? "התחברו כדי להזמין — יוצגו לך השעות הפנויות עבורך."
+                    : "שעות שעברו אינן זמינות לבחירה."}
                 </p>
               </div>
               <ClockTimePicker

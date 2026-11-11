@@ -255,12 +255,6 @@ export function Sidebar({
         active: pathname === "/gallery" && !contactActive,
       },
       {
-        href: "/hours",
-        label: "שעות פעילות",
-        icon: "clock",
-        active: pathname === "/hours" && !contactActive,
-      },
-      {
         href: "/pricing",
         label: "מחירון",
         icon: "card",

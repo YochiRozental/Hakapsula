@@ -64,7 +64,7 @@ export async function assertBookable(startTime: Date, endTime: Date, source: str
   const track = source === "ADMIN" ? undefined : await trackForUser(userId);
   if (source !== "ADMIN" && !track) throw new BookingError("יש להשלים מגדר בפרופיל כדי לקבוע תור");
   const reason = hoursRejection(await loadWindows(), startTime, endTime, source, track);
-  if (reason) throw new BookingError(`הזמן שנבחר אינו זמין: ${reason}`);
+  if (reason) throw new BookingError(reason);
 }
 
 /**

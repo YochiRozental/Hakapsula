@@ -192,6 +192,23 @@ export function resolveDay(all: HoursWindow[], dateStr: string): ResolvedDay {
   return weeklyDay(all, parseDateKey(dateStr)?.getDay() ?? -1);
 }
 
+/**
+ * תצוגת יום ללקוח (API ציבורי): רק חלונות המסלול הידוע שלו, בלי לחשוף את חלונות המסלול האחר כלל.
+ * בלי מסלול ידוע (אורח, או לקוח שלא השלים מגדר) אין חלונות להצגה.
+ */
+export function dayForTrack(day: ResolvedDay, track?: BookingTrack): ResolvedDay {
+  return { ...day, windows: track ? day.windows.filter((w) => w.activity === track) : [] };
+}
+
+/**
+ * מה מחזיר ה-API הציבורי של שעות היום, לפי תפקיד המשתמש המחובר: מנהל מקבל את היום המלא (שני המסלולים, לצורך ניהול/יומן/תור
+ * ידני); לקוח מקבל רק את המסלול שלו (dayForTrack); אורח (role=null) לא מקבל שום חלון, גם אם משום מה הועבר לו track.
+ */
+export function openingHoursResponseFor(day: ResolvedDay, role: "ADMIN" | "CLIENT" | null, track?: BookingTrack): ResolvedDay {
+  if (role === "ADMIN") return day;
+  return dayForTrack(day, role === "CLIENT" ? track : undefined);
+}
+
 /** חלונות היום שמתאימים למסלול (ללא מסלול — כולם), עם איחוד חלונות רצופים: ההזמנה יכולה להימשך על פניהם */
 function matchingWindows(day: ResolvedDay, track?: BookingTrack): DayInterval[] {
   return mergeIntervals(day.windows.filter((w) => activityMatches(w.activity, track)), false);
@@ -264,9 +281,13 @@ function closedDayRejection(all: HoursWindow[], start: Date, end: Date): string 
   return null;
 }
 
+/** הודעת חסימה כללית ללקוח (אתר/IVR/משמרות): כשהדחייה נובעת מהמסלול (בנים/בנות) אין לחשוף את סוג המסלול או את סיבת הדחייה המדויקת */
+const PUBLIC_UNAVAILABLE_MESSAGE = "המועד אינו זמין להזמנה";
+
 /**
  * יום סגור חוסם את כולם (גם מנהל); שעות הפעילות והמסלול נאכפים על כולם מלבד מנהל (source ADMIN),
  * שרשאי לחרוג מהן בימי פעילות. שבת נבדקת בנפרד ותמיד קודם (closedDayViolation).
+ * ללקוח (לא ADMIN) הודעת דחייה לפי שעות/מסלול היא כללית בלבד — ראו PUBLIC_UNAVAILABLE_MESSAGE.
  */
 export function hoursRejection(
   all: HoursWindow[],
@@ -275,7 +296,10 @@ export function hoursRejection(
   source: string,
   track?: BookingTrack
 ): string | null {
-  return closedDayRejection(all, start, end) ?? (source === "ADMIN" ? null : bookingViolation(all, start, end, track));
+  const closed = closedDayRejection(all, start, end);
+  if (closed) return closed;
+  if (source === "ADMIN") return null;
+  return bookingViolation(all, start, end, track) ? PUBLIC_UNAVAILABLE_MESSAGE : null;
 }
 
 /** טווח ברירת המחדל של יומן ביום ללא חלונות פתוחים ובלי תורים (8:00–20:00). אינו שעות פעילות — רק תצוגה */

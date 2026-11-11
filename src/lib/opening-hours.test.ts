@@ -14,6 +14,8 @@ import {
   closedDayViolation,
   jerusalemParts,
   defaultDayWindow,
+  dayForTrack,
+  openingHoursResponseFor,
   explainUnavailable,
   fitsOpening,
   resolveDay,
@@ -207,6 +209,40 @@ test("הסבר לחלון לא מתאים כולל את שם המסלול", () =
   assert.match(explainUnavailable(resolveDay([weekly(0, 8, 12, "BOYS")], SUN), 13 * 60, 14 * 60, "GIRLS")!, /אין חלונות המתאימים למסלול בנות/);
   assert.match(explainUnavailable(day, 21 * 60, 22 * 60, "BOYS")!, /מחוץ לשעות הפעילות של מסלול בנים \(08:00–12:00 · 16:00–20:00\)/);
   assert.match(explainUnavailable(day, 21 * 60, 22 * 60)!, /^מחוץ לשעות הפעילות \(/);
+});
+
+// ---- /api/opening-hours: סינון לפי תפקיד (dayForTrack / openingHoursResponseFor) — האתר הציבורי אינו חושף את המסלול האחר ----
+test("dayForTrack: מחזיר רק את חלונות המסלול הידוע; בלי מסלול ידוע אין חלונות בכלל", () => {
+  const day = resolveDay(mixed, SUN); // 08–12 בנים, 12–16 בנות, 16–20 בנים
+  const boysView = dayForTrack(day, "BOYS");
+  assert.deepEqual(boysView.windows, [
+    { startMinutes: 8 * 60, endMinutes: 12 * 60, activity: "BOYS" },
+    { startMinutes: 16 * 60, endMinutes: 20 * 60, activity: "BOYS" },
+  ]);
+  assert.ok(boysView.windows.every((w) => w.activity === "BOYS")); // שום חלון של המסלול האחר לא דלף
+  assert.deepEqual(dayForTrack(day, "GIRLS").windows, [{ startMinutes: 12 * 60, endMinutes: 16 * 60, activity: "GIRLS" }]);
+  assert.deepEqual(dayForTrack(day, undefined).windows, []); // בלי מסלול ידוע (אורח, או לקוח בלי מגדר) — שום חלון, אפילו לא חלקי
+  // מידע שאינו נוגע למסלול (יום סגור, הערה) נשמר כרגיל
+  const closed = { source: "weekly" as const, closed: true, note: "חג", windows: [] };
+  assert.deepEqual(dayForTrack(closed, "BOYS"), closed);
+});
+
+test("openingHoursResponseFor: מנהל מקבל את היום המלא; לקוח רק את המסלול שלו; אורח כלום", () => {
+  const day = resolveDay(mixed, SUN);
+  // מנהל: היום המלא, גם אם משום מה יש לו track (למשל אם הוא גם לקוח) — תפקיד המנהל גובר
+  assert.deepEqual(openingHoursResponseFor(day, "ADMIN", undefined), day);
+  assert.deepEqual(openingHoursResponseFor(day, "ADMIN", "BOYS"), day);
+  // לקוח מחובר: רק המסלול שלו, לפי מגדרו
+  assert.deepEqual(openingHoursResponseFor(day, "CLIENT", "GIRLS").windows, [{ startMinutes: 12 * 60, endMinutes: 16 * 60, activity: "GIRLS" }]);
+  assert.deepEqual(openingHoursResponseFor(day, "CLIENT", "BOYS").windows, [
+    { startMinutes: 8 * 60, endMinutes: 12 * 60, activity: "BOYS" },
+    { startMinutes: 16 * 60, endMinutes: 20 * 60, activity: "BOYS" },
+  ]);
+  // לקוח בלי מגדר מושלם בפרופיל: track לא ידוע — אין חלונות
+  assert.deepEqual(openingHoursResponseFor(day, "CLIENT", undefined).windows, []);
+  // משתמש לא מחובר (role=null): שום חלון, אפילו אם הועבר track בטעות
+  assert.deepEqual(openingHoursResponseFor(day, null, undefined).windows, []);
+  assert.deepEqual(openingHoursResponseFor(day, null, "BOYS").windows, []);
 });
 
 test("אימות צד שרת לפי מסלול; IVR ללא מסלול; מנהל פטור בימי חול", () => {
