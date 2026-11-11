@@ -40,6 +40,7 @@ export const AUDIT_ACTION: Record<string, string> = {
   "shift_makeup.waived": "ויתור על שעה חלופית",
   "shift_window.update": "עדכון משבצת משמרת",
   "shift_window.create": "משבצת משמרת חדשה",
+  "pricing.update": "עדכון מחירון (שעה בודדת / כרטיסיות)",
   BOOKING_APPROVED_WITH_DEBT: "אישור הזמנה עם חוב",
   DEBT_SETTLED: "הסדרת חוב",
   DEBT_WAIVED: "ויתור על חוב",

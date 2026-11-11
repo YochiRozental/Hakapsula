@@ -6,6 +6,7 @@ import { assertBookable } from "@/lib/opening-hours-db";
 import { BookingError } from "@/lib/booking-error";
 import { jerusalemWallInstant } from "@/lib/jerusalem-time";
 import { regularPriceAgorot } from "@/lib/payments/pricing";
+import { getRegularPricing } from "@/lib/payments/pricing-db";
 import { createAdminBookingWithDebt } from "@/lib/payments/booking-payment";
 import { writeAudit } from "@/lib/finance/audit";
 import { FinanceError } from "@/lib/finance/errors";
@@ -60,7 +61,7 @@ export async function quoteDebtBooking(input: DebtBookingInput, now: Date = new 
     if (!(err instanceof BookingError)) throw err;
     closedReason = err.message;
   }
-  const priceAgorot = regularPriceAgorot(input.durationMinutes);
+  const priceAgorot = regularPriceAgorot(input.durationMinutes, (await getRegularPricing()).hourlyAgorot);
   return {
     customer: { id: customer.id, name: customer.name },
     room: ROOM_LABELS[input.roomKey],

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { findHoursPackage, packageExpiry, packageMinutes } from "@/lib/payments/pricing";
+import { getRegularPricing, hoursPackageOptions } from "@/lib/payments/pricing-db";
 import type { PaymentProvider } from "@/lib/payments/provider";
 import {
   PaymentFlowError,
@@ -44,7 +45,8 @@ export async function startPackagePurchase(params: {
   if (user.role !== "CLIENT" || user.status !== "APPROVED") {
     throw new PaymentFlowError("רק לקוח מאושר רשאי לרכוש חבילה", "FORBIDDEN");
   }
-  const option = findHoursPackage(hours);
+  const pricing = await getRegularPricing();
+  const option = findHoursPackage(hours, hoursPackageOptions(pricing));
   if (!option) throw new PaymentFlowError("חבילה לא קיימת", "INVALID");
   if (!CLIENT_KEY.test(clientKey)) throw new PaymentFlowError("מפתח הבקשה אינו תקין", "INVALID");
 
@@ -145,9 +147,13 @@ export async function finalizePackagePayment(params: {
     packageId,
   });
 
-  const option = payment.packageHours ? findHoursPackage(payment.packageHours) : undefined;
-  // המחיר השמור חייב להתאים לטבלת המחירים (הגנה מפני שורה שנפגעה)
-  if (!option || option.priceAgorot !== payment.amountAgorot) return result("AMOUNT_MISMATCH");
+  // המחיר נעול כבר ב-startPackagePurchase (payment.amountAgorot), ואינו נבדק כאן מחדש מול הקטלוג החי: הקטלוג
+  // ניתן לעריכת מנהל בכל רגע, ותשלום שנפתח לפני שינוי מחיר חייב להמשיך ולהתממש באותו סכום שהלקוח אישר ושהספק
+  // בפועל חייב (ראו ההשוואה ל-verified.amountAgorot להלן) — לא להיפסל רק בגלל שהמחיר בקטלוג כבר השתנה.
+  // sanity קבוע: hours/amount חיוביים (payment.amountAgorot/packageHours נקבעים ע"י השרת בלבד ב-startPackagePurchase
+  // ואינם ניתנים לשינוי אחרי כן, ולכן אינם יכולים "להידרדר" מהקטלוג)
+  const hours = payment.packageHours;
+  if (!hours || !Number.isInteger(payment.amountAgorot) || payment.amountAgorot <= 0) return result("AMOUNT_MISMATCH");
 
   if (payment.hoursPackage) return result("ALREADY_ACTIVATED", payment.hoursPackage.id);
   if (!payment.providerPaymentId) return result("PENDING");
@@ -189,10 +195,10 @@ export async function finalizePackagePayment(params: {
       const created = await tx.hoursPackage.create({
         data: {
           userId: payment.userId,
-          hours: option.hours,
+          hours,
           pricePaidAgorot: payment.amountAgorot,
-          minutesTotal: packageMinutes(option.hours),
-          minutesRemaining: packageMinutes(option.hours),
+          minutesTotal: packageMinutes(hours),
+          minutesRemaining: packageMinutes(hours),
           purchasedAt: now,
           expiresAt: packageExpiry(now),
           paymentId: payment.id,

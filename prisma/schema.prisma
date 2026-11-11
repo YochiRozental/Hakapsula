@@ -616,6 +616,20 @@ model ShiftWindow {
   updatedAt          DateTime @updatedAt
 }
 
+/// מקור האמת היחיד למחיר שעה בודדת ולמחירי כרטיסיות השעות (5/10/20), ניתן לעריכה ע"י מנהל. שורה בודדת (id קבוע).
+/// עריכה משפיעה רק על רכישות/הזמנות חדשות: תשלומים וחבילות קיימים שומרים את המחיר שנקבע להם בזמן הרכישה
+/// (Payment.amountAgorot / HoursPackage.pricePaidAgorot) ואינם תלויים בשורה הזו לאחר מכן.
+model RegularPricing {
+  id              String   @id @default("default")
+  /// מחיר שעה בודדת, באגורות
+  hourlyAgorot    Int
+  package5Agorot  Int
+  package10Agorot Int
+  package20Agorot Int
+  updatedAt       DateTime @updatedAt
+  updatedById     String?
+}
+
 model Shift {
   id             String        @id @default(cuid())
   userId         String

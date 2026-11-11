@@ -14,8 +14,13 @@ import {
   usePaymentsGate,
   useSingleFlight,
 } from "@/lib/payments/client";
-import { HOURS_PACKAGES, packageSavingsAgorot } from "@/lib/payments/pricing";
 import type { BalanceView, HistoryEntry, PackageView } from "@/lib/payments/views";
+
+export interface PackageOfferView {
+  hours: number;
+  priceAgorot: number;
+  savingsAgorot: number;
+}
 
 type Tab = "balance" | "buy" | "history";
 
@@ -25,7 +30,7 @@ const TABS: { id: Tab; label: string; icon: IconName }[] = [
   { id: "history", label: "היסטוריה", icon: "list" },
 ];
 
-export function HoursCenter({ canPurchase }: { canPurchase: boolean }) {
+export function HoursCenter({ canPurchase, packages }: { canPurchase: boolean; packages: PackageOfferView[] }) {
   const gate = usePaymentsGate();
   const [tab, setTab] = useState<Tab>("balance");
   const [balanceVersion, setBalanceVersion] = useState(0);
@@ -51,7 +56,7 @@ export function HoursCenter({ canPurchase }: { canPurchase: boolean }) {
       </div>
 
       {tab === "balance" && <BalanceTab key={balanceVersion} onBuy={() => setTab("buy")} />}
-      {tab === "buy" && <BuyTab canPurchase={canPurchase} sandbox={gate.sandbox} onActivated={bump} />}
+      {tab === "buy" && <BuyTab canPurchase={canPurchase} sandbox={gate.sandbox} onActivated={bump} packages={packages} />}
       {tab === "history" && <HistoryTab />}
     </div>
   );
@@ -273,7 +278,7 @@ function newClientKey(): string {
   return globalThis.crypto.randomUUID().replace(/-/g, "");
 }
 
-function BuyTab({ canPurchase, sandbox, onActivated }: { canPurchase: boolean; sandbox: boolean; onActivated: () => void }) {
+function BuyTab({ canPurchase, sandbox, onActivated, packages }: { canPurchase: boolean; sandbox: boolean; onActivated: () => void; packages: PackageOfferView[] }) {
   const [confirming, setConfirming] = useState<{ hours: number; priceAgorot: number; key: string } | null>(null);
   const [purchase, setPurchase] = useState<Purchase | null>(null);
   const [message, setMessage] = useState<PurchaseMessage | null>(null);
@@ -406,13 +411,13 @@ function BuyTab({ canPurchase, sandbox, onActivated }: { canPurchase: boolean; s
       <section>
         <SectionTitle hint="כל חבילה תקפה שנה מיום הרכישה, לכל החדרים, וניצולה לפי דקות">חבילות שעות</SectionTitle>
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {HOURS_PACKAGES.map((p) => (
+          {packages.map((p) => (
             <li key={p.hours} className="card card-hover p-5 flex flex-col gap-3" data-testid="package-offer">
               <p className="font-display text-3xl font-bold text-stone-900">{p.hours} שעות</p>
               <p className="font-display text-2xl font-bold text-brand-700 tabular-nums">{shekel(p.priceAgorot)}</p>
               <ul className="text-sm text-stone-500 space-y-1">
                 <li>{shekel(Math.round(p.priceAgorot / p.hours))} לשעה</li>
-                <li>חיסכון של {shekel(packageSavingsAgorot(p))} לעומת מחיר רגיל</li>
+                <li>חיסכון של {shekel(p.savingsAgorot)} לעומת מחיר רגיל</li>
                 <li>תוקף: שנה מיום הרכישה</li>
               </ul>
               <button

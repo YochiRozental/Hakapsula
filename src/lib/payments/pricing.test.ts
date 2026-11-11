@@ -1,22 +1,29 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  HOURS_PACKAGES,
   allocatePackageMinutes,
   formatAgorot,
   packageExpiry,
   packageSavingsAgorot,
   regularPriceAgorot,
   splitBookingPrice,
+  type HoursPackageOption,
 } from "@/lib/payments/pricing";
 import { creditExpiry, isAutoRefundEligible } from "@/lib/payments/policy";
 
+const HOURLY_AGOROT = 7500; // 75 ₪ לשעה, ערך הבדיקה הנוכחי (ראו RegularPricing)
+const HOURS_PACKAGES: HoursPackageOption[] = [
+  { hours: 5, priceAgorot: 30000 },
+  { hours: 10, priceAgorot: 55000 },
+  { hours: 20, priceAgorot: 100000 },
+];
+
 test("regular price: 75 per hour, 18.75 per quarter hour", () => {
-  assert.equal(regularPriceAgorot(15), 1875);
-  assert.equal(regularPriceAgorot(60), 7500);
-  assert.equal(regularPriceAgorot(90), 11250);
-  assert.throws(() => regularPriceAgorot(20), RangeError);
-  assert.throws(() => regularPriceAgorot(0), RangeError);
+  assert.equal(regularPriceAgorot(15, HOURLY_AGOROT), 1875);
+  assert.equal(regularPriceAgorot(60, HOURLY_AGOROT), 7500);
+  assert.equal(regularPriceAgorot(90, HOURLY_AGOROT), 11250);
+  assert.throws(() => regularPriceAgorot(20, HOURLY_AGOROT), RangeError);
+  assert.throws(() => regularPriceAgorot(0, HOURLY_AGOROT), RangeError);
 });
 
 test("package prices match the price list and are cheaper than regular", () => {
@@ -24,8 +31,8 @@ test("package prices match the price list and are cheaper than regular", () => {
     HOURS_PACKAGES.map((p) => [p.hours, p.priceAgorot]),
     [[5, 30000], [10, 55000], [20, 100000]]
   );
-  for (const p of HOURS_PACKAGES) assert.ok(packageSavingsAgorot(p) > 0);
-  assert.equal(packageSavingsAgorot(HOURS_PACKAGES[0]), 5 * 7500 - 30000);
+  for (const p of HOURS_PACKAGES) assert.ok(packageSavingsAgorot(p, HOURLY_AGOROT) > 0);
+  assert.equal(packageSavingsAgorot(HOURS_PACKAGES[0], HOURLY_AGOROT), 5 * 7500 - 30000);
 });
 
 test("package expires one year after purchase, leap day clamped", () => {
@@ -74,15 +81,15 @@ test("allocation does not mutate its input", () => {
 
 test("booking split combines package balance with regular payment", () => {
   const pkgs = [{ id: "a", expiresAt: new Date("2027-01-01Z"), minutesRemaining: 45 }];
-  const split = splitBookingPrice(60, pkgs, now);
+  const split = splitBookingPrice(60, pkgs, now, HOURLY_AGOROT);
   assert.equal(split.packageMinutes, 45);
   assert.equal(split.regularMinutes, 15);
   assert.equal(split.regularPriceAgorot, 1875);
 
-  const full = splitBookingPrice(30, pkgs, now);
+  const full = splitBookingPrice(30, pkgs, now, HOURLY_AGOROT);
   assert.equal(full.regularPriceAgorot, 0);
 
-  const none = splitBookingPrice(60, [], now);
+  const none = splitBookingPrice(60, [], now, HOURLY_AGOROT);
   assert.equal(none.regularPriceAgorot, 7500);
 });
 

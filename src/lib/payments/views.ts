@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { quoteHold } from "@/lib/payments/booking-payment";
 import { loadUsableBalances } from "@/lib/payments/balances";
 import { regularPriceAgorot } from "@/lib/payments/pricing";
+import { getRegularPricing } from "@/lib/payments/pricing-db";
 import { PaymentFlowError } from "@/lib/payments/shared";
 
 /**
@@ -144,7 +145,7 @@ export async function getHoldDetails(appointmentId: string, userId: string, now:
 
   let fullPriceAgorot = 0;
   try {
-    fullPriceAgorot = regularPriceAgorot(durationMinutes);
+    fullPriceAgorot = regularPriceAgorot(durationMinutes, (await getRegularPricing()).hourlyAgorot);
   } catch {
     // משך שאינו ניתן לתמחור: נשאר 0 והתשלום יידחה בשרת
   }

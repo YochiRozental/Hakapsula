@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/ui";
 import { HoursCenter } from "@/components/payments/hours-center";
 import { getFlowProvider } from "@/lib/payments/flow";
+import { packageSavingsAgorot } from "@/lib/payments/pricing";
+import { getRegularPricing, hoursPackageOptions } from "@/lib/payments/pricing-db";
 
 /**
  * יתרת שעות, רכישת חבילות והיסטוריית תשלומים. חלק מ"הכרטיס שלי". קיים רק כשזרימת התשלום פעילה (סביבת פיתוח);
@@ -22,10 +24,13 @@ export default async function HoursPage() {
   const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { status: true, role: true } });
   if (!user) redirect("/login");
 
+  const pricing = await getRegularPricing();
+  const packages = hoursPackageOptions(pricing).map((p) => ({ ...p, savingsAgorot: packageSavingsAgorot(p, pricing.hourlyAgorot) }));
+
   return (
     <div className="max-w-4xl mx-auto">
       <PageHeader eyebrow="האזור האישי" title="חבילות שעות ויתרה" subtitle="יתרת הדקות שלכם, רכישת חבילות והיסטוריית תשלומים" />
-      <HoursCenter canPurchase={user.status === "APPROVED" && user.role === "CLIENT"} />
+      <HoursCenter canPurchase={user.status === "APPROVED" && user.role === "CLIENT"} packages={packages} />
     </div>
   );
 }

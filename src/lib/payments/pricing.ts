@@ -1,12 +1,10 @@
 /**
- * תמחור, חבילות ומשמרות. פונקציות טהורות בלבד (ללא מסד נתונים), הכול באגורות שלמות.
- * משכי זמן בדקות, בקפיצות של רבע שעה כמו שאר המערכת (SLOT_STEP_MINUTES).
+ * תמחור, חבילות ומשמרות. פונקציות טהורות בלבד (ללא מסד נתונים) — המחירים עצמם (שעה בודדת וכרטיסיות) הם פרמטר
+ * שהקורא מעביר, ומקורם היחיד הוא RegularPricing במסד (ראו pricing-db.ts). אין כאן קבועי מחיר קשיחים, כדי שלא
+ * תהיה כפילות בין מחיר בקוד למחיר במסד. הכול באגורות שלמות; משכי זמן בדקות, בקפיצות של רבע שעה.
  */
 
 export const SLOT_MINUTES = 15;
-
-export const REGULAR_QUARTER_HOUR_AGOROT = 1875; // 18.75 ₪ לכל 15 דקות
-export const REGULAR_HOURLY_AGOROT = REGULAR_QUARTER_HOUR_AGOROT * 4; // 75 ₪ לשעה
 
 export function assertQuarterHours(minutes: number) {
   if (!Number.isInteger(minutes) || minutes <= 0 || minutes % SLOT_MINUTES !== 0) {
@@ -14,21 +12,21 @@ export function assertQuarterHours(minutes: number) {
   }
 }
 
-/** מחיר רגיל להזמנה לפי משך בדקות */
-export function regularPriceAgorot(minutes: number): number {
+/** מחיר רגיל להזמנה לפי משך בדקות ומחיר שעה (באגורות) נוכחי. מעוגל לאגורה הקרובה */
+export function regularPriceAgorot(minutes: number, hourlyAgorot: number): number {
   assertQuarterHours(minutes);
-  return (minutes / SLOT_MINUTES) * REGULAR_QUARTER_HOUR_AGOROT;
+  return Math.round((minutes * hourlyAgorot) / 60);
 }
 
 // ---- חבילות שעות ----
-// מחירון נוכחי, זמין לרכישה חדשה. חבילות שהוסרו מהמכירה (אך עדיין נתמכות במלואן ליתרות קיימות, כי אינן תלויות
-// ברשימה הזו בכלל — ראו HoursPackage.pricePaidAgorot/minutesRemaining) מתועדות ב-LEGACY_HOURS_PACKAGES בלבד.
+// מחירי 5/10/20 השעות נשמרים ב-RegularPricing (ראו pricing-db.ts: hoursPackageOptions). חבילות שהוסרו מהמכירה
+// (אך עדיין נתמכות במלואן ליתרות קיימות, כי אינן תלויות ברשימה הזו בכלל — ראו HoursPackage.pricePaidAgorot/
+// minutesRemaining) מתועדות ב-LEGACY_HOURS_PACKAGES בלבד.
 
-export const HOURS_PACKAGES = [
-  { hours: 5, priceAgorot: 30000 },
-  { hours: 10, priceAgorot: 55000 },
-  { hours: 20, priceAgorot: 100000 },
-] as const;
+export interface HoursPackageOption {
+  hours: number;
+  priceAgorot: number;
+}
 
 /** הוסרו מהמכירה (לא ניתנות לרכישה חדשה דרך findHoursPackage). תיעוד בלבד — יתרות שכבר נרכשו אינן תלויות כאן */
 export const LEGACY_HOURS_PACKAGES = [
@@ -36,19 +34,17 @@ export const LEGACY_HOURS_PACKAGES = [
   { hours: 100, priceAgorot: 275600 },
 ] as const;
 
-export type HoursPackageOption = (typeof HOURS_PACKAGES)[number];
-
-export function findHoursPackage(hours: number): HoursPackageOption | undefined {
-  return HOURS_PACKAGES.find((p) => p.hours === hours);
+export function findHoursPackage(hours: number, options: readonly HoursPackageOption[]): HoursPackageOption | undefined {
+  return options.find((p) => p.hours === hours);
 }
 
 export function packageMinutes(hours: number): number {
   return hours * 60;
 }
 
-/** כמה נחסך בחבילה לעומת מחיר רגיל לאותן שעות */
-export function packageSavingsAgorot(option: HoursPackageOption): number {
-  return regularPriceAgorot(packageMinutes(option.hours)) - option.priceAgorot;
+/** כמה נחסך בחבילה לעומת מחיר רגיל לאותן שעות, לפי מחיר השעה הנוכחי */
+export function packageSavingsAgorot(option: HoursPackageOption, hourlyAgorot: number): number {
+  return regularPriceAgorot(packageMinutes(option.hours), hourlyAgorot) - option.priceAgorot;
 }
 
 /** תוקף חבילה: שנה מיום הרכישה. 29 בפברואר נחתך ל-28 בפברואר בשנה שאינה מעוברת */
@@ -118,14 +114,15 @@ export interface BookingPriceSplit {
 export function splitBookingPrice(
   durationMinutes: number,
   packages: PackageBalance[],
-  now: Date
+  now: Date,
+  hourlyAgorot: number
 ): BookingPriceSplit {
   assertQuarterHours(durationMinutes);
   const { allocations, shortfallMinutes } = allocatePackageMinutes(packages, durationMinutes, now);
   return {
     packageMinutes: durationMinutes - shortfallMinutes,
     regularMinutes: shortfallMinutes,
-    regularPriceAgorot: shortfallMinutes === 0 ? 0 : regularPriceAgorot(shortfallMinutes),
+    regularPriceAgorot: shortfallMinutes === 0 ? 0 : regularPriceAgorot(shortfallMinutes, hourlyAgorot),
     allocations,
   };
 }

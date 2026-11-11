@@ -7,6 +7,7 @@ import { ToneBadge } from "@/components/shifts/bits";
 import { api } from "@/lib/payments/client";
 import { AUDIT_ACTION, LEDGER_TYPE, Money, PAYMENT_STATUS, PURPOSE_LABEL, fmtDate, fmtDateTime } from "@/components/finance/bits";
 import { DebtsTab, PackageRequestsTab, RefundsTab, UnknownTab } from "@/components/finance/finance-actions";
+import { PricingTab } from "@/components/finance/pricing-tab";
 import { monthLabel, SHIFT_STATUS_TEXT, windowLabel, WEEKDAY_NAMES } from "@/lib/shifts/labels";
 
 export interface Overview {
@@ -36,7 +37,7 @@ export interface Overview {
   unusualAdminActions: { action: string; count: number }[];
 }
 
-type Tab = "overview" | "debts" | "refunds" | "packages" | "unknown" | "shifts" | "audit";
+type Tab = "overview" | "pricing" | "debts" | "refunds" | "packages" | "unknown" | "shifts" | "audit";
 
 export function FinanceAdmin() {
   const [tab, setTab] = useState<Tab>("overview");
@@ -47,6 +48,7 @@ export function FinanceAdmin() {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "overview", label: "תמונת מצב" },
+    { id: "pricing", label: "ניהול תמחור" },
     { id: "debts", label: "חובות" },
     { id: "refunds", label: "החזרים" },
     { id: "packages", label: "ביטול חבילות" },
@@ -76,6 +78,7 @@ export function FinanceAdmin() {
       </div>
       {notice && <Alert tone={notice.tone}>{notice.text}</Alert>}
       {tab === "overview" && <OverviewTab version={version} />}
+      {tab === "pricing" && <PricingTab onChanged={refresh} tell={tell} />}
       {tab === "debts" && <DebtsTab version={version} onChanged={refresh} tell={tell} />}
       {tab === "refunds" && <RefundsTab version={version} onChanged={refresh} tell={tell} />}
       {tab === "packages" && <PackageRequestsTab version={version} onChanged={refresh} tell={tell} />}

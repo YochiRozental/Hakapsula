@@ -20,6 +20,12 @@ function assertLocalTestDatabase(url: string) {
 const SECRET = "packages-test-secret-0123456789";
 const MIN = 60_000;
 const DAY = 24 * 3600_000;
+const HOURLY_AGOROT = 7500; // 75 ₪ לשעה, זהה לערך הזרוע בשורת RegularPricing של מסד הבדיקות
+const HOURS_PACKAGES = [
+  { hours: 5, priceAgorot: 30000 },
+  { hours: 10, priceAgorot: 55000 },
+  { hours: 20, priceAgorot: 100000 },
+];
 
 describe("חבילות שעות, יתרות ותשלום משולב: מול PostgreSQL מקומי", { skip: !testUrl && "PACKAGES_TEST_DATABASE_URL לא מוגדר" }, () => {
   type Db = typeof import("@/lib/prisma").prisma;
@@ -30,6 +36,7 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
   let bal: typeof import("@/lib/payments/balances");
   let views: typeof import("@/lib/payments/views");
   let pricing: typeof import("@/lib/payments/pricing");
+  let pricingDb: typeof import("@/lib/payments/pricing-db");
   let policy: typeof import("@/lib/payments/policy");
   let MockPaymentProvider: typeof import("@/lib/payments/mock-provider").MockPaymentProvider;
   let PrismaMockStore: typeof import("@/lib/payments/mock-store").PrismaMockStore;
@@ -75,6 +82,7 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
     bal = await import("@/lib/payments/balances");
     views = await import("@/lib/payments/views");
     pricing = await import("@/lib/payments/pricing");
+    pricingDb = await import("@/lib/payments/pricing-db");
     policy = await import("@/lib/payments/policy");
     ({ MockPaymentProvider } = await import("@/lib/payments/mock-provider"));
     ({ PrismaMockStore } = await import("@/lib/payments/mock-store"));
@@ -156,7 +164,7 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
   // ───────────── רכישת חבילות ─────────────
 
   test("רכישת כל אחת משלוש החבילות: מחיר מהטבלה, דקות, תוקף שנה וקשר לתשלום ולרוכש", async () => {
-    for (const option of pricing.HOURS_PACKAGES) {
+    for (const option of HOURS_PACKAGES) {
       const { started, res } = await buy(userA, option.hours);
       assert.equal(res.outcome, "PACKAGE_ACTIVATED");
       assert.equal(started.amountAgorot, option.priceAgorot);
@@ -253,10 +261,10 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
     assert.equal((await prisma.hoursPackage.findUniqueOrThrow({ where: { id: legacy.id } })).minutesRemaining, 100 * 60 - 60);
   });
 
-  test("אי אפשר לעקוף: סכום פגוע לא מפעיל חבילה, ותשלום לא אמיתי לא יוצר יתרה", async () => {
+  test("אי אפשר לעקוף: סכום שהוספק לא תואם למה שהספק בפועל אישר אינו מפעיל חבילה, ותשלום לא אמיתי לא יוצר יתרה", async () => {
     const started = await pkgs.startPackagePurchase({ userId: userA, hours: 20, clientKey: nextKey(), provider });
     await provider.completeCheckout(started.providerPaymentId!, "success");
-    // השורה אצלנו שונתה (למשל 20 שעות במחיר חבילת ה-5 שעות): לא מפעילים
+    // השורה אצלנו שונתה אחרי שהספק כבר אישר סכום אחר (הספק זוכר את הסכום המקורי מרגע פתיחת התשלום): לא מפעילים
     await prisma.payment.update({ where: { id: started.paymentId }, data: { amountAgorot: 30000 } });
     assert.equal((await pkgs.finalizePackagePayment({ paymentId: started.paymentId, provider })).outcome, "AMOUNT_MISMATCH");
     assert.equal(await prisma.hoursPackage.count({}), 0);
@@ -280,6 +288,36 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
     const rec = await svc.reconcilePendingPayments({ provider, olderThanMs: 0 });
     assert.deepEqual(rec.errors, []);
     assert.equal(await prisma.hoursPackage.count({ where: { userId: userA } }), 2);
+  });
+
+  test("שינוי מחיר קטלוג (ע\"י מנהל) בין פתיחת רכישת חבילה לאישורה: התשלום שהלקוח כבר שילם ממשיך להפעיל את החבילה במחיר שאושר, ולא נחסם כ-AMOUNT_MISMATCH", async () => {
+    const before5 = HOURS_PACKAGES.find((p) => p.hours === 5)!.priceAgorot; // 30000 (300 ₪)
+    const started = await pkgs.startPackagePurchase({ userId: userA, hours: 5, clientKey: nextKey(), provider });
+    assert.equal(started.amountAgorot, before5);
+    await provider.completeCheckout(started.providerPaymentId!, "success");
+
+    // המנהל משנה את מחיר כרטיסיית 5 השעות תוך כדי שהתשלום כבר פתוח ואושר אצל הספק
+    await pricingDb.saveRegularPricing({
+      adminId,
+      input: { hourlyAgorot: HOURLY_AGOROT, package5Agorot: 99900, package10Agorot: 55000, package20Agorot: 100000 },
+    });
+
+    const res = await pkgs.finalizePackagePayment({ paymentId: started.paymentId, provider });
+    assert.equal(res.outcome, "PACKAGE_ACTIVATED", "שינוי מחיר בקטלוג לא אמור לחסום תשלום שכבר נפתח ושולם");
+    const pkg = await prisma.hoursPackage.findUniqueOrThrow({ where: { id: res.packageId } });
+    assert.equal(pkg.pricePaidAgorot, before5, "המחיר שנשמר הוא זה שאושר ושולם, לא המחיר החדש בקטלוג");
+    assert.equal(pkg.hours, 5);
+    assert.equal((await payOf(started.paymentId)).amountAgorot, before5, "סכום התשלום עצמו לא משתנה בדיעבד");
+
+    // הקטלוג עצמו עודכן, וישמש רכישות עתידיות בלבד
+    const current = await pricingDb.getRegularPricing();
+    assert.equal(current.package5Agorot, 99900);
+
+    // משחזרים את הקטלוג כדי לא להשפיע על בדיקות אחרות באותו קובץ (הטבלה גלובלית ואינה מתאפסת ב-wipe לכל בדיקה)
+    await pricingDb.saveRegularPricing({
+      adminId,
+      input: { hourlyAgorot: HOURLY_AGOROT, package5Agorot: before5, package10Agorot: 55000, package20Agorot: 100000 },
+    });
   });
 
   // ───────────── ניצול יתרות ─────────────
@@ -320,7 +358,7 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
     const b = await hold(userA, "ROOM3", 10, 45);
     await confirmFromBalance(userA, b.id);
     assert.equal(await remaining(userA), 240);
-    assert.equal(pricing.regularPriceAgorot(15), 1875);
+    assert.equal(pricing.regularPriceAgorot(15, HOURLY_AGOROT), 1875);
   });
 
   test("החבילה שפוקעת ראשונה מנוצלת ראשונה (וגם זיכוי שפוקע ראשון)", async () => {
@@ -651,7 +689,7 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
 
     // הזיכוי ניתן לניצול לפני תשלום רגיל
     const sources = await bal.loadUsableBalances(prisma, userA, cancelAt);
-    const split = pricing.splitBookingPrice(60, sources.map(bal.toPackageBalance), cancelAt);
+    const split = pricing.splitBookingPrice(60, sources.map(bal.toPackageBalance), cancelAt, HOURLY_AGOROT);
     assert.deepEqual([split.packageMinutes, split.regularPriceAgorot], [60, 0]);
   });
 

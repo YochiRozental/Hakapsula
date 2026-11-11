@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BrandHeader, Icon, SectionTitle } from "@/components/ui";
-import { HOURS_PACKAGES, formatAgorot, regularPriceAgorot } from "@/lib/payments/pricing";
+import { formatAgorot, regularPriceAgorot } from "@/lib/payments/pricing";
+import { getRegularPricing, hoursPackageOptions } from "@/lib/payments/pricing-db";
 import { listShiftWindows } from "@/lib/shifts/windows-db";
 import { hhmm } from "@/lib/shifts/windows";
 
@@ -10,8 +11,10 @@ export const metadata = { title: "מחירון | הקפסולה" };
 const TRIAL_DISCOUNT_PERCENT = 25;
 
 export default async function PricingPage() {
-  const shiftWindows = (await listShiftWindows({ activeOnly: true })).filter((w) => w.active);
-  const singleHourAgorot = regularPriceAgorot(60);
+  const [shiftWindowsAll, pricing] = await Promise.all([listShiftWindows({ activeOnly: true }), getRegularPricing()]);
+  const shiftWindows = shiftWindowsAll.filter((w) => w.active);
+  const packages = hoursPackageOptions(pricing);
+  const singleHourAgorot = regularPriceAgorot(60, pricing.hourlyAgorot);
   const trialAgorot = Math.round((singleHourAgorot * (100 - TRIAL_DISCOUNT_PERCENT)) / 100);
 
   return (
@@ -64,7 +67,7 @@ export default async function PricingPage() {
           כרטיסיות שעות
         </SectionTitle>
         <div className="grid sm:grid-cols-3 gap-4">
-          {HOURS_PACKAGES.map((p) => (
+          {packages.map((p) => (
             <div key={p.hours} className="card card-hover p-6 text-center">
               <p className="font-display text-lg font-bold text-stone-900">{p.hours} שעות</p>
               <p className="font-display text-3xl font-bold text-brand-700 mt-2 tabular-nums">{p.priceAgorot / 100} ₪</p>

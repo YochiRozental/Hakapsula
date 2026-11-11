@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { BookingError, blockingAppointmentWhere, createBookingHold, lockRoomZone } from "@/lib/booking";
 import { CONFLICTING_ROOM_KEYS } from "@/lib/rooms";
 import { regularPriceAgorot, splitBookingPrice } from "@/lib/payments/pricing";
+import { getRegularPricing } from "@/lib/payments/pricing-db";
 import { isAutoRefundEligible } from "@/lib/payments/policy";
 import type { PaymentProvider } from "@/lib/payments/provider";
 import type { BookingSource, Payment, RoomKey } from "@/generated/prisma/client";
@@ -37,10 +38,10 @@ function durationOf(appt: { startTime: Date; endTime: Date }): number {
   return (appt.endTime.getTime() - appt.startTime.getTime()) / 60_000;
 }
 
-function priceFor(appt: { startTime: Date; endTime: Date }): number {
+function priceFor(appt: { startTime: Date; endTime: Date }, hourlyAgorot: number): number {
   try {
-    // המחיר מחושב בשרת מתוך זמני ההזמנה השמורים. סכום מהלקוח אינו נקלט בשום מקום
-    return regularPriceAgorot(durationOf(appt));
+    // המחיר מחושב בשרת מתוך זמני ההזמנה השמורים ומחיר השעה הנוכחי מהמסד. סכום מהלקוח אינו נקלט בשום מקום
+    return regularPriceAgorot(durationOf(appt), hourlyAgorot);
   } catch {
     throw new PaymentFlowError("משך ההזמנה אינו ניתן לתמחור (חייב להיות מכפלה של 15 דקות)", "INVALID");
   }
@@ -106,10 +107,11 @@ async function planFor(
   useBalance: boolean
 ): Promise<BookingPlan> {
   const durationMinutes = durationOf(appt);
-  const fullPrice = priceFor(appt); // מוודא שהמשך ניתן לתמחור
+  const pricing = await getRegularPricing();
+  const fullPrice = priceFor(appt, pricing.hourlyAgorot); // מוודא שהמשך ניתן לתמחור
   if (!useBalance) return { durationMinutes, packageMinutes: 0, cashAgorot: fullPrice, fullyCoveredByBalance: false };
   const sources = await loadUsableBalances(prisma, userId, now);
-  const split = splitBookingPrice(durationMinutes, sources.map(toPackageBalance), now);
+  const split = splitBookingPrice(durationMinutes, sources.map(toPackageBalance), now, pricing.hourlyAgorot);
   return {
     durationMinutes,
     packageMinutes: split.packageMinutes,
@@ -294,7 +296,7 @@ export async function confirmBookingFromBalance(params: {
   const appt = await prisma.appointment.findUnique({ where: { id: appointmentId }, include: { room: true } });
   if (!appt || appt.userId !== userId) throw new PaymentFlowError("ההזמנה לא נמצאה", "NOT_FOUND");
   const minutes = durationOf(appt);
-  priceFor(appt); // מוודא שהמשך ניתן לתמחור
+  priceFor(appt, (await getRegularPricing()).hourlyAgorot); // מוודא שהמשך ניתן לתמחור
 
   if (appt.status === "CONFIRMED" && appt.paidFromBalanceMinutes === minutes && appt.paidCashAgorot === 0) {
     return { outcome: "ALREADY_CONFIRMED", appointmentId, minutes };
@@ -866,7 +868,7 @@ export async function createAdminBookingWithDebt(params: {
   if (!customer) throw new PaymentFlowError("הלקוח לא נמצא", "NOT_FOUND");
 
   const hold = await createBookingHold({ userId, roomKey, startTime, endTime, notes, source: "ADMIN", now });
-  const amountAgorot = priceFor(hold);
+  const amountAgorot = priceFor(hold, (await getRegularPricing()).hourlyAgorot);
 
   try {
     return await prisma.$transaction(async (tx) => {
