@@ -83,9 +83,10 @@ function RegisterForm() {
         <SectionTitle index="1">פרטים אישיים</SectionTitle>
         <div className="grid sm:grid-cols-2 gap-5">
           <div>
-            <label htmlFor="reg-first-name" className="field-label">שם פרטי</label>
+            <label htmlFor="reg-first-name" className="field-label">שם פרטי *</label>
             <input
               id="reg-first-name"
+              required
               autoComplete="given-name"
               value={form.firstName}
               onChange={(e) => setForm({ ...form, firstName: e.target.value })}
@@ -93,9 +94,10 @@ function RegisterForm() {
             />
           </div>
           <div>
-            <label htmlFor="reg-last-name" className="field-label">שם משפחה</label>
+            <label htmlFor="reg-last-name" className="field-label">שם משפחה *</label>
             <input
               id="reg-last-name"
+              required
               autoComplete="family-name"
               value={form.lastName}
               onChange={(e) => setForm({ ...form, lastName: e.target.value })}
@@ -105,9 +107,10 @@ function RegisterForm() {
         </div>
         <div className="grid sm:grid-cols-2 gap-5">
           <div>
-            <label htmlFor="reg-phone" className="field-label">פלאפון</label>
+            <label htmlFor="reg-phone" className="field-label">פלאפון *</label>
             <input
               id="reg-phone"
+              required
               type="tel"
               dir="ltr"
               autoComplete="tel"
@@ -118,9 +121,10 @@ function RegisterForm() {
             />
           </div>
           <div>
-            <label htmlFor="reg-id-number" className="field-label">מספר זהות</label>
+            <label htmlFor="reg-id-number" className="field-label">מספר זהות *</label>
             <input
               id="reg-id-number"
+              required
               inputMode="numeric"
               dir="ltr"
               maxLength={9}
@@ -166,10 +170,11 @@ function RegisterForm() {
           פרטי אשראי
         </SectionTitle>
         <div>
-          <label htmlFor="reg-card-number" className="field-label">מספר כרטיס אשראי</label>
+          <label htmlFor="reg-card-number" className="field-label">מספר כרטיס אשראי *</label>
           <div className="relative">
             <input
               id="reg-card-number"
+              required
               inputMode="numeric"
               dir="ltr"
               autoComplete="cc-number"
@@ -186,9 +191,10 @@ function RegisterForm() {
         </div>
         <div className="grid grid-cols-2 gap-5">
           <div>
-            <label htmlFor="reg-card-expiry" className="field-label">תוקף</label>
+            <label htmlFor="reg-card-expiry" className="field-label">תוקף *</label>
             <input
               id="reg-card-expiry"
+              required
               inputMode="numeric"
               dir="ltr"
               autoComplete="cc-exp"
@@ -202,10 +208,11 @@ function RegisterForm() {
           </div>
           <div>
             <label htmlFor="reg-card-cvv" className="field-label">
-              CVV <span className="font-normal text-stone-400">(3 ספרות בגב הכרטיס)</span>
+              CVV * <span className="font-normal text-stone-400">(3 ספרות בגב הכרטיס)</span>
             </label>
             <input
               id="reg-card-cvv"
+              required
               type="password"
               inputMode="numeric"
               dir="ltr"

@@ -7,31 +7,21 @@ import {
   findIdentityConflict,
   normalizeIdNumber,
   normalizePhone,
-  optionalField,
   profileFieldSchemas as fields,
 } from "@/lib/profile";
 
-// בהרשמה רק אימייל וסיסמה הכרחיים; שאר הפרטים אופציונליים (אך אם הוזנו — חייבים להיות תקינים).
-// פרטי חובה להזמנת חדר נאכפים בעת ההזמנה (ראו src/lib/profile.ts).
-const registerSchema = z
-  .object({
-    email: z.string().trim().email("כתובת אימייל לא תקינה"),
-    password: z.string().min(4, "הסיסמה חייבת להכיל לפחות 4 תווים"),
-    firstName: optionalField(fields.firstName),
-    lastName: optionalField(fields.lastName),
-    phone: optionalField(fields.phone),
-    idNumber: optionalField(fields.idNumber),
-    cardNumber: optionalField(fields.cardNumber),
-    cardExpiry: optionalField(fields.cardExpiry),
-    cardCvv: optionalField(fields.cardCvv),
-  })
-  .superRefine((data, ctx) => {
-    // פרטי אשראי הם חבילה אחת: אם הוזן חלק מהם, יש להזין את כולם
-    const provided = [data.cardNumber, data.cardExpiry, data.cardCvv].filter(Boolean).length;
-    if (provided > 0 && provided < 3) {
-      ctx.addIssue({ code: "custom", message: "יש להזין את כל פרטי כרטיס האשראי (מספר, תוקף ו-CVV) או להשאיר ריק" });
-    }
-  });
+// כל שדות ההרשמה הם שדות חובה.
+const registerSchema = z.object({
+  firstName: fields.firstName,
+  lastName: fields.lastName,
+  email: z.string().trim().email("כתובת אימייל לא תקינה"),
+  phone: fields.phone,
+  idNumber: fields.idNumber,
+  cardNumber: fields.cardNumber,
+  cardExpiry: z.string().trim().min(1, "יש להזין תוקף כרטיס").pipe(fields.cardExpiry),
+  cardCvv: fields.cardCvv,
+  password: z.string().min(4, "הסיסמה חייבת להכיל לפחות 4 תווים"),
+});
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
@@ -48,8 +38,8 @@ export async function POST(request: Request) {
   // נשמרות רק 4 הספרות האחרונות והתוקף, לצורך זיהוי הכרטיס.
   const { firstName, lastName, email, phone, idNumber, cardNumber, cardExpiry, password } = parsed.data;
   const normalizedEmail = email.toLowerCase();
-  const normalizedPhone = phone ? normalizePhone(phone) : undefined;
-  const normalizedId = idNumber ? normalizeIdNumber(idNumber) : undefined;
+  const normalizedPhone = normalizePhone(phone);
+  const normalizedId = normalizeIdNumber(idNumber);
 
   const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (existing) {
@@ -66,13 +56,13 @@ export async function POST(request: Request) {
   try {
     const user = await prisma.user.create({
       data: {
-        name: [firstName, lastName].filter(Boolean).join(" ") || normalizedEmail.split("@")[0],
+        name: `${firstName} ${lastName}`,
         firstName,
         lastName,
         email: normalizedEmail,
         phone: normalizedPhone,
         idNumber: normalizedId,
-        cardLast4: cardNumber ? digitsOnly(cardNumber).slice(-4) : undefined,
+        cardLast4: digitsOnly(cardNumber).slice(-4),
         cardExpiry,
         passwordHash,
       },
