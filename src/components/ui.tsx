@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { ReactNode, SVGProps } from "react";
 import type { RoomKey } from "@/generated/prisma/client";
 
@@ -59,68 +60,34 @@ export function Icon({ name, className = "w-5 h-5", ...props }: { name: IconName
   );
 }
 
-/* ---------- לוגו הקפסולה ---------- */
+/* ---------- לוגו הקפסולה (קובץ המקור — ללא עיצוב מחדש) ---------- */
 
+/** סמל הפרח מתוך הלוגו המקורי — לשימוש במקומות שהלוגו המלא אינו מתאים בהם (תגיות קטנות, מצב מכווץ, רקעים כהים). */
 export function LogoMark({ className = "w-11 h-11" }: { className?: string }) {
   return (
-    <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
-      <defs>
-        <linearGradient id="kapsula-metal" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#f4f1ec" />
-          <stop offset="35%" stopColor="#9b9792" />
-          <stop offset="60%" stopColor="#5d5a56" />
-          <stop offset="100%" stopColor="#c9c5bf" />
-        </linearGradient>
-        <linearGradient id="kapsula-k" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#4a4744" />
-          <stop offset="100%" stopColor="#1f1d1b" />
-        </linearGradient>
-      </defs>
-      <circle cx="32" cy="32" r="29" fill="none" stroke="url(#kapsula-metal)" strokeWidth="3" />
-      <circle cx="32" cy="32" r="25.5" fill="none" stroke="url(#kapsula-metal)" strokeWidth="0.8" opacity="0.6" />
-      <text
-        x="32"
-        y="44"
-        textAnchor="middle"
-        fontFamily="Georgia, 'Times New Roman', serif"
-        fontStyle="italic"
-        fontSize="36"
-        fill="url(#kapsula-k)"
-      >
-        K
-      </text>
-    </svg>
+    <Image
+      src="/brand/logo-mark.png"
+      alt=""
+      aria-hidden="true"
+      width={548}
+      height={410}
+      className={`${className} object-contain`}
+    />
   );
 }
 
-export function Logo({ tone = "dark", size = "md" }: { tone?: "dark" | "light"; size?: "md" | "lg" }) {
+/** הלוגו המלא של הקפסולה (סמל + שם + סלוגן), כפי שהוא. מיועד לרקעים בהירים בלבד — על רקע כהה יש להשתמש ב-LogoMark בתוך "שבבי" בהיר. */
+export function Logo({ size = "md" }: { size?: "md" | "lg" }) {
   const big = size === "lg";
   return (
-    <span className="inline-flex items-center gap-3">
-      <span
-        className={`rounded-full p-0.5 bg-linear-to-b from-white to-cream-200 shadow-sm ring-1 ${
-          tone === "light" ? "ring-white/30" : "ring-cream-300/70"
-        }`}
-      >
-        <LogoMark className={big ? "w-20 h-20" : "w-11 h-11"} />
-      </span>
-      <span className="flex flex-col leading-none">
-        <span
-          className={`font-display font-bold ${big ? "text-4xl" : "text-[1.6rem]"} ${
-            tone === "light" ? "text-white" : "text-stone-900"
-          }`}
-        >
-          הקפסולה
-        </span>
-        <span
-          className={`mt-1 tracking-wide ${big ? "text-sm" : "text-[10.5px]"} ${
-            tone === "light" ? "text-bronze-200" : "text-bronze-600"
-          }`}
-        >
-          הבית שלך לפגישות עסקיות
-        </span>
-      </span>
-    </span>
+    <Image
+      src="/brand/logo-full.png"
+      alt="הקפסולה — קליניקות להשכרה לפי שעה"
+      width={1626}
+      height={819}
+      priority
+      className={big ? "h-16 sm:h-20 w-auto" : "h-9 sm:h-10 w-auto"}
+    />
   );
 }
 
@@ -259,7 +226,7 @@ export function Alert({ tone, children }: { tone: "error" | "success"; children:
       className={`flex items-start gap-2 rounded-xl px-4 py-3 text-sm ${
         tone === "error"
           ? "bg-red-50 text-red-700 border border-red-100"
-          : "bg-brand-50 text-brand-700 border border-brand-100"
+          : "bg-emerald-50 text-emerald-700 border border-emerald-100"
       }`}
     >
       <Icon name={tone === "error" ? "x" : "check"} className="w-4 h-4 mt-0.5 shrink-0" />

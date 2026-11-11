@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Icon, LogoMark, type IconName } from "@/components/ui";
+import { Icon, Logo, LogoMark, type IconName } from "@/components/ui";
 
 const FEATURES: { icon: IconName; title: string; text: string }[] = [
   {
@@ -28,23 +28,13 @@ export default function Home() {
           className="absolute inset-0 opacity-60 -z-10"
           style={{
             backgroundImage:
-              "radial-gradient(circle at 15% 20%, rgba(255,236,200,0.28), transparent 40%), radial-gradient(circle at 85% 90%, rgba(13,92,83,0.55), transparent 45%)",
+              "radial-gradient(circle at 15% 20%, rgba(213,167,111,0.26), transparent 40%), radial-gradient(circle at 85% 90%, rgba(10,52,82,0.55), transparent 45%)",
           }}
         />
         <div className="relative grid md:grid-cols-2 gap-10 items-center px-6 py-12 sm:px-12 sm:py-16">
           <div>
-            <div className="flex items-center gap-4 mb-8">
-              <span className="rounded-full p-1 bg-linear-to-b from-white to-cream-200 shadow-lg ring-1 ring-bronze-300/40">
-                <LogoMark className="w-16 h-16 sm:w-20 sm:h-20" />
-              </span>
-              <div>
-                <p className="font-display text-3xl sm:text-4xl font-bold">
-                  הקפסולה
-                </p>
-                <p className="text-sm text-bronze-200 tracking-wide mt-1">
-                  הבית שלך לפגישות עסקיות
-                </p>
-              </div>
+            <div className="mb-8 rounded-2xl bg-linear-to-b from-white to-cream-100 shadow-lg ring-1 ring-bronze-300/40 p-4 w-fit">
+              <Logo size="lg" />
             </div>
             <h1 className="font-display text-4xl sm:text-6xl font-bold leading-[1.1] mb-6">
               מקום מקצועי
