@@ -45,6 +45,72 @@ function NavLink({
   );
 }
 
+function AdminNavGroup({
+  collapsed,
+  open,
+  onToggle,
+  isAdminPath,
+  links,
+  onNavigate,
+}: {
+  collapsed: boolean;
+  open: boolean;
+  onToggle: () => void;
+  isAdminPath: boolean;
+  links: NavItem[];
+  onNavigate?: () => void;
+}) {
+  if (collapsed) {
+    return (
+      <Link
+        href="/admin"
+        title="ניהול"
+        aria-current={isAdminPath ? "page" : undefined}
+        className={`flex items-center justify-center rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-colors ${
+          isAdminPath
+            ? "bg-linear-to-b from-brand-500 to-brand-700 text-white shadow-brand"
+            : "text-stone-600 hover:bg-bronze-50 hover:text-brand-800"
+        }`}
+      >
+        <Icon name="chart" className={`w-5 h-5 shrink-0 ${isAdminPath ? "" : "text-bronze-500"}`} />
+      </Link>
+    );
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-colors w-full ${
+          isAdminPath ? "text-brand-800 bg-bronze-50/60" : "text-stone-600 hover:bg-bronze-50 hover:text-brand-800"
+        }`}
+      >
+        <Icon name="chart" className={`w-5 h-5 shrink-0 ${isAdminPath ? "text-brand-600" : "text-bronze-500"}`} />
+        <span className="flex-1 text-right truncate">ניהול</span>
+        <Icon
+          name="chevronRight"
+          className={`w-4 h-4 shrink-0 transition-transform duration-200 ${open ? "rotate-90" : ""}`}
+        />
+      </button>
+      <div
+        className={`grid transition-[grid-template-rows] duration-300 ease-out ${
+          open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+        }`}
+      >
+        <div className="overflow-hidden">
+          <div className="flex flex-col gap-1 pt-1 ps-4">
+            {links.map((l) => (
+              <NavLink key={l.href} link={l} collapsed={false} onNavigate={onNavigate} />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AuthSection({
   collapsed,
   onNavigate,
@@ -110,12 +176,22 @@ function AuthSection({
   );
 }
 
-export function Sidebar({ children }: { children: ReactNode }) {
+export function Sidebar({
+  children,
+  showShifts = false,
+  showFinance = false,
+}: {
+  children: ReactNode;
+  showShifts?: boolean;
+  showFinance?: boolean;
+}) {
   const { data: session, status } = useSession();
   const pathname = usePathname();
   const [contactActive, setContactActive] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [adminOpenOverride, setAdminOpenOverride] = useState<boolean | null>(null);
+  const [prevIsAdminPath, setPrevIsAdminPath] = useState(pathname?.startsWith("/admin") ?? false);
 
   useEffect(() => {
     const section = document.getElementById("contact");
@@ -138,17 +214,33 @@ export function Sidebar({ children }: { children: ReactNode }) {
 
   const isAdmin = session?.user?.role === "ADMIN";
   const isAuthenticated = status === "authenticated";
+  const isAdminPath = pathname?.startsWith("/admin") ?? false;
+
+  if (isAdminPath !== prevIsAdminPath) {
+    setPrevIsAdminPath(isAdminPath);
+    setAdminOpenOverride(null);
+  }
+  const adminOpen = adminOpenOverride ?? isAdminPath;
+
+  const adminLinks: NavItem[] = [
+    { href: "/admin", label: "לוח בקרה", icon: "chart", active: pathname === "/admin" },
+    { href: "/admin/calendar", label: "יומן חדרים", icon: "calendar", active: pathname?.startsWith("/admin/calendar") ?? false },
+    { href: "/admin/appointments", label: "ניהול תורים", icon: "list", active: pathname?.startsWith("/admin/appointments") ?? false },
+    { href: "/admin/rooms", label: "חדרים", icon: "door", active: pathname?.startsWith("/admin/rooms") ?? false },
+    { href: "/admin/gallery", label: "גלריה", icon: "image", active: pathname?.startsWith("/admin/gallery") ?? false },
+    { href: "/admin/hours", label: "שעות פעילות", icon: "clock", active: pathname?.startsWith("/admin/hours") ?? false },
+    { href: "/admin/users", label: "משתמשים", icon: "users", active: pathname?.startsWith("/admin/users") ?? false },
+    ...(showShifts
+      ? [{ href: "/admin/shifts", label: "משמרות", icon: "clock" as IconName, active: pathname?.startsWith("/admin/shifts") ?? false }]
+      : []),
+    ...(showFinance
+      ? [{ href: "/admin/finance", label: "ניהול כספי", icon: "card" as IconName, active: pathname?.startsWith("/admin/finance") ?? false }]
+      : []),
+  ];
 
   const links: NavItem[] = [];
 
-  if (isAdmin) {
-    links.push({
-      href: "/admin",
-      label: "ניהול",
-      icon: "chart",
-      active: pathname?.startsWith("/admin") ?? false,
-    });
-  } else if (status !== "loading") {
+  if (!isAdmin && status !== "loading") {
     links.push(
       {
         href: "/",
@@ -262,9 +354,20 @@ export function Sidebar({ children }: { children: ReactNode }) {
           </div>
           <div aria-hidden="true" className="hairline-bronze mx-4" />
           <nav className="flex-1 overflow-y-auto px-3 py-4 flex flex-col gap-1">
-            {links.map((l) => (
-              <NavLink key={l.href} link={l} collapsed={false} onNavigate={() => setDrawerOpen(false)} />
-            ))}
+            {isAdmin ? (
+              <AdminNavGroup
+                collapsed={false}
+                open={adminOpen}
+                onToggle={() => setAdminOpenOverride(!adminOpen)}
+                isAdminPath={isAdminPath}
+                links={adminLinks}
+                onNavigate={() => setDrawerOpen(false)}
+              />
+            ) : (
+              links.map((l) => (
+                <NavLink key={l.href} link={l} collapsed={false} onNavigate={() => setDrawerOpen(false)} />
+              ))
+            )}
           </nav>
           <div className="border-t border-cream-200/80 p-3">
             <AuthSection collapsed={false} onNavigate={() => setDrawerOpen(false)} />
@@ -313,9 +416,17 @@ export function Sidebar({ children }: { children: ReactNode }) {
           )}
           <div aria-hidden="true" className="hairline-bronze mx-4" />
           <nav className="flex-1 overflow-y-auto px-3 py-4 flex flex-col gap-1">
-            {links.map((l) => (
-              <NavLink key={l.href} link={l} collapsed={collapsed} />
-            ))}
+            {isAdmin ? (
+              <AdminNavGroup
+                collapsed={collapsed}
+                open={adminOpen}
+                onToggle={() => setAdminOpenOverride(!adminOpen)}
+                isAdminPath={isAdminPath}
+                links={adminLinks}
+              />
+            ) : (
+              links.map((l) => <NavLink key={l.href} link={l} collapsed={collapsed} />)
+            )}
           </nav>
           <div className="border-t border-cream-200/80 p-3">
             <AuthSection collapsed={collapsed} />
