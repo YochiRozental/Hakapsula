@@ -29,3 +29,9 @@ test("אימות משבצות: שם, שעות, מחיר, חפיפה ופעילו
   // משבצת מושבתת אינה נבדקת לחפיפה
   assert.equal(validateWindowInputs([base(), base({ name: "ישנה", startMinutes: 8 * 60, endMinutes: 12 * 60, active: false })]), null);
 });
+
+test("משבצת המסתיימת בדיוק בחצות (24:00) תקינה — תומך במשמרת 20:15–24:00", () => {
+  const night = base({ name: "לילה", startMinutes: 20 * 60 + 15, endMinutes: 24 * 60 });
+  assert.equal(validateWindowInputs([night]), null);
+  assert.equal(validateWindowInputs([base(), night]), null); // אינה חופפת למשבצת אחרת (07:00–11:00)
+});

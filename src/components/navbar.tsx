@@ -76,6 +76,12 @@ export function Navbar() {
         active: pathname === "/hours" && !contactActive,
       },
       {
+        href: "/pricing",
+        label: "מחירון",
+        icon: "card",
+        active: pathname === "/pricing" && !contactActive,
+      },
+      {
         href: "/booking",
         label: "הזמנת קליניקה",
         icon: "calendar",

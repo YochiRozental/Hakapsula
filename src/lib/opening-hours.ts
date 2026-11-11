@@ -36,11 +36,11 @@ export function activityMatches(activity: ActivityType, track?: BookingTrack): b
 }
 
 /**
- * שעות היום המלא כשלא הוגדרו חלונות מפורשים, לפי היום בשבוע: ראשון עד חמישי 07:00–22:00, שישי 07:00–12:00 (שבת סגורה תמיד),
+ * שעות היום המלא כשלא הוגדרו חלונות מפורשים, לפי היום בשבוע: ראשון עד חמישי 07:00–24:00, שישי 07:00–12:00 (שבת סגורה תמיד),
  * במסלול ברירת המחדל של היום. הגדרה מפורשת של מנהל גוברת עליהן.
  */
 export function defaultDayWindow(weekday: number): { startMinutes: number; endMinutes: number } {
-  return weekday === 5 ? { startMinutes: 7 * 60, endMinutes: 12 * 60 } : { startMinutes: 7 * 60, endMinutes: 22 * 60 };
+  return weekday === 5 ? { startMinutes: 7 * 60, endMinutes: 12 * 60 } : { startMinutes: 7 * 60, endMinutes: 24 * 60 };
 }
 
 export type HoursWindow = {
@@ -231,12 +231,16 @@ export function explainUnavailable(
   return `מחוץ לשעות הפעילות${track ? ` של מסלול ${trackLabel}` : ""} (${formatWindows(own)})`;
 }
 
-/** האם הזמנה (תאריך+שעות מקומיים) במסלול נתון מותרת לפי ההגדרות? מחזיר הסבר לדחייה או null. זו נקודת האימות היחידה לשרת */
+/**
+ * האם הזמנה (תאריך+שעות מקומיים) במסלול נתון מותרת לפי ההגדרות? מחזיר הסבר לדחייה או null. זו נקודת האימות היחידה לשרת.
+ * הסיום נבדק לפי הרגע האחרון שהוא כולל בפועל (כמו closedDayViolation), כך שהזמנה המסתיימת בדיוק בחצות (24:00) נחשבת
+ * בתוך היום שבו התחילה ולא "חוצה חצות" ליום הבא.
+ */
 export function bookingViolation(all: HoursWindow[], start: Date, end: Date, track?: BookingTrack): string | null {
   const from = jerusalemParts(start);
-  const to = jerusalemParts(end);
-  if (from.date !== to.date) return "ההזמנה חייבת להיות בתוך יום אחד";
-  return explainUnavailable(resolveDay(all, from.date), from.minutes, to.minutes, track);
+  const last = jerusalemParts(new Date(end.getTime() - 1));
+  if (from.date !== last.date) return "ההזמנה חייבת להיות בתוך יום אחד";
+  return explainUnavailable(resolveDay(all, from.date), from.minutes, last.minutes + 1, track);
 }
 
 /**

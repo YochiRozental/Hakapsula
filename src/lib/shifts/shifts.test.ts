@@ -388,7 +388,7 @@ describe("משמרות קבועות וחיוב חודשי: מול PostgreSQL מ�
     // שישי: 07:00–12:00 בלבד. משבצת צהריים (11–15) חורגת בכל 13 השישיים, בוקר (7–11) מתקבלת
     await assert.rejects(() => create(ids.a, { weekday: 5, windowId: "NOON" }), (e: { code: string; details?: { conflicts: unknown[] } }) => e.code === "CONFLICT" && (e.details?.conflicts.length ?? 0) === SESSIONS);
     await createOk(ids.a, { weekday: 5, windowId: "MORNING" });
-    // ערב 19:00–22:00 בתוך שעות הפעילות (א'–ה' עד 22:00)
+    // ערב 19:00–22:00 בתוך שעות הפעילות (א'–ה' עד 24:00)
     await createOk(ids.a, { windowId: "EVENING", roomKey: "ROOM2" });
     await assert.rejects(() => create(ids.female), { code: "CONFLICT" }, "יום שני הוא מסלול בנים");
     await createOk(ids.female, { weekday: 2 }); // יום שלישי: מסלול בנות
