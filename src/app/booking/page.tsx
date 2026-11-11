@@ -90,6 +90,8 @@ export default function BookingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  // חסר פרט פרופיל שחוסם הזמנה (כולל מגדר, שאינו מוזכר כאן בשם — ראו "אין להחזיר כיתובים על בנים/בנות")
+  const [profileIncomplete, setProfileIncomplete] = useState(false);
 
   // restore the last date/room/time the user had selected, instead of always resetting to today
   useEffect(() => {
@@ -183,6 +185,7 @@ export default function BookingPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setProfileIncomplete(false);
     setSubmitting(true);
 
     const start = combineDateAndTime(date, startTime);
@@ -214,6 +217,13 @@ export default function BookingPage() {
         return;
       }
       if (data.code === "PROFILE_INCOMPLETE") {
+        // מגדר הוא ההגדרה היחידה שקובעת את שעות ההזמנה הפנויות; במקרה הזה מציגים הודעה ידידותית
+        // עם קישור ישיר לפרופיל, בלי להסביר למה, ולא עוברים אוטומטית לטופס השלמת הפרטים
+        if (Array.isArray(data.missing) && data.missing.includes("gender")) {
+          setProfileIncomplete(true);
+          setSubmitting(false);
+          return;
+        }
         router.push(`/complete-profile?next=${encodeURIComponent("/booking")}`);
         return;
       }
@@ -455,6 +465,14 @@ export default function BookingPage() {
           />
         </section>
 
+        {profileIncomplete && (
+          <Alert tone="error">
+            כדי להזמין תור, יש להשלים את הפרטים בפרופיל האישי.{" "}
+            <Link href="/profile" className="underline font-semibold">
+              לפרופיל האישי
+            </Link>
+          </Alert>
+        )}
         {error && <Alert tone="error">{error}</Alert>}
         {success && (
           <Alert tone="success">

@@ -17,7 +17,6 @@ const registerSchema = z
   .object({
     email: z.string().trim().email("כתובת אימייל לא תקינה"),
     password: z.string().min(4, "הסיסמה חייבת להכיל לפחות 4 תווים"),
-    gender: optionalField(fields.gender),
     firstName: optionalField(fields.firstName),
     lastName: optionalField(fields.lastName),
     phone: optionalField(fields.phone),
@@ -47,7 +46,7 @@ export async function POST(request: Request) {
 
   // מספר הכרטיס המלא וה-CVV לא נשמרים — שמירתם אסורה לפי תקן PCI DSS.
   // נשמרות רק 4 הספרות האחרונות והתוקף, לצורך זיהוי הכרטיס.
-  const { firstName, lastName, email, phone, idNumber, cardNumber, cardExpiry, password, gender } = parsed.data;
+  const { firstName, lastName, email, phone, idNumber, cardNumber, cardExpiry, password } = parsed.data;
   const normalizedEmail = email.toLowerCase();
   const normalizedPhone = phone ? normalizePhone(phone) : undefined;
   const normalizedId = idNumber ? normalizeIdNumber(idNumber) : undefined;
@@ -73,7 +72,6 @@ export async function POST(request: Request) {
         email: normalizedEmail,
         phone: normalizedPhone,
         idNumber: normalizedId,
-        gender,
         cardLast4: cardNumber ? digitsOnly(cardNumber).slice(-4) : undefined,
         cardExpiry,
         passwordHash,

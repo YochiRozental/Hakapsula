@@ -179,7 +179,7 @@ export function CompleteProfileForm({
             ))}
           </div>
           <p className="text-xs text-stone-400 mt-1.5">
-            נדרש לצורך התאמת שעות בנים / בנות
+            נדרש להזמנת תור
           </p>
         </div>
 
