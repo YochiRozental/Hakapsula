@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Assistant, Frank_Ruhl_Libre } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
-import { Navbar } from "@/components/navbar";
+import { Sidebar } from "@/components/sidebar";
 import { ContactBanner } from "@/components/contact-banner";
 
 const assistant = Assistant({
@@ -28,23 +28,24 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       dir="rtl"
       className={`${assistant.variable} ${frankRuhl.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col text-stone-800 font-sans">
+      <body className="min-h-full text-stone-800 font-sans">
         <Providers>
-          <Navbar />
-          <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-10">
-            {children}
-          </main>
-          <section id="contact" className="scroll-mt-24">
-            <ContactBanner />
-          </section>
-          <footer className="border-t border-cream-200/80 bg-white/40">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-stone-400">
-              <span className="font-display text-sm text-stone-600">
-                הקפסולה
-              </span>
-              <span>הבית שלך לפגישות עסקיות · מערכת ניהול קליניקות</span>
-            </div>
-          </footer>
+          <Sidebar>
+            <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-10">
+              {children}
+            </main>
+            <section id="contact" className="scroll-mt-24">
+              <ContactBanner />
+            </section>
+            <footer className="border-t border-cream-200/80 bg-white/40">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-stone-400">
+                <span className="font-display text-sm text-stone-600">
+                  הקפסולה
+                </span>
+                <span>הבית שלך לפגישות עסקיות · מערכת ניהול קליניקות</span>
+              </div>
+            </footer>
+          </Sidebar>
         </Providers>
       </body>
     </html>
