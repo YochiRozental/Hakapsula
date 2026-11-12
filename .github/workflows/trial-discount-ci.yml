@@ -89,4 +89,18 @@ jobs:
           PIN_TEST_DATABASE_URL: postgresql://ci:ci_ephemeral_pw@localhost:5432/clinics_pin_test
           SHIFTS_TEST_DATABASE_URL: postgresql://ci:ci_ephemeral_pw@localhost:5432/clinics_shifts_test
           IVR_TEST_DATABASE_URL: postgresql://ci:ci_ephemeral_pw@localhost:5432/clinics_ivr_test
-        run: npm test
+        run: |
+          set +e
+          npm test > test-output.log 2>&1
+          code=$?
+          {
+            echo "## Test run exit code: $code"
+            echo
+            echo "### Summary line"
+            grep -E "^(ℹ|# )(tests|pass|fail|cancelled|skipped)" test-output.log || true
+            echo
+            echo "### Failures (✖ / not ok)"
+            grep -n -B1 -A15 "✖\|not ok" test-output.log | head -400 || echo "(none matched)"
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat test-output.log
+          exit $code
