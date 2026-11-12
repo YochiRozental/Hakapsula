@@ -277,13 +277,24 @@ export function Checkout({ appointmentId }: { appointmentId: string }) {
               {durationText(details.paidFromBalanceMinutes)}
             </InfoRow>
           )}
-          {details.paidCashAgorot > 0 && (
-            <InfoRow label="שולם בכסף">
-              {shekel(details.paidCashAgorot)}
+          {details.paidCashAgorot > 0 && details.payment && details.payment.discountAgorot > 0 && (
+            <InfoRow label="מחיר רגיל">
+              <span className="line-through text-stone-400 font-normal">
+                {shekel(details.paidCashAgorot + details.payment.discountAgorot)}
+              </span>
             </InfoRow>
           )}
           {details.payment && details.payment.discountAgorot > 0 && (
             <TrialDiscountRow discountAgorot={details.payment.discountAgorot} shekel={shekel} />
+          )}
+          {details.paidCashAgorot > 0 && (
+            <InfoRow label="שולם בכסף">
+              {details.payment && details.payment.discountAgorot > 0 ? (
+                <span className="text-brand-700 font-bold text-base">{shekel(details.paidCashAgorot)}</span>
+              ) : (
+                shekel(details.paidCashAgorot)
+              )}
+            </InfoRow>
           )}
           <InfoRow label="תאריך">{dateText(details.startTime)}</InfoRow>
         </section>
@@ -416,8 +427,19 @@ export function Checkout({ appointmentId }: { appointmentId: string }) {
           </div>
         </div>
         <InfoRow label="משך">{durationText(details.durationMinutes)}</InfoRow>
-        <InfoRow label="מחיר רגיל">{shekel(details.fullPriceAgorot)}</InfoRow>
+        <InfoRow label="מחיר רגיל">
+          {plan && plan.discountAgorot > 0 ? (
+            <span className="line-through text-stone-400 font-normal">{shekel(details.fullPriceAgorot)}</span>
+          ) : (
+            shekel(details.fullPriceAgorot)
+          )}
+        </InfoRow>
         {plan && <TrialDiscountRow discountAgorot={plan.discountAgorot} shekel={shekel} />}
+        {plan && plan.discountAgorot > 0 && (
+          <InfoRow label="לתשלום">
+            <span className="text-brand-700 font-bold text-base">{shekel(plan.cashAgorot)}</span>
+          </InfoRow>
+        )}
         <InfoRow label="יתרת שעות זמינה">
           {details.availableBalanceMinutes > 0
             ? durationText(details.availableBalanceMinutes)
@@ -438,8 +460,21 @@ export function Checkout({ appointmentId }: { appointmentId: string }) {
               {durationText(pending.packageMinutes)}
             </InfoRow>
           )}
+          {pending.discountAgorot > 0 && (
+            <InfoRow label="מחיר רגיל">
+              <span className="line-through text-stone-400 font-normal">
+                {shekel(pending.amountAgorot + pending.discountAgorot)}
+              </span>
+            </InfoRow>
+          )}
           <TrialDiscountRow discountAgorot={pending.discountAgorot} shekel={shekel} />
-          <InfoRow label="סכום לתשלום">{shekel(pending.amountAgorot)}</InfoRow>
+          <InfoRow label="סכום לתשלום">
+            {pending.discountAgorot > 0 ? (
+              <span className="text-brand-700 font-bold text-base">{shekel(pending.amountAgorot)}</span>
+            ) : (
+              shekel(pending.amountAgorot)
+            )}
+          </InfoRow>
           <p className="text-sm text-stone-500">
             ההזמנה תאושר רק לאחר שהשרת יאמת את התשלום מול הספק. ניתן לרענן את
             הדף בבטחה: המצב נשמר.
