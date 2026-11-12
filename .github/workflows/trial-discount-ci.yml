@@ -50,14 +50,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: TypeScript
-        run: npx tsc --noEmit
-
       - name: ESLint
         run: npm run lint
 
+      # מריצים build לפני tsc העצמאי: next build מייצר טיפוסי-עזר לנתיבים (למשל LayoutProps ב-.next/types),
+      # שאינם קיימים ב-checkout נקי (.next/ אינו ב-git) ובלעדיהם tsc --noEmit נכשל בטעות על src/app/layout.tsx.
+      # next build כבר מריץ בעצמו בדיקת טיפוסים מלאה; tsc --noEmit אחריו הוא בדיקה חוזרת/וידוא בלבד
       - name: Build
         run: npm run build
+
+      - name: TypeScript
+        run: npx tsc --noEmit
 
       - name: Create isolated per-suite test databases (ephemeral container only)
         run: |
