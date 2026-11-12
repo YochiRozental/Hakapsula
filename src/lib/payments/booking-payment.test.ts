@@ -43,8 +43,12 @@ describe("תשלום על הזמנה והחזקת חדרים: מול PostgreSQL 
   const newProvider = () => new MockPaymentProvider(SECRET, new PrismaMockStore(prisma));
 
   async function wipe() {
+    await prisma.creditUsage.deleteMany({});
+    await prisma.packageUsage.deleteMany({});
+    await prisma.credit.deleteMany({});
     await prisma.refund.deleteMany({});
     await prisma.paymentAttempt.deleteMany({});
+    await prisma.hoursPackage.deleteMany({});
     await prisma.payment.deleteMany({});
     await prisma.debtSettlement.deleteMany({});
     await prisma.debt.deleteMany({});
@@ -704,8 +708,9 @@ describe("תשלום על הזמנה והחזקת חדרים: מול PostgreSQL 
     assert.equal((await userOf(u)).trialDiscountUsedAt, null, "תשלום מיתרה בלבד לא צורך את ההטבה (אין בו כסף להוזיל)");
     assert.equal((await prisma.hoursPackage.findUniqueOrThrow({ where: { id: pkg.id } })).minutesRemaining, 240);
 
-    // ובהזמנה הבאה בכסף, ההטבה עדיין זמינה
-    const { started } = await holdAndStart(u, "ROOM4", 11);
+    // ובהזמנה הבאה בכסף (היתרה הנותרת מכסה אותה במלואה, ולכן מבקשים כאן במפורש לשלם בכסף), ההטבה עדיין זמינה
+    const h2 = await hold(u, "ROOM4", 11);
+    const started = await svc.startBookingPayment({ appointmentId: h2.id, userId: u, provider, useBalance: false });
     assert.equal(started.amountAgorot, 5625);
   });
 
