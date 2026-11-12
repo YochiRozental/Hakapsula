@@ -12,7 +12,7 @@ import { CONFLICTING_ROOM_KEYS } from "@/lib/rooms";
 
 /**
  * מנהל יוצר החזקה זמנית (10 דקות) לחדר, עבור לקוח קיים שנבחר — כצעד ראשון הזמנת קליניקה ידנית שממשיכה
- * לתשלום (לא תור מאושר מיד). משך גמיש (בניגוד להזמנת לקוח רגילה שמוגבלת לשעה), כפי שהטופס הידני מאפשר.
+ * לתשלום (לא הזמנה מאושר מיד). משך גמיש (בניגוד להזמנת לקוח רגילה שמוגבלת לשעה), כפי שהטופס הידני מאפשר.
  */
 export async function POST(request: Request) {
   if (!getFlowProvider()) return notFound();
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     Number.isNaN(end.getTime())
   ) {
     return NextResponse.json(
-      { error: "חסרים פרטים לקביעת התור" },
+      { error: "חסרים פרטים להזמנת קליניקה" },
       { status: 400 },
     );
   }

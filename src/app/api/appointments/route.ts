@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json(
-      { error: "יש להתחבר כדי לקבוע תור", code: "AUTH_REQUIRED" },
+      { error: "יש להתחבר כדי להזמין קליניקה", code: "AUTH_REQUIRED" },
       { status: 401 },
     );
   }
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
   const user = await prisma.user.findUnique({ where: { id: session.user.id } });
   if (!user) {
     return NextResponse.json(
-      { error: "יש להתחבר כדי לקבוע תור", code: "AUTH_REQUIRED" },
+      { error: "יש להתחבר כדי להזמין קליניקה", code: "AUTH_REQUIRED" },
       { status: 401 },
     );
   }
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
 
   if (!roomKey || !startTime || !endTime) {
     return NextResponse.json(
-      { error: "חסרים פרטים לקביעת התור" },
+      { error: "חסרים פרטים להזמנת קליניקה" },
       { status: 400 },
     );
   }
@@ -93,6 +93,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: err.message }, { status: 409 });
     }
     console.error(err);
-    return NextResponse.json({ error: "שגיאה בקביעת התור" }, { status: 500 });
+    return NextResponse.json(
+      { error: "שגיאה בהזמנת הקליניקה" },
+      { status: 500 },
+    );
   }
 }

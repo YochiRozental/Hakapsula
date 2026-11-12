@@ -280,20 +280,24 @@ export function Checkout({ appointmentId }: { appointmentId: string }) {
           {details.paidCashAgorot > 0 &&
             (details.payment && details.payment.discountAgorot > 0 ? (
               <TrialDiscountBreakdown
-                regularAgorot={details.paidCashAgorot + details.payment.discountAgorot}
+                regularAgorot={
+                  details.paidCashAgorot + details.payment.discountAgorot
+                }
                 discountAgorot={details.payment.discountAgorot}
                 finalAgorot={details.paidCashAgorot}
                 finalLabel="שולם בכסף"
                 shekel={shekel}
               />
             ) : (
-              <InfoRow label="שולם בכסף">{shekel(details.paidCashAgorot)}</InfoRow>
+              <InfoRow label="שולם בכסף">
+                {shekel(details.paidCashAgorot)}
+              </InfoRow>
             ))}
           <InfoRow label="תאריך">{dateText(details.startTime)}</InfoRow>
         </section>
         <div className="flex flex-wrap gap-3">
           <Link href="/booking/my" className="btn btn-primary">
-            התורים שלי
+            לוחות הזמנים שלי
           </Link>
           <Link href="/booking" className="btn btn-secondary">
             הזמנה נוספת
@@ -460,7 +464,9 @@ export function Checkout({ appointmentId }: { appointmentId: string }) {
               shekel={shekel}
             />
           ) : (
-            <InfoRow label="סכום לתשלום">{shekel(pending.amountAgorot)}</InfoRow>
+            <InfoRow label="סכום לתשלום">
+              {shekel(pending.amountAgorot)}
+            </InfoRow>
           )}
           <p className="text-sm text-stone-500">
             ההזמנה תאושר רק לאחר שהשרת יאמת את התשלום מול הספק. ניתן לרענן את
@@ -502,25 +508,31 @@ export function Checkout({ appointmentId }: { appointmentId: string }) {
                   ? "מאשר..."
                   : `אישור מהיתרה · ${durationText(plan.packageMinutes)}`}
               </button>
-              {details.cashOnlyPlan && details.cashOnlyPlan.discountAgorot > 0 && (
-                <div className="rounded-xl bg-cream-50 ring-1 ring-cream-200 px-4 py-1">
-                  <p className="text-xs text-stone-500 pt-2 -mb-1">אם תבחרו לשלם בכסף במקום מהיתרה:</p>
-                  <TrialDiscountBreakdown
-                    regularAgorot={details.fullPriceAgorot}
-                    discountAgorot={details.cashOnlyPlan.discountAgorot}
-                    finalAgorot={details.cashOnlyPlan.cashAgorot}
-                    finalLabel="לתשלום בכסף"
-                    shekel={shekel}
-                  />
-                </div>
-              )}
+              {details.cashOnlyPlan &&
+                details.cashOnlyPlan.discountAgorot > 0 && (
+                  <div className="rounded-xl bg-cream-50 ring-1 ring-cream-200 px-4 py-1">
+                    <p className="text-xs text-stone-500 pt-2 -mb-1">
+                      אם תבחרו לשלם בכסף במקום מהיתרה:
+                    </p>
+                    <TrialDiscountBreakdown
+                      regularAgorot={details.fullPriceAgorot}
+                      discountAgorot={details.cashOnlyPlan.discountAgorot}
+                      finalAgorot={details.cashOnlyPlan.cashAgorot}
+                      finalLabel="לתשלום בכסף"
+                      shekel={shekel}
+                    />
+                  </div>
+                )}
               <button
                 type="button"
                 className="btn btn-secondary w-full"
                 disabled={action.busy}
                 onClick={() => pay(false)}
               >
-                לשלם בכסף במקום: {shekel(details.cashOnlyPlan?.cashAgorot ?? details.fullPriceAgorot)}
+                לשלם בכסף במקום:{" "}
+                {shekel(
+                  details.cashOnlyPlan?.cashAgorot ?? details.fullPriceAgorot,
+                )}
               </button>
             </>
           ) : plan && plan.packageMinutes > 0 ? (
@@ -541,31 +553,41 @@ export function Checkout({ appointmentId }: { appointmentId: string }) {
                   ? "פותח תשלום..."
                   : `תשלום משולב: ${shekel(plan.cashAgorot)} + ${durationText(plan.packageMinutes)} מהיתרה`}
               </button>
-              {details.cashOnlyPlan && details.cashOnlyPlan.discountAgorot > 0 && (
-                <div className="rounded-xl bg-cream-50 ring-1 ring-cream-200 px-4 py-1">
-                  <p className="text-xs text-stone-500 pt-2 -mb-1">אם תבחרו לשלם הכול בכסף, בלי לנצל יתרה:</p>
-                  <TrialDiscountBreakdown
-                    regularAgorot={details.fullPriceAgorot}
-                    discountAgorot={details.cashOnlyPlan.discountAgorot}
-                    finalAgorot={details.cashOnlyPlan.cashAgorot}
-                    finalLabel="לתשלום בכסף"
-                    shekel={shekel}
-                  />
-                </div>
-              )}
+              {details.cashOnlyPlan &&
+                details.cashOnlyPlan.discountAgorot > 0 && (
+                  <div className="rounded-xl bg-cream-50 ring-1 ring-cream-200 px-4 py-1">
+                    <p className="text-xs text-stone-500 pt-2 -mb-1">
+                      אם תבחרו לשלם הכול בכסף, בלי לנצל יתרה:
+                    </p>
+                    <TrialDiscountBreakdown
+                      regularAgorot={details.fullPriceAgorot}
+                      discountAgorot={details.cashOnlyPlan.discountAgorot}
+                      finalAgorot={details.cashOnlyPlan.cashAgorot}
+                      finalLabel="לתשלום בכסף"
+                      shekel={shekel}
+                    />
+                  </div>
+                )}
               <button
                 type="button"
                 className="btn btn-secondary w-full"
                 disabled={action.busy}
                 onClick={() => pay(false)}
               >
-                לשלם הכול בכסף: {shekel(details.cashOnlyPlan?.cashAgorot ?? details.fullPriceAgorot)}
+                לשלם הכול בכסף:{" "}
+                {shekel(
+                  details.cashOnlyPlan?.cashAgorot ?? details.fullPriceAgorot,
+                )}
               </button>
             </>
           ) : (
             <>
               <p className="text-sm text-stone-600">
-                אין לכם יתרת שעות זמינה, ולכן ההזמנה משולמת במחיר הרגיל{plan && plan.discountAgorot > 0 ? " (בניכוי הנחת הזמנה ראשונה)" : ""}.
+                אין לכם יתרת שעות זמינה, ולכן ההזמנה משולמת במחיר הרגיל
+                {plan && plan.discountAgorot > 0
+                  ? " (בניכוי הנחת הזמנה ראשונה)"
+                  : ""}
+                .
               </p>
               <button
                 type="button"

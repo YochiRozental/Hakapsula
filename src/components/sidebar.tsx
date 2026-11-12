@@ -72,7 +72,10 @@ function AdminNavGroup({
             : "text-stone-600 hover:bg-bronze-50 hover:text-brand-800"
         }`}
       >
-        <Icon name="chart" className={`w-5 h-5 shrink-0 ${isAdminPath ? "" : "text-bronze-500"}`} />
+        <Icon
+          name="chart"
+          className={`w-5 h-5 shrink-0 ${isAdminPath ? "" : "text-bronze-500"}`}
+        />
       </Link>
     );
   }
@@ -84,10 +87,15 @@ function AdminNavGroup({
         onClick={onToggle}
         aria-expanded={open}
         className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-colors w-full ${
-          isAdminPath ? "text-brand-800 bg-bronze-50/60" : "text-stone-600 hover:bg-bronze-50 hover:text-brand-800"
+          isAdminPath
+            ? "text-brand-800 bg-bronze-50/60"
+            : "text-stone-600 hover:bg-bronze-50 hover:text-brand-800"
         }`}
       >
-        <Icon name="chart" className={`w-5 h-5 shrink-0 ${isAdminPath ? "text-brand-600" : "text-bronze-500"}`} />
+        <Icon
+          name="chart"
+          className={`w-5 h-5 shrink-0 ${isAdminPath ? "text-brand-600" : "text-bronze-500"}`}
+        />
         <span className="flex-1 text-right truncate">ניהול</span>
         <Icon
           name="chevronRight"
@@ -102,7 +110,12 @@ function AdminNavGroup({
         <div className="overflow-hidden">
           <div className="flex flex-col gap-1 pt-1 ps-4">
             {links.map((l) => (
-              <NavLink key={l.href} link={l} collapsed={false} onNavigate={onNavigate} />
+              <NavLink
+                key={l.href}
+                link={l}
+                collapsed={false}
+                onNavigate={onNavigate}
+              />
             ))}
           </div>
         </div>
@@ -126,7 +139,9 @@ function AuthSection({
 
   if (status === "authenticated") {
     return (
-      <div className={`flex gap-2 ${collapsed ? "flex-col items-center" : "flex-col"}`}>
+      <div
+        className={`flex gap-2 ${collapsed ? "flex-col items-center" : "flex-col"}`}
+      >
         <span
           className={`flex items-center gap-2 text-sm text-stone-600 ${
             collapsed ? "flex-col text-center" : ""
@@ -135,7 +150,9 @@ function AuthSection({
           <span className="w-9 h-9 rounded-full bg-linear-to-b from-bronze-50 to-bronze-100 text-bronze-700 font-bold flex items-center justify-center ring-1 ring-bronze-200 shadow-sm shrink-0">
             {initial}
           </span>
-          {!collapsed && <span className="truncate">שלום, {session.user?.name}</span>}
+          {!collapsed && (
+            <span className="truncate">שלום, {session.user?.name}</span>
+          )}
         </span>
         <button
           onClick={() => {
@@ -190,8 +207,12 @@ export function Sidebar({
   const [contactActive, setContactActive] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [adminOpenOverride, setAdminOpenOverride] = useState<boolean | null>(null);
-  const [prevIsAdminPath, setPrevIsAdminPath] = useState(pathname?.startsWith("/admin") ?? false);
+  const [adminOpenOverride, setAdminOpenOverride] = useState<boolean | null>(
+    null,
+  );
+  const [prevIsAdminPath, setPrevIsAdminPath] = useState(
+    pathname?.startsWith("/admin") ?? false,
+  );
 
   useEffect(() => {
     const section = document.getElementById("contact");
@@ -223,18 +244,67 @@ export function Sidebar({
   const adminOpen = adminOpenOverride ?? isAdminPath;
 
   const adminLinks: NavItem[] = [
-    { href: "/admin", label: "לוח בקרה", icon: "chart", active: pathname === "/admin" },
-    { href: "/admin/calendar", label: "יומן חדרים", icon: "calendar", active: pathname?.startsWith("/admin/calendar") ?? false },
-    { href: "/admin/appointments", label: "ניהול תורים", icon: "list", active: pathname?.startsWith("/admin/appointments") ?? false },
-    { href: "/admin/rooms", label: "חדרים", icon: "door", active: pathname?.startsWith("/admin/rooms") ?? false },
-    { href: "/admin/gallery", label: "גלריה", icon: "image", active: pathname?.startsWith("/admin/gallery") ?? false },
-    { href: "/admin/hours", label: "שעות פעילות", icon: "clock", active: pathname?.startsWith("/admin/hours") ?? false },
-    { href: "/admin/users", label: "משתמשים", icon: "users", active: pathname?.startsWith("/admin/users") ?? false },
+    {
+      href: "/admin",
+      label: "לוח בקרה",
+      icon: "chart",
+      active: pathname === "/admin",
+    },
+    {
+      href: "/admin/calendar",
+      label: "יומן חדרים",
+      icon: "calendar",
+      active: pathname?.startsWith("/admin/calendar") ?? false,
+    },
+    {
+      href: "/admin/appointments",
+      label: "ניהול הזמנות",
+      icon: "list",
+      active: pathname?.startsWith("/admin/appointments") ?? false,
+    },
+    {
+      href: "/admin/rooms",
+      label: "חדרים",
+      icon: "door",
+      active: pathname?.startsWith("/admin/rooms") ?? false,
+    },
+    {
+      href: "/admin/gallery",
+      label: "גלריה",
+      icon: "image",
+      active: pathname?.startsWith("/admin/gallery") ?? false,
+    },
+    {
+      href: "/admin/hours",
+      label: "שעות פעילות",
+      icon: "clock",
+      active: pathname?.startsWith("/admin/hours") ?? false,
+    },
+    {
+      href: "/admin/users",
+      label: "משתמשים",
+      icon: "users",
+      active: pathname?.startsWith("/admin/users") ?? false,
+    },
     ...(showShifts
-      ? [{ href: "/admin/shifts", label: "משמרות", icon: "clock" as IconName, active: pathname?.startsWith("/admin/shifts") ?? false }]
+      ? [
+          {
+            href: "/admin/shifts",
+            label: "משמרות",
+            icon: "clock" as IconName,
+            active: pathname?.startsWith("/admin/shifts") ?? false,
+          },
+        ]
       : []),
     ...(showFinance
-      ? [{ href: "/admin/finance", label: "ניהול כספי", icon: "card" as IconName, active: pathname?.startsWith("/admin/finance") ?? false }]
+      ? [
+          {
+            href: "/admin/finance",
+            label: "ניהול כספי",
+            icon: "card" as IconName,
+            active: pathname?.startsWith("/admin/finance") ?? false,
+          },
+        ]
       : []),
   ];
 
@@ -272,7 +342,7 @@ export function Sidebar({
       links.push(
         {
           href: "/booking/my",
-          label: "התורים שלי",
+          label: "לוחות הזמנים שלי",
           icon: "calendarCheck",
           active: pathname === "/booking/my" && !contactActive,
         },
@@ -319,7 +389,9 @@ export function Sidebar({
       {/* תפריט נשלף למובייל */}
       <div
         className={`fixed inset-0 z-50 lg:hidden transition-opacity duration-300 ${
-          drawerOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+          drawerOpen
+            ? "opacity-100 pointer-events-auto"
+            : "opacity-0 pointer-events-none"
         }`}
       >
         <button
@@ -334,7 +406,11 @@ export function Sidebar({
           }`}
         >
           <div className="flex items-center justify-between gap-2 px-4 py-5">
-            <Link href={homeHref} onClick={() => setDrawerOpen(false)} className="shrink-0">
+            <Link
+              href={homeHref}
+              onClick={() => setDrawerOpen(false)}
+              className="shrink-0"
+            >
               <Logo />
             </Link>
             <button
@@ -359,12 +435,20 @@ export function Sidebar({
               />
             ) : (
               links.map((l) => (
-                <NavLink key={l.href} link={l} collapsed={false} onNavigate={() => setDrawerOpen(false)} />
+                <NavLink
+                  key={l.href}
+                  link={l}
+                  collapsed={false}
+                  onNavigate={() => setDrawerOpen(false)}
+                />
               ))
             )}
           </nav>
           <div className="border-t border-cream-200/80 p-3">
-            <AuthSection collapsed={false} onNavigate={() => setDrawerOpen(false)} />
+            <AuthSection
+              collapsed={false}
+              onNavigate={() => setDrawerOpen(false)}
+            />
           </div>
         </div>
       </div>
@@ -376,7 +460,9 @@ export function Sidebar({
             collapsed ? "lg:w-20" : "lg:w-72"
           }`}
         >
-          <div className={`flex items-center gap-2 px-4 py-5 ${collapsed ? "justify-center" : "justify-between"}`}>
+          <div
+            className={`flex items-center gap-2 px-4 py-5 ${collapsed ? "justify-center" : "justify-between"}`}
+          >
             {!collapsed && (
               <Link href={homeHref} className="shrink-0">
                 <Logo />
@@ -419,7 +505,9 @@ export function Sidebar({
                 links={adminLinks}
               />
             ) : (
-              links.map((l) => <NavLink key={l.href} link={l} collapsed={collapsed} />)
+              links.map((l) => (
+                <NavLink key={l.href} link={l} collapsed={collapsed} />
+              ))
             )}
           </nav>
           <div className="border-t border-cream-200/80 p-3">

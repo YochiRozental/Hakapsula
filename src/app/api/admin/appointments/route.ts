@@ -14,7 +14,7 @@ import {
   type SortField,
 } from "@/lib/table-filters-server";
 
-// שדות שמותר לסנן לפיהם בטבלת התורים
+// שדות שמותר לסנן לפיהם בטבלת ההזמנות
 const APPOINTMENT_FILTER_FIELDS: Record<string, ServerField> = {
   startTime: { type: "date", path: ["startTime"] },
   room: { type: "select", path: ["room", "key"] },
@@ -37,11 +37,18 @@ const APPOINTMENT_SORT_FIELDS: Record<string, SortField> = {
   status: { orderBy: (dir) => ({ status: dir }) },
 };
 
-const APPOINTMENT_SEARCH_PATHS = [["user", "name"], ["user", "email"], ["user", "phone"], ["notes"], ["room", "name"]];
+const APPOINTMENT_SEARCH_PATHS = [
+  ["user", "name"],
+  ["user", "email"],
+  ["user", "phone"],
+  ["notes"],
+  ["room", "name"],
+];
 
 export async function GET(request: Request) {
   const session = await requireAdmin();
-  if (!session) return NextResponse.json({ error: "אין הרשאה" }, { status: 403 });
+  if (!session)
+    return NextResponse.json({ error: "אין הרשאה" }, { status: 403 });
 
   const { searchParams } = new URL(request.url);
 
@@ -51,16 +58,27 @@ export async function GET(request: Request) {
       searchPaths: APPOINTMENT_SEARCH_PATHS,
       fields: APPOINTMENT_FILTER_FIELDS,
     })) as Prisma.AppointmentWhereInput;
-    // בסינון לפי תאריך התורים מוצגים בסדר כרונולוגי; בלעדיו — החדשים קודם
+    // בסינון לפי תאריך ההזמנות מוצגות בסדר כרונולוגי; בלעדיו — החדשים קודם
     const byDate = query.filters.some((f) => f.key === "startTime");
-    const include = { room: true, user: { select: { id: true, name: true, email: true, phone: true } } };
+    const include = {
+      room: true,
+      user: { select: { id: true, name: true, email: true, phone: true } },
+    };
     const skip = (query.page - 1) * query.pageSize;
-    const plan = resolveSort(query.sort, APPOINTMENT_SORT_FIELDS, [{ startTime: byDate ? "asc" : "desc" }]);
+    const plan = resolveSort(query.sort, APPOINTMENT_SORT_FIELDS, [
+      { startTime: byDate ? "asc" : "desc" },
+    ]);
 
     if (plan.kind === "text") {
-      const all = await prisma.appointment.findMany({ where: filtered, select: textSortSelect(plan.path) as { id: true } });
+      const all = await prisma.appointment.findMany({
+        where: filtered,
+        select: textSortSelect(plan.path) as { id: true },
+      });
       const { ids, total } = textSortPage(all, plan, skip, query.pageSize);
-      const rows = await prisma.appointment.findMany({ where: { id: { in: ids } }, include });
+      const rows = await prisma.appointment.findMany({
+        where: { id: { in: ids } },
+        include,
+      });
       return NextResponse.json({ appointments: orderByIds(rows, ids), total });
     }
 
@@ -96,7 +114,10 @@ export async function GET(request: Request) {
 
   const appointments = await prisma.appointment.findMany({
     where,
-    include: { room: true, user: { select: { id: true, name: true, email: true, phone: true } } },
+    include: {
+      room: true,
+      user: { select: { id: true, name: true, email: true, phone: true } },
+    },
     orderBy: { startTime: "asc" },
   });
 
@@ -105,7 +126,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const session = await requireAdmin();
-  if (!session) return NextResponse.json({ error: "אין הרשאה" }, { status: 403 });
+  if (!session)
+    return NextResponse.json({ error: "אין הרשאה" }, { status: 403 });
 
   const body = await request.json().catch(() => null);
   const userId = body?.userId as string | undefined;
@@ -115,7 +137,10 @@ export async function POST(request: Request) {
   const notes = body?.notes as string | undefined;
 
   if (!userId || !roomKey || !startTime || !endTime) {
-    return NextResponse.json({ error: "חסרים פרטים לקביעת התור" }, { status: 400 });
+    return NextResponse.json(
+      { error: "חסרים פרטים להזמנת הקליניקה" },
+      { status: 400 },
+    );
   }
 
   try {
@@ -133,6 +158,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: err.message }, { status: 409 });
     }
     console.error(err);
-    return NextResponse.json({ error: "שגיאה בקביעת התור" }, { status: 500 });
+    return NextResponse.json(
+      { error: "שגיאה בהזמנת הקליניקה" },
+      { status: 500 },
+    );
   }
 }

@@ -233,7 +233,7 @@ export default function BookingPage() {
       }
 
       if (!res.ok) {
-        setError(data.error ?? "שגיאה בקביעת התור");
+        setError(data.error ?? "שגיאה בהזמנת הקליניקה");
         setSubmitting(false);
         return;
       }
@@ -393,7 +393,7 @@ export default function BookingPage() {
             <section className="card p-5 sm:p-8">
               <SectionTitle
                 index="03"
-                hint="ההזמנה היא לשעה אחת · התנגשות עם תור קיים תוצג בסיכום למטה"
+                hint="ההזמנה היא לשעה אחת · התנגשות עם הזמנה קיימת תוצג בסיכום למטה"
                 aside={
                   loadingBusy && (
                     <span className="flex items-center gap-1.5 text-xs text-stone-400">
@@ -467,7 +467,7 @@ export default function BookingPage() {
 
         {profileIncomplete && (
           <Alert tone="error">
-            כדי להזמין תור, יש להשלים את הפרטים בפרופיל האישי.{" "}
+            כדי להזמין קליניקה, יש להשלים את הפרטים בפרופיל האישי.{" "}
             <Link href="/profile" className="underline font-semibold">
               לפרופיל האישי
             </Link>
@@ -476,7 +476,7 @@ export default function BookingPage() {
         {error && <Alert tone="error">{error}</Alert>}
         {success && (
           <Alert tone="success">
-            התור נקבע בהצלחה! מעביר אותך לתורים שלי...
+            ההזמנה נקבעה בהצלחה! מעביר אותך להזמנות שלי...
           </Alert>
         )}
 
@@ -497,12 +497,12 @@ export default function BookingPage() {
               </p>
               {conflict && (
                 <p className="text-sm text-red-200 font-semibold">
-                  השעה מתנגשת עם תור קיים
+                  השעה מתנגשת עם הזמנה קיימת
                 </p>
               )}
               {!conflict && dayHours && selectedReason && (
                 <p className="text-sm text-red-200 font-semibold">
-                  לא ניתן לקבוע תור – {selectedReason}
+                  לא ניתן להזמין קליניקה – {selectedReason}
                 </p>
               )}
             </div>
@@ -520,7 +520,7 @@ export default function BookingPage() {
             {submitting
               ? paymentsGate.enabled
                 ? "שומר את החדר..."
-                : "קובע תור..."
+                : "קובע קליניקה..."
               : paymentsGate.enabled
                 ? "המשך לתשלום"
                 : "הזמנת קליניקה"}

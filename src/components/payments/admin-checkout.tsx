@@ -32,7 +32,7 @@ function noticeForOutcome(outcome: string): Notice | null {
   switch (outcome) {
     case "CONFIRMED":
     case "ALREADY_CONFIRMED":
-      return { tone: "success", text: "התשלום אומת והתור אושר." };
+      return { tone: "success", text: "התשלום אומת וההזמנה אושרה." };
     case "PAYMENT_FAILED":
       return {
         tone: "error",
@@ -46,18 +46,18 @@ function noticeForOutcome(outcome: string): Notice | null {
     case "LATE_REFUNDED":
       return {
         tone: "error",
-        text: "התשלום התקבל רק אחרי שההחזקה פגה, ולכן התור לא אושר והסכום הוחזר במלואו. יש להתחיל מחדש.",
+        text: "התשלום התקבל רק אחרי שההחזקה פגה, ולכן ההזמנה לא אושרה והסכום הוחזר במלואו. יש להתחיל מחדש.",
       };
     case "BALANCE_CHANGED_REFUNDED":
       return {
         tone: "error",
-        text: "יתרת החבילה של הלקוח השתנתה בזמן התשלום, ולכן התור לא אושר והסכום הוחזר במלואו. יש להתחיל מחדש.",
+        text: "יתרת החבילה של הלקוח השתנתה בזמן התשלום, ולכן ההזמנה לא אושרה והסכום הוחזר במלואו. יש להתחיל מחדש.",
       };
     case "LATE_REFUND_FAILED":
     case "BALANCE_CHANGED_REFUND_FAILED":
       return {
         tone: "error",
-        text: "התור לא אושר, וההחזר הכספי עדיין בטיפול.",
+        text: "ההזמנה לא אושרה, וההחזר הכספי עדיין בטיפול.",
       };
     case "AMOUNT_MISMATCH":
       return {
@@ -96,7 +96,7 @@ export function AdminCheckout({
 }: {
   appointmentId: string;
   customerName: string;
-  /** נקרא פעם אחת ברגע שהתור מאושר בפועל (לפי תשובת השרת בלבד) */
+  /** נקרא פעם אחת ברגע שההזמנה מאושרת בפועל (לפי תשובת השרת בלבד) */
   onConfirmed: () => void;
   /** נקרא אחרי שההחזקה שוחררה/בוטלה בהצלחה */
   onCancelled: () => void;
@@ -218,7 +218,7 @@ export function AdminCheckout({
         `/api/admin/payments/holds/${appointmentId}/confirm-balance`,
         { body: {} },
       );
-      if (res.ok) setNotice({ tone: "success", text: "התור אושר מהיתרה." });
+      if (res.ok) setNotice({ tone: "success", text: "ההזמנה אושרה מהיתרה." });
       else if (res.data.code === "INSUFFICIENT_BALANCE") {
         setNotice({
           tone: "error",
@@ -265,14 +265,18 @@ export function AdminCheckout({
           {details.paidCashAgorot > 0 &&
             (details.payment && details.payment.discountAgorot > 0 ? (
               <TrialDiscountBreakdown
-                regularAgorot={details.paidCashAgorot + details.payment.discountAgorot}
+                regularAgorot={
+                  details.paidCashAgorot + details.payment.discountAgorot
+                }
                 discountAgorot={details.payment.discountAgorot}
                 finalAgorot={details.paidCashAgorot}
                 finalLabel="שולם בכסף"
                 shekel={shekel}
               />
             ) : (
-              <InfoRow label="שולם בכסף">{shekel(details.paidCashAgorot)}</InfoRow>
+              <InfoRow label="שולם בכסף">
+                {shekel(details.paidCashAgorot)}
+              </InfoRow>
             ))}
         </section>
       </div>
@@ -291,11 +295,13 @@ export function AdminCheckout({
         {notice && <NoticeBox notice={notice} />}
         {refunded ? (
           <Alert tone="error">
-            התור לא אושר, והסכום ששולם (
+            ההזמנה לא אושרה, והסכום ששולם (
             {shekel(details.payment!.refundedAgorot)}) הוחזר במלואו.
           </Alert>
         ) : chargedNoRefund ? (
-          <Alert tone="error">התור לא אושר, וההחזר הכספי עדיין בטיפול.</Alert>
+          <Alert tone="error">
+            ההזמנה לא אושרה, וההחזר הכספי עדיין בטיפול.
+          </Alert>
         ) : details.status === "CANCELLED" ? (
           <Alert tone="error">ההזמנה בוטלה.</Alert>
         ) : (
@@ -317,7 +323,7 @@ export function AdminCheckout({
   return (
     <div className="space-y-4">
       <SectionTitle hint={`עבור ${customerName}`}>
-        תשלום להשלמת התור
+        תשלום להשלמת ההזמנה
       </SectionTitle>
 
       {gate.sandbox && <SandboxNotice />}
@@ -408,7 +414,9 @@ export function AdminCheckout({
               shekel={shekel}
             />
           ) : (
-            <InfoRow label="סכום לתשלום">{shekel(pending.amountAgorot)}</InfoRow>
+            <InfoRow label="סכום לתשלום">
+              {shekel(pending.amountAgorot)}
+            </InfoRow>
           )}
           {gate.sandbox && pending.providerPaymentId && (
             <SandboxPanel
@@ -432,7 +440,7 @@ export function AdminCheckout({
           {plan?.fullyCoveredByBalance ? (
             <>
               <p className="text-sm text-stone-600">
-                היתרה של הלקוח מכסה את התור במלואו:{" "}
+                היתרה של הלקוח מכסה את ההזמנה במלואה:{" "}
                 <strong>{durationText(plan.packageMinutes)}</strong> יינוכו
                 מהחבילה ללא תשלום בכסף.
               </p>
@@ -446,32 +454,38 @@ export function AdminCheckout({
                   ? "מאשר..."
                   : `אישור מהיתרה · ${durationText(plan.packageMinutes)}`}
               </button>
-              {details.cashOnlyPlan && details.cashOnlyPlan.discountAgorot > 0 && (
-                <div className="rounded-xl bg-cream-50 ring-1 ring-cream-200 px-4 py-1">
-                  <p className="text-xs text-stone-500 pt-2 -mb-1">אם הלקוח ישלם בכסף במקום מהיתרה:</p>
-                  <TrialDiscountBreakdown
-                    regularAgorot={details.fullPriceAgorot}
-                    discountAgorot={details.cashOnlyPlan.discountAgorot}
-                    finalAgorot={details.cashOnlyPlan.cashAgorot}
-                    finalLabel="לתשלום בכסף"
-                    shekel={shekel}
-                  />
-                </div>
-              )}
+              {details.cashOnlyPlan &&
+                details.cashOnlyPlan.discountAgorot > 0 && (
+                  <div className="rounded-xl bg-cream-50 ring-1 ring-cream-200 px-4 py-1">
+                    <p className="text-xs text-stone-500 pt-2 -mb-1">
+                      אם הלקוח ישלם בכסף במקום מהיתרה:
+                    </p>
+                    <TrialDiscountBreakdown
+                      regularAgorot={details.fullPriceAgorot}
+                      discountAgorot={details.cashOnlyPlan.discountAgorot}
+                      finalAgorot={details.cashOnlyPlan.cashAgorot}
+                      finalLabel="לתשלום בכסף"
+                      shekel={shekel}
+                    />
+                  </div>
+                )}
               <button
                 type="button"
                 className="btn btn-secondary w-full"
                 disabled={action.busy}
                 onClick={() => pay(false)}
               >
-                לשלם בכסף במקום: {shekel(details.cashOnlyPlan?.cashAgorot ?? details.fullPriceAgorot)}
+                לשלם בכסף במקום:{" "}
+                {shekel(
+                  details.cashOnlyPlan?.cashAgorot ?? details.fullPriceAgorot,
+                )}
               </button>
             </>
           ) : plan && plan.packageMinutes > 0 ? (
             <>
               <p className="text-sm text-stone-600">
                 היתרה של הלקוח ({durationText(plan.packageMinutes)}) לא מכסה את
-                כל התור. ההפרש: <strong>{shekel(plan.cashAgorot)}</strong>.
+                כל ההזמנה. ההפרש: <strong>{shekel(plan.cashAgorot)}</strong>.
               </p>
               <button
                 type="button"
@@ -483,31 +497,41 @@ export function AdminCheckout({
                   ? "פותח תשלום..."
                   : `תשלום משולב: ${shekel(plan.cashAgorot)} + ${durationText(plan.packageMinutes)} מהיתרה`}
               </button>
-              {details.cashOnlyPlan && details.cashOnlyPlan.discountAgorot > 0 && (
-                <div className="rounded-xl bg-cream-50 ring-1 ring-cream-200 px-4 py-1">
-                  <p className="text-xs text-stone-500 pt-2 -mb-1">אם הלקוח ישלם הכול בכסף, בלי לנצל יתרה:</p>
-                  <TrialDiscountBreakdown
-                    regularAgorot={details.fullPriceAgorot}
-                    discountAgorot={details.cashOnlyPlan.discountAgorot}
-                    finalAgorot={details.cashOnlyPlan.cashAgorot}
-                    finalLabel="לתשלום בכסף"
-                    shekel={shekel}
-                  />
-                </div>
-              )}
+              {details.cashOnlyPlan &&
+                details.cashOnlyPlan.discountAgorot > 0 && (
+                  <div className="rounded-xl bg-cream-50 ring-1 ring-cream-200 px-4 py-1">
+                    <p className="text-xs text-stone-500 pt-2 -mb-1">
+                      אם הלקוח ישלם הכול בכסף, בלי לנצל יתרה:
+                    </p>
+                    <TrialDiscountBreakdown
+                      regularAgorot={details.fullPriceAgorot}
+                      discountAgorot={details.cashOnlyPlan.discountAgorot}
+                      finalAgorot={details.cashOnlyPlan.cashAgorot}
+                      finalLabel="לתשלום בכסף"
+                      shekel={shekel}
+                    />
+                  </div>
+                )}
               <button
                 type="button"
                 className="btn btn-secondary w-full"
                 disabled={action.busy}
                 onClick={() => pay(false)}
               >
-                לשלם הכול בכסף: {shekel(details.cashOnlyPlan?.cashAgorot ?? details.fullPriceAgorot)}
+                לשלם הכול בכסף:{" "}
+                {shekel(
+                  details.cashOnlyPlan?.cashAgorot ?? details.fullPriceAgorot,
+                )}
               </button>
             </>
           ) : (
             <>
               <p className="text-sm text-stone-600">
-                אין ללקוח יתרת שעות זמינה, ולכן התור משולם במחיר הרגיל{plan && plan.discountAgorot > 0 ? " (בניכוי הנחת הזמנה ראשונה)" : ""}.
+                אין ללקוח יתרת שעות זמינה, ולכן ההזמנה משולמת במחיר הרגיל
+                {plan && plan.discountAgorot > 0
+                  ? " (בניכוי הנחת הזמנה ראשונה)"
+                  : ""}
+                .
               </p>
               <button
                 type="button"

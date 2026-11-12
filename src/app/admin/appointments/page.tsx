@@ -68,7 +68,7 @@ const TIME_OPTIONS = buildTimeOptions();
 const PAGE_SIZE = 50;
 
 const FILTER_FIELDS: FilterField[] = [
-  { key: "startTime", label: "תאריך התור", type: "date" },
+  { key: "startTime", label: "תאריך ההזמנה", type: "date" },
   {
     key: "room",
     label: "חדר",
@@ -102,7 +102,7 @@ const FILTER_FIELDS: FilterField[] = [
   { key: "createdAt", label: "תאריך יצירה", type: "date" },
 ];
 
-/** ברירת המחדל כמו קודם: תורי היום. אפשר להסיר את התגית כדי לראות את כל התורים */
+/** ברירת המחדל כמו קודם: הזמנות היום. אפשר להסיר את התגית כדי לראות את כל ההזמנות */
 function defaultFilters(): Record<string, Filter> {
   const today = jerusalemTodayIso();
   return {
@@ -156,7 +156,7 @@ export default function AdminAppointmentsPage() {
   const time = timeTouched ? newTime : (openOptions[0] ?? newTime);
   const selectedOutside = !!newDayHours && !dayClosed && !insideHours(time);
 
-  // הסינון מתבצע בשרת על כל התורים, לא רק על העמוד הנוכחי
+  // הסינון מתבצע בשרת על כל ההזמנות, לא רק על העמוד הנוכחי
   function loadAppointments() {
     const params = buildListParams({
       search: applied.search,
@@ -208,7 +208,7 @@ export default function AdminAppointmentsPage() {
     loadAppointments();
   }
 
-  // דרישה: בלי מנגנון תשלום פעיל אסור לאשר תור בלי תשלום — חוסמים עם הסבר ברור, בלי ליפול חזרה לאישור חינמי
+  // דרישה: בלי מנגנון תשלום פעיל אסור לאשר הזמנה בלי תשלום — חוסמים עם הסבר ברור, בלי ליפול חזרה לאישור חינמי
   const paymentsBlocked = paymentsGate.loaded && !paymentsGate.enabled;
 
   function closeForm() {
@@ -227,7 +227,7 @@ export default function AdminAppointmentsPage() {
     }
     if (paymentsBlocked) {
       setFormError(
-        "הזמנת קליניקה ידנית דורשת הפעלת מנגנון תשלום. לא ניתן לאשר תור בלי תשלום או ניצול יתרה.",
+        "הזמנת קליניקה ידנית דורשת הפעלת מנגנון תשלום. לא ניתן לאשר הזמנה בלי תשלום או ניצול יתרה.",
       );
       return;
     }
@@ -237,7 +237,7 @@ export default function AdminAppointmentsPage() {
     const end = new Date(start.getTime() + newDuration * 60000);
 
     try {
-      // יוצרים החזקה בלבד (10 דק'); התור מאושר רק אחרי תשלום/יתרה אמיתיים דרך AdminCheckout למטה
+      // יוצרים החזקה בלבד (10 דק'); ההזמנה מאושרת רק אחרי תשלום/יתרה אמיתיים דרך AdminCheckout למטה
       const res = await fetch("/api/admin/payments/holds", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -253,7 +253,7 @@ export default function AdminAppointmentsPage() {
       if (!res.ok) {
         setFormError(
           res.status === 404
-            ? "הזמנת קליניקה ידנית דורשת הפעלת מנגנון תשלום. לא ניתן לאשר תור בלי תשלום או ניצול יתרה."
+            ? "הזמנת קליניקה ידנית דורשת הפעלת מנגנון תשלום. לא ניתן לאשר הזמנה בלי תשלום או ניצול יתרה."
             : (data.error ?? "שגיאה ביצירת ההחזקה"),
         );
         return;
@@ -271,8 +271,8 @@ export default function AdminAppointmentsPage() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="תפעול"
-        title="ניהול תורים"
-        subtitle="צפייה, סינון, ביטול וקביעה ידנית של תורים"
+        title="ניהול הזמנות"
+        subtitle="צפייה, סינון, ביטול וקביעה ידנית של הזמנות"
         actions={
           <button
             onClick={() => (showForm ? closeForm() : setShowForm(true))}
@@ -284,13 +284,15 @@ export default function AdminAppointmentsPage() {
         }
       />
 
-      {createSuccess && <Alert tone="success">התור נקבע בהצלחה!</Alert>}
+      {createSuccess && (
+        <Alert tone="success">הקליניקה נשמרה עבורך בהצלחה!</Alert>
+      )}
 
       <TableFilterBar
         state={filterState}
         fields={FILTER_FIELDS}
         searchPlaceholder="חיפוש לפי לקוח, טלפון, חדר או הערות..."
-        searchLabel="חיפוש תורים"
+        searchLabel="חיפוש הזמנות"
         total={total}
       />
 
@@ -465,15 +467,15 @@ export default function AdminAppointmentsPage() {
                 {dayClosed ? (
                   <p className="text-sm font-semibold text-red-700">
                     {saturdayClosed ? "יום שבת סגור" : "היום הוגדר כסגור"} — לא
-                    ניתן לקבוע בו תור, גם למנהל.
+                    ניתן להמין בו קליניקה, גם למנהל.
                   </p>
                 ) : newDayHours ? (
                   <>
                     <DayHours day={newDayHours} />
                     {selectedOutside && (
                       <p className="text-sm font-semibold text-amber-800">
-                        השעה שנבחרה מחוץ לשעות הפעילות. כמנהל אפשר לקבוע בה תור
-                        (חריג).
+                        השעה שנבחרה מחוץ לשעות הפעילות. כמנהל אפשר לקבוע בה
+                        הזמנה (חריג).
                       </p>
                     )}
                   </>
@@ -498,7 +500,7 @@ export default function AdminAppointmentsPage() {
                 <Alert tone="error">
                   הזמנת קליניקה ידנית דורשת הפעלת מנגנון תשלום (כסף או ניצול
                   יתרה). כרגע מנגנון התשלום אינו פעיל בסביבה זו, ולכן לא ניתן
-                  לאשר תור חדש במסך זה.
+                  לאשר הזמנה חדשה במסך זה.
                 </Alert>
               )}
               {formError && <Alert tone="error">{formError}</Alert>}
@@ -521,8 +523,8 @@ export default function AdminAppointmentsPage() {
         ) : appointments.length === 0 ? (
           <EmptyState>
             {filterState.active.length > 0 || applied.search
-              ? "לא נמצאו תורים התואמים לחיפוש ולמסננים."
-              : "אין תורים עדיין."}
+              ? "לא נמצאו הזמנות התואמות לחיפוש ולמסננים."
+              : "אין הזמנות עדיין."}
           </EmptyState>
         ) : (
           <div className="card overflow-x-auto">

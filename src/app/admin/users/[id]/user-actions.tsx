@@ -5,7 +5,17 @@ import { useRouter } from "next/navigation";
 
 type Status = "PENDING" | "APPROVED" | "BLOCKED";
 
-export function UserActions({ id, name, status, isSelf }: { id: string; name: string; status: Status; isSelf: boolean }) {
+export function UserActions({
+  id,
+  name,
+  status,
+  isSelf,
+}: {
+  id: string;
+  name: string;
+  status: Status;
+  isSelf: boolean;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
@@ -21,7 +31,12 @@ export function UserActions({ id, name, status, isSelf }: { id: string; name: st
   }
 
   async function remove() {
-    if (!confirm(`למחוק את ${name}? יימחקו גם כל התורים שלו/שלה. פעולה זו בלתי הפיכה.`)) return;
+    if (
+      !confirm(
+        `למחוק את ${name}? יימחקו גם כל ההזמנות שלו/שלה. פעולה זו בלתי הפיכה.`,
+      )
+    )
+      return;
     setBusy(true);
     const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
     if (!res.ok) {
@@ -37,16 +52,28 @@ export function UserActions({ id, name, status, isSelf }: { id: string; name: st
   return (
     <div className="flex flex-wrap gap-2">
       {status !== "APPROVED" && (
-        <button onClick={() => setStatus("APPROVED")} disabled={busy} className="btn btn-primary btn-sm">
+        <button
+          onClick={() => setStatus("APPROVED")}
+          disabled={busy}
+          className="btn btn-primary btn-sm"
+        >
           {status === "BLOCKED" ? "ביטול חסימה" : "אישור"}
         </button>
       )}
       {status !== "BLOCKED" && (
-        <button onClick={() => setStatus("BLOCKED")} disabled={busy || isSelf} className="btn btn-danger btn-sm">
+        <button
+          onClick={() => setStatus("BLOCKED")}
+          disabled={busy || isSelf}
+          className="btn btn-danger btn-sm"
+        >
           חסימה
         </button>
       )}
-      <button onClick={remove} disabled={busy || isSelf} className="btn btn-ghost btn-sm text-red-700! hover:bg-red-50!">
+      <button
+        onClick={remove}
+        disabled={busy || isSelf}
+        className="btn btn-ghost btn-sm text-red-700! hover:bg-red-50!"
+      >
         מחיקה
       </button>
     </div>

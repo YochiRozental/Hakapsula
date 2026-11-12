@@ -18,11 +18,20 @@ export type EditRow = { start: string; end: string; activity: ActivityType };
  * עריכת יום: מסלול היום (חל גם בלי חלונות: היום המלא לפי שעות ברירת המחדל שלו), האם היום סגור, והחלונות המפורשים.
  * כשהיום סגור החלונות נשמרים (לא נמחקים) אך אינם פעילים.
  */
-export type DayEdit = { dayActivity: ActivityType; closed: boolean; rows: EditRow[] };
+export type DayEdit = {
+  dayActivity: ActivityType;
+  closed: boolean;
+  rows: EditRow[];
+};
 
 /** מסלול היום בפועל: כשכל החלונות מאותו מסלול — הוא; אחרת (או בלי חלונות) — מה שנבחר ליום */
-export function effectiveDayActivity({ dayActivity, rows }: Pick<DayEdit, "dayActivity" | "rows">): ActivityType {
-  return rows.length > 0 && rows.every((r) => r.activity === rows[0].activity) ? rows[0].activity : dayActivity;
+export function effectiveDayActivity({
+  dayActivity,
+  rows,
+}: Pick<DayEdit, "dayActivity" | "rows">): ActivityType {
+  return rows.length > 0 && rows.every((r) => r.activity === rows[0].activity)
+    ? rows[0].activity
+    : dayActivity;
 }
 
 export function toEditRows(list: DayInterval[]): EditRow[] {
@@ -109,9 +118,11 @@ export function HoursEditor({
 }) {
   const { rows } = value;
   const dayActivity = effectiveDayActivity(value);
-  const mixed = rows.length > 0 && !rows.every((r) => r.activity === rows[0].activity);
+  const mixed =
+    rows.length > 0 && !rows.every((r) => r.activity === rows[0].activity);
 
-  const setRows = (next: EditRow[]) => onChange({ ...value, dayActivity, rows: next });
+  const setRows = (next: EditRow[]) =>
+    onChange({ ...value, dayActivity, rows: next });
   function patch(i: number, change: Partial<EditRow>) {
     setRows(rows.map((r, idx) => (idx === i ? { ...r, ...change } : r)));
   }
@@ -131,24 +142,39 @@ export function HoursEditor({
           onChange={(a) =>
             a === CLOSED
               ? onChange({ ...value, closed: true })
-              : onChange({ dayActivity: a, closed: false, rows: rows.map((r) => ({ ...r, activity: a })) })
+              : onChange({
+                  dayActivity: a,
+                  closed: false,
+                  rows: rows.map((r) => ({ ...r, activity: a })),
+                })
           }
         />
-        <p className="text-xs text-stone-500 mt-1">חל על כל חלונות היום; אפשר לשנות כל חלון בנפרד.</p>
+        <p className="text-xs text-stone-500 mt-1">
+          חל על כל חלונות היום; אפשר לשנות כל חלון בנפרד.
+        </p>
       </div>
 
       {value.closed ? (
-        <p className="text-sm font-semibold text-red-700">היום סגור — לא ניתן להזמין בו תורים. חלונות שהוגדרו נשמרים ויחזרו לפעול כשהיום ייפתח.</p>
+        <p className="text-sm font-semibold text-red-700">
+          היום סגור — לא ניתן להזמין בו קליניקות. חלונות שהוגדרו נשמרים ויחזרו
+          לפעול כשהיום ייפתח.
+        </p>
       ) : (
         <>
           {rows.length === 0 && (
             <p className="text-sm text-stone-500">
-              ללא חלונות מוגדרים — פתוח <span className="tabular-nums" dir="ltr">{formatWindow({ ...defaultWindow, activity: dayActivity })}</span>{" "}
+              ללא חלונות מוגדרים — פתוח{" "}
+              <span className="tabular-nums" dir="ltr">
+                {formatWindow({ ...defaultWindow, activity: dayActivity })}
+              </span>{" "}
               במסלול {ACTIVITY_LABELS[dayActivity]}.
             </p>
           )}
           {rows.map((r, i) => (
-            <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end rounded-xl bg-cream-50 ring-1 ring-cream-200 p-3">
+            <div
+              key={i}
+              className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end rounded-xl bg-cream-50 ring-1 ring-cream-200 p-3"
+            >
               <label className="block">
                 <span className="field-label">התחלה</span>
                 <input
@@ -184,14 +210,23 @@ export function HoursEditor({
               </button>
               <label className="block col-span-3">
                 <span className="field-label">מסלול פעילות בחלון</span>
-                <ActivitySelect value={r.activity} disabled={disabled} onChange={(a) => patch(i, { activity: a as ActivityType })} />
+                <ActivitySelect
+                  value={r.activity}
+                  disabled={disabled}
+                  onChange={(a) => patch(i, { activity: a as ActivityType })}
+                />
               </label>
             </div>
           ))}
           <button
             type="button"
             disabled={disabled}
-            onClick={() => setRows([...rows, { start: "09:00", end: "17:00", activity: dayActivity }])}
+            onClick={() =>
+              setRows([
+                ...rows,
+                { start: "09:00", end: "17:00", activity: dayActivity },
+              ])
+            }
             className="btn btn-secondary btn-sm"
           >
             <Icon name="plus" className="w-4 h-4" />

@@ -2,7 +2,10 @@ import { prisma } from "@/lib/prisma";
 import { CONFLICTING_ROOM_KEYS, ROOM_LOCK_ZONE } from "@/lib/rooms";
 import { ensureRooms } from "@/lib/rooms-db";
 import { assertBookable } from "@/lib/opening-hours-db";
-import { MIN_DURATION_MINUTES, MAX_DURATION_MINUTES } from "@/lib/business-rules";
+import {
+  MIN_DURATION_MINUTES,
+  MAX_DURATION_MINUTES,
+} from "@/lib/business-rules";
 import { BookingError } from "@/lib/booking-error";
 import type { BookingSource, Prisma, RoomKey } from "@/generated/prisma/client";
 
@@ -10,10 +13,18 @@ export { BookingError } from "@/lib/booking-error";
 
 /** שעון ירושלים נמצא תמיד בהפרש של מספר שעות שלם מ-UTC, כך שבדיקת הדקות/שניות ב-UTC שקולה לבדיקתן בשעון ירושלים */
 function isOnTheHour(date: Date) {
-  return date.getUTCMinutes() === 0 && date.getUTCSeconds() === 0 && date.getUTCMilliseconds() === 0;
+  return (
+    date.getUTCMinutes() === 0 &&
+    date.getUTCSeconds() === 0 &&
+    date.getUTCMilliseconds() === 0
+  );
 }
 
-function validateTimeRange(startTime: Date, endTime: Date, source: BookingSource) {
+function validateTimeRange(
+  startTime: Date,
+  endTime: Date,
+  source: BookingSource,
+) {
   if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
     throw new BookingError("תאריך/שעה לא תקינים");
   }
@@ -28,13 +39,17 @@ function validateTimeRange(startTime: Date, endTime: Date, source: BookingSource
   }
   const durationMinutes = (endTime.getTime() - startTime.getTime()) / 60000;
   if (durationMinutes < MIN_DURATION_MINUTES) {
-    throw new BookingError(`משך התור המינימלי הוא ${MIN_DURATION_MINUTES} דקות`);
+    throw new BookingError(
+      `משך ההזמנה המינימלי הוא ${MIN_DURATION_MINUTES} דקות`,
+    );
   }
   if (durationMinutes > MAX_DURATION_MINUTES) {
-    throw new BookingError(`משך התור המקסימלי הוא ${MAX_DURATION_MINUTES} דקות`);
+    throw new BookingError(
+      `משך ההזמנה המקסימלי הוא ${MAX_DURATION_MINUTES} דקות`,
+    );
   }
   if (startTime.getTime() < Date.now()) {
-    throw new BookingError("לא ניתן לקבוע תור בזמן שכבר עבר");
+    throw new BookingError("לא ניתן לקבוע הזמנה בזמן שכבר עבר");
   }
 }
 
@@ -47,9 +62,14 @@ export const MAX_ACTIVE_HOLDS_PER_USER = 3;
  * הזמנה שחוסמת חדר: מאושרת, או החזקה שעדיין לא פגה. החזקה שפגה אינה חוסמת גם אם הניקוי טרם רץ —
  * התנאי נבדק מול הזמן עצמו ולא מול הסטטוס בלבד. כל שאילתת זמינות/התנגשות חייבת להשתמש בו.
  */
-export function blockingAppointmentWhere(now: Date): Prisma.AppointmentWhereInput {
+export function blockingAppointmentWhere(
+  now: Date,
+): Prisma.AppointmentWhereInput {
   return {
-    OR: [{ status: "CONFIRMED" }, { status: "PENDING_PAYMENT", holdExpiresAt: { gt: now } }],
+    OR: [
+      { status: "CONFIRMED" },
+      { status: "PENDING_PAYMENT", holdExpiresAt: { gt: now } },
+    ],
   };
 }
 
@@ -57,7 +77,7 @@ export async function findConflictingAppointments(
   roomKey: RoomKey,
   startTime: Date,
   endTime: Date,
-  excludeAppointmentId?: string
+  excludeAppointmentId?: string,
 ) {
   const conflictingKeys = CONFLICTING_ROOM_KEYS[roomKey];
   return prisma.appointment.findMany({
@@ -129,23 +149,30 @@ export async function createAppointment(params: {
 
 export async function cancelAppointment(
   appointmentId: string,
-  requestingUser: { id: string; role: string }
+  requestingUser: { id: string; role: string },
 ) {
   const appointment = await prisma.appointment.findUnique({
     where: { id: appointmentId },
   });
   if (!appointment) {
-    throw new BookingError("התור לא נמצא");
+    throw new BookingError("ההזמנה לא נמצאה");
   }
-  if (requestingUser.role !== "ADMIN" && appointment.userId !== requestingUser.id) {
-    throw new BookingError("אין הרשאה לבטל תור זה");
+  if (
+    requestingUser.role !== "ADMIN" &&
+    appointment.userId !== requestingUser.id
+  ) {
+    throw new BookingError("אין הרשאה לבטל הזמנה זו");
   }
-  // מופע של משמרת קבועה: שינוי וביטול מחייבים אישור מנהל במסלול המשמרות (כולל ההשפעה על החיוב), לא ביטול תור בודד
+  // מופע של משמרת קבועה: שינוי וביטול מחייבים אישור מנהל במסלול המשמרות (כולל ההשפעה על החיוב), לא ביטול הזמנה בודדת
   if ((await prisma.shiftOccurrence.count({ where: { appointmentId } })) > 0) {
-    throw new BookingError("זהו מופע של משמרת קבועה. שינוי או ביטול מחייבים בקשה ואישור מנהל במסך המשמרות");
+    throw new BookingError(
+      "זהו מופע של משמרת קבועה. שינוי או ביטול מחייבים בקשה ואישור מנהל במסך המשמרות",
+    );
   }
   // הזמנה ששולמה מקוונת (בכסף או מיתרת דקות) מבוטלת רק דרך מסלול הביטול עם החזר (payments/booking-payment), כדי שלא יאבדו כסף או דקות
-  const paid = await prisma.payment.count({ where: { appointmentId, status: "SUCCEEDED" } });
+  const paid = await prisma.payment.count({
+    where: { appointmentId, status: "SUCCEEDED" },
+  });
   if (paid > 0 || appointment.paidFromBalanceMinutes > 0) {
     throw new BookingError("הזמנה ששולמה מבוטלת דרך מסלול הביטול עם החזר");
   }
@@ -156,7 +183,10 @@ export async function cancelAppointment(
 }
 
 /** נעילת ה-advisory של אזור החדר. תמיד הנעילה הראשונה בטרנזקציה, לפני נעילת שורות (סדר עקבי מונע deadlock) */
-export async function lockRoomZone(tx: Pick<Prisma.TransactionClient, "$executeRaw">, roomKey: RoomKey) {
+export async function lockRoomZone(
+  tx: Pick<Prisma.TransactionClient, "$executeRaw">,
+  roomKey: RoomKey,
+) {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${APPOINTMENT_LOCK_NAMESPACE}::int, ${ROOM_LOCK_ZONE[roomKey]}::int)`;
 }
 
@@ -173,7 +203,15 @@ export async function createBookingHold(params: {
   source?: BookingSource;
   now?: Date;
 }) {
-  const { userId, roomKey, startTime, endTime, notes, source = "WEB", now = new Date() } = params;
+  const {
+    userId,
+    roomKey,
+    startTime,
+    endTime,
+    notes,
+    source = "WEB",
+    now = new Date(),
+  } = params;
 
   validateTimeRange(startTime, endTime, source);
   await assertBookable(startTime, endTime, source, userId);
@@ -213,10 +251,16 @@ export async function createBookingHold(params: {
 
     if (source !== "ADMIN") {
       const active = await tx.appointment.count({
-        where: { userId, status: "PENDING_PAYMENT", holdExpiresAt: { gt: now } },
+        where: {
+          userId,
+          status: "PENDING_PAYMENT",
+          holdExpiresAt: { gt: now },
+        },
       });
       if (active >= MAX_ACTIVE_HOLDS_PER_USER) {
-        throw new BookingError("יש לך כבר מספר החזקות פעילות; השלם תשלום או המתן לפקיעתן");
+        throw new BookingError(
+          "יש לך כבר מספר החזקות פעילות; השלם תשלום או המתן לפקיעתן",
+        );
       }
     }
 

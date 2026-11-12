@@ -4,8 +4,17 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { EmptyState, Loading, PageHeader } from "@/components/ui";
-import { Pager, SortableTh, TableFilterBar, useTableFilters } from "@/components/table-filter";
-import { buildListParams, clampPage, type FilterField } from "@/lib/table-filters";
+import {
+  Pager,
+  SortableTh,
+  TableFilterBar,
+  useTableFilters,
+} from "@/components/table-filter";
+import {
+  buildListParams,
+  clampPage,
+  type FilterField,
+} from "@/lib/table-filters";
 
 type UserRow = {
   id: string;
@@ -45,7 +54,7 @@ const FILTER_FIELDS: FilterField[] = [
   { key: "email", label: "אימייל", type: "text", nullable: true },
   { key: "phone", label: "טלפון", type: "text", nullable: true },
   { key: "createdAt", label: "תאריך הצטרפות", type: "date" },
-  { key: "appointments", label: "מספר תורים", type: "number" },
+  { key: "appointments", label: "מספר הזמנות", type: "number" },
   {
     key: "role",
     label: "תפקיד",
@@ -59,7 +68,9 @@ const FILTER_FIELDS: FilterField[] = [
     key: "status",
     label: "סטטוס",
     type: "select",
-    options: (Object.keys(STATUS_LABELS) as UserRow["status"][]).map((value) => ({ value, label: STATUS_LABELS[value] })),
+    options: (Object.keys(STATUS_LABELS) as UserRow["status"][]).map(
+      (value) => ({ value, label: STATUS_LABELS[value] }),
+    ),
   },
 ];
 
@@ -85,11 +96,21 @@ export default function AdminUsersPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [createdInfo, setCreatedInfo] = useState<{ name: string; email: string | null; password: string } | null>(null);
+  const [createdInfo, setCreatedInfo] = useState<{
+    name: string;
+    email: string | null;
+    password: string;
+  } | null>(null);
 
   // הסינון מתבצע בשרת על כל המשתמשים, לא רק על העמוד הנוכחי
   function load() {
-    const params = buildListParams({ search: applied.search, filters: applied.filters, sort, page, pageSize: PAGE_SIZE });
+    const params = buildListParams({
+      search: applied.search,
+      filters: applied.filters,
+      sort,
+      page,
+      pageSize: PAGE_SIZE,
+    });
     fetch(`/api/admin/users?${params}`)
       .then((res) => res.json())
       .then((data) => {
@@ -97,7 +118,8 @@ export default function AdminUsersPage() {
         const nextTotal = typeof data?.total === "number" ? data.total : 0;
         setTotal(nextTotal);
         // אחרי מחיקה/סינון העמוד עלול לא להתקיים — חוזרים לעמוד התקין האחרון
-        if (clampPage(page, nextTotal, PAGE_SIZE) !== page) setPage(clampPage(page, nextTotal, PAGE_SIZE));
+        if (clampPage(page, nextTotal, PAGE_SIZE) !== page)
+          setPage(clampPage(page, nextTotal, PAGE_SIZE));
       });
   }
 
@@ -119,7 +141,11 @@ export default function AdminUsersPage() {
       return;
     }
     const created = await res.json();
-    setCreatedInfo({ name: created.name, email: created.email, password: created.temporaryPassword });
+    setCreatedInfo({
+      name: created.name,
+      email: created.email,
+      password: created.temporaryPassword,
+    });
     setForm(EMPTY_FORM);
     setShowForm(false);
     load();
@@ -139,12 +165,14 @@ export default function AdminUsersPage() {
   async function deleteUser(user: UserRow) {
     const warning =
       user._count.appointments > 0
-        ? `למחוק את ${user.name}? יימחקו גם ${user._count.appointments} התורים שלו/שלה. פעולה זו בלתי הפיכה.`
+        ? `למחוק את ${user.name}? יימחקו גם ${user._count.appointments} ההזמנות שלו/שלה. פעולה זו בלתי הפיכה.`
         : `למחוק את ${user.name}? פעולה זו בלתי הפיכה.`;
     if (!confirm(warning)) return;
 
     setSavingId(user.id);
-    const res = await fetch(`/api/admin/users/${user.id}`, { method: "DELETE" });
+    const res = await fetch(`/api/admin/users/${user.id}`, {
+      method: "DELETE",
+    });
     setSavingId(null);
     if (!res.ok) {
       const data = await res.json().catch(() => null);
@@ -156,7 +184,11 @@ export default function AdminUsersPage() {
 
   return (
     <div>
-      <PageHeader eyebrow="לקוחות ומנהלים" title="ניהול משתמשים" subtitle="אישור, חסימה ומחיקה של משתמשי המערכת" />
+      <PageHeader
+        eyebrow="לקוחות ומנהלים"
+        title="ניהול משתמשים"
+        subtitle="אישור, חסימה ומחיקה של משתמשי המערכת"
+      />
 
       <div className="mb-4">
         <TableFilterBar
@@ -166,7 +198,10 @@ export default function AdminUsersPage() {
           searchLabel="חיפוש משתמשים"
           total={total}
           actions={
-            <button onClick={() => setShowForm((v) => !v)} className="btn btn-primary">
+            <button
+              onClick={() => setShowForm((v) => !v)}
+              className="btn btn-primary"
+            >
               {showForm ? "ביטול" : "+ הוספת משתמש"}
             </button>
           }
@@ -174,19 +209,34 @@ export default function AdminUsersPage() {
       </div>
 
       {createdInfo && (
-        <div className="card p-5 mb-5 border border-brand-100 bg-brand-50/40" role="status">
-          <p className="font-semibold text-stone-800 mb-2">המשתמש {createdInfo.name} נוצר בהצלחה</p>
+        <div
+          className="card p-5 mb-5 border border-brand-100 bg-brand-50/40"
+          role="status"
+        >
+          <p className="font-semibold text-stone-800 mb-2">
+            המשתמש {createdInfo.name} נוצר בהצלחה
+          </p>
           {createdInfo.email && (
             <p className="text-sm text-stone-600">
-              אימייל: <span dir="ltr" className="font-mono">{createdInfo.email}</span>
+              אימייל:{" "}
+              <span dir="ltr" className="font-mono">
+                {createdInfo.email}
+              </span>
             </p>
           )}
           <p className="text-sm text-stone-600 flex flex-wrap items-center gap-2">
             סיסמה זמנית:
-            <span dir="ltr" className="font-mono text-base font-bold text-stone-900 select-all">{createdInfo.password}</span>
+            <span
+              dir="ltr"
+              className="font-mono text-base font-bold text-stone-900 select-all"
+            >
+              {createdInfo.password}
+            </span>
             <button
               type="button"
-              onClick={() => navigator.clipboard?.writeText(createdInfo.password)}
+              onClick={() =>
+                navigator.clipboard?.writeText(createdInfo.password)
+              }
               className="btn btn-secondary btn-sm"
             >
               העתקה
@@ -195,14 +245,21 @@ export default function AdminUsersPage() {
           <p className="text-xs text-stone-500 mt-2">
             הסיסמה מוצגת רק עכשיו. בכניסה הראשונה המשתמש יידרש להחליף אותה.
           </p>
-          <button type="button" onClick={() => setCreatedInfo(null)} className="btn btn-ghost btn-sm mt-2">
+          <button
+            type="button"
+            onClick={() => setCreatedInfo(null)}
+            className="btn btn-ghost btn-sm mt-2"
+          >
             סגירה
           </button>
         </div>
       )}
 
       {showForm && (
-        <form onSubmit={createUser} className="card p-5 mb-5 grid gap-4 sm:grid-cols-2">
+        <form
+          onSubmit={createUser}
+          className="card p-5 mb-5 grid gap-4 sm:grid-cols-2"
+        >
           <input
             required
             value={form.firstName}
@@ -276,11 +333,18 @@ export default function AdminUsersPage() {
             <option value="BLOCKED">חסום</option>
           </select>
           <p className="sm:col-span-2 text-xs text-stone-500">
-            יש להזין אימייל או פלאפון (ההתחברות היא באמצעות אימייל). הסיסמה תוצג לך לאחר היצירה, והמשתמש יחליף אותה בכניסה הראשונה.
+            יש להזין אימייל או פלאפון (ההתחברות היא באמצעות אימייל). הסיסמה תוצג
+            לך לאחר היצירה, והמשתמש יחליף אותה בכניסה הראשונה.
           </p>
-          {formError && <p className="sm:col-span-2 text-sm text-red-700">{formError}</p>}
+          {formError && (
+            <p className="sm:col-span-2 text-sm text-red-700">{formError}</p>
+          )}
           <div className="sm:col-span-2">
-            <button type="submit" disabled={creating} className="btn btn-primary">
+            <button
+              type="submit"
+              disabled={creating}
+              className="btn btn-primary"
+            >
               {creating ? "שומר..." : "הוספה"}
             </button>
           </div>
@@ -291,7 +355,9 @@ export default function AdminUsersPage() {
         <Loading />
       ) : users.length === 0 ? (
         <EmptyState icon="users">
-          {filterState.active.length > 0 || applied.search ? "לא נמצאו משתמשים התואמים לחיפוש ולמסננים." : "אין משתמשים עדיין."}
+          {filterState.active.length > 0 || applied.search
+            ? "לא נמצאו משתמשים התואמים לחיפוש ולמסננים."
+            : "אין משתמשים עדיין."}
         </EmptyState>
       ) : (
         <div className="card overflow-x-auto">
@@ -299,12 +365,28 @@ export default function AdminUsersPage() {
             <thead>
               <tr>
                 <SortableTh label="שם" sortKey="name" state={filterState} />
-                <SortableTh label="אימייל" sortKey="email" state={filterState} />
+                <SortableTh
+                  label="אימייל"
+                  sortKey="email"
+                  state={filterState}
+                />
                 <SortableTh label="טלפון" sortKey="phone" state={filterState} />
-                <SortableTh label="תאריך הצטרפות" sortKey="createdAt" state={filterState} />
-                <SortableTh label="תורים" sortKey="appointments" state={filterState} />
+                <SortableTh
+                  label="תאריך הצטרפות"
+                  sortKey="createdAt"
+                  state={filterState}
+                />
+                <SortableTh
+                  label="הזמנות"
+                  sortKey="appointments"
+                  state={filterState}
+                />
                 <SortableTh label="תפקיד" sortKey="role" state={filterState} />
-                <SortableTh label="סטטוס" sortKey="status" state={filterState} />
+                <SortableTh
+                  label="סטטוס"
+                  sortKey="status"
+                  state={filterState}
+                />
                 <th>פעולות</th>
                 <th></th>
               </tr>
@@ -324,21 +406,31 @@ export default function AdminUsersPage() {
                       {u.name}
                     </Link>
                   </td>
-                  <td className="text-stone-500">{u.email ?? "נרשם/ה דרך הטלפון"}</td>
-                  <td className="text-stone-500 tabular-nums whitespace-nowrap">{u.phone ?? "—"}</td>
-                  <td className="text-stone-500 tabular-nums whitespace-nowrap">{joinDateFmt.format(new Date(u.createdAt))}</td>
+                  <td className="text-stone-500">
+                    {u.email ?? "נרשם/ה דרך הטלפון"}
+                  </td>
+                  <td className="text-stone-500 tabular-nums whitespace-nowrap">
+                    {u.phone ?? "—"}
+                  </td>
+                  <td className="text-stone-500 tabular-nums whitespace-nowrap">
+                    {joinDateFmt.format(new Date(u.createdAt))}
+                  </td>
                   <td className="tabular-nums">{u._count.appointments}</td>
                   <td>
                     <span
                       className={`badge ${
-                        u.role === "ADMIN" ? "bg-brand-50 text-brand-700" : "bg-cream-100 text-stone-600"
+                        u.role === "ADMIN"
+                          ? "bg-brand-50 text-brand-700"
+                          : "bg-cream-100 text-stone-600"
                       }`}
                     >
                       {u.role === "ADMIN" ? "מנהל" : "לקוח"}
                     </span>
                   </td>
                   <td>
-                    <span className={`badge ${STATUS_CLASSES[u.status]}`}>{STATUS_LABELS[u.status]}</span>
+                    <span className={`badge ${STATUS_CLASSES[u.status]}`}>
+                      {STATUS_LABELS[u.status]}
+                    </span>
                   </td>
                   <td className="whitespace-nowrap">
                     {u.status === "PENDING" && (
@@ -352,7 +444,9 @@ export default function AdminUsersPage() {
                         </button>
                         <button
                           onClick={() => setStatus(u, "BLOCKED")}
-                          disabled={savingId === u.id || u.id === session?.user?.id}
+                          disabled={
+                            savingId === u.id || u.id === session?.user?.id
+                          }
                           className="btn btn-danger btn-sm"
                         >
                           חסימה
@@ -362,7 +456,9 @@ export default function AdminUsersPage() {
                     {u.status === "APPROVED" && (
                       <button
                         onClick={() => setStatus(u, "BLOCKED")}
-                        disabled={savingId === u.id || u.id === session?.user?.id}
+                        disabled={
+                          savingId === u.id || u.id === session?.user?.id
+                        }
                         className="btn btn-danger btn-sm"
                       >
                         חסימה
@@ -393,7 +489,14 @@ export default function AdminUsersPage() {
           </table>
         </div>
       )}
-      {total !== null && <Pager page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} />}
+      {total !== null && (
+        <Pager
+          page={page}
+          pageSize={PAGE_SIZE}
+          total={total}
+          onPage={setPage}
+        />
+      )}
     </div>
   );
 }

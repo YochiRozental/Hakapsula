@@ -178,9 +178,7 @@ export function CompleteProfileForm({
               </label>
             ))}
           </div>
-          <p className="text-xs text-stone-400 mt-1.5">
-            נדרש להזמנת תור
-          </p>
+          <p className="text-xs text-stone-400 mt-1.5">נדרש להזמנת קליניקה</p>
         </div>
 
         <div className="hairline-bronze" />

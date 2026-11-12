@@ -4,7 +4,7 @@ import { cancelAppointment, BookingError } from "@/lib/booking";
 
 export async function DELETE(
   _request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();
   if (!session?.user) {
@@ -21,6 +21,6 @@ export async function DELETE(
       return NextResponse.json({ error: err.message }, { status: 403 });
     }
     console.error(err);
-    return NextResponse.json({ error: "שגיאה בביטול התור" }, { status: 500 });
+    return NextResponse.json({ error: "שגיאה בביטול ההזמנה" }, { status: 500 });
   }
 }

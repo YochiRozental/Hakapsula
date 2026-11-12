@@ -6,7 +6,7 @@ export const ROOM_LABELS: Record<RoomKey, string> = {
   ROOM3: "קפסולה 3",
   ROOM4: "קפסולה 4",
   WORKSHOP: "קפסולת סדנאות",
-  ROOM1_2: "קפסולה 1+2 (משולב)",
+  ROOM1_2: "קפסולה 1+2 (2 חדרים נפרדים עם חיבור פנימי ודיסקרטי בינהם)",
 };
 
 export const ROOM_SEED: {
@@ -47,7 +47,7 @@ export const ROOM_SEED: {
   },
   {
     key: "ROOM1_2",
-    name: "קפסולה 1+2 (משולב)",
+    name: "קפסולה 1+2 (2 חדרים נפרדים עם חיבור פנימי ודיסקרטי בינהם)",
     description:
       "ניתן להזמין את שני החדרים עם דלת משותפת ביניהם עבור מטפלים הזקוקים לחיבור ביניהם",
     isCombo: true,

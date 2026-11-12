@@ -39,12 +39,12 @@ async function sendApprovalEmail(email: string, name: string) {
     auth: { user: SMTP_USER, pass: SMTP_PASS },
   });
 
-  const text = `שלום ${name},\n\nהחשבון שלך במערכת קביעת התורים אושר על ידי מנהל המערכת.\nניתן כעת להתחבר ולקבוע תורים בקליניקות.\n\nאם היית מחובר/ת בעת האישור, יש להתנתק ולהתחבר מחדש כדי שהאישור ייכנס לתוקף.`;
+  const text = `שלום ${name},\n\nהחשבון שלך במערכת קביעת הזמנות אושר על ידי מנהל המערכת.\nניתן כעת להתחבר ולקבוע הזמנות בקליניקות.\n\nאם היית מחובר/ת בעת האישור, יש להתנתק ולהתחבר מחדש כדי שהאישור ייכנס לתוקף.`;
 
   await transport.sendMail({
     from: SMTP_FROM,
     to: email,
-    subject: "החשבון שלך אושר - ניתן לקבוע תורים",
+    subject: "החשבון שלך אושר - ניתן להזמין קליניקות",
     text,
     html: `<div dir="rtl" style="text-align: right; font-family: Arial, sans-serif;">${text
       .split("\n")
@@ -101,7 +101,13 @@ export const CONTACT_EMAIL = "hakapsula@gmail.com";
  * מעביר הודעה מטופס "צור קשר" לתיבת המייל של המערכת. Reply-To מוגדר לכתובת הפונה כדי שאפשר יהיה לחזור אליו ישירות.
  * משתמש באותה הגדרת SMTP כמו מייל האישור.
  */
-export async function sendContactMessage(msg: { name?: string; email?: string; phone?: string; message?: string; marketingConsent?: boolean }) {
+export async function sendContactMessage(msg: {
+  name?: string;
+  email?: string;
+  phone?: string;
+  message?: string;
+  marketingConsent?: boolean;
+}) {
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
 
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS || !SMTP_FROM) {
@@ -129,7 +135,9 @@ export async function sendContactMessage(msg: { name?: string; email?: string; p
   await transport.sendMail({
     from: SMTP_FROM,
     to: CONTACT_EMAIL,
-    replyTo: msg.email ? `"${(msg.name ?? "").replace(/["\r\n]/g, "")}" <${msg.email}>` : undefined,
+    replyTo: msg.email
+      ? `"${(msg.name ?? "").replace(/["\r\n]/g, "")}" <${msg.email}>`
+      : undefined,
     subject: `פנייה חדשה מהאתר${msg.name ? ` - ${msg.name.replace(/[\r\n]/g, " ")}` : msg.phone ? ` - ${msg.phone.replace(/[\r\n]/g, " ")}` : ""}`,
     text,
   });

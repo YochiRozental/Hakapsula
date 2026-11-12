@@ -58,7 +58,7 @@ export default function MyAppointmentsPage() {
           creditedMinutes?: number;
         }>(`/api/payments/bookings/${id}/cancel`, { body: {} });
         if (!r.ok) {
-          setError(r.data.error ?? "שגיאה בביטול התור");
+          setError(r.data.error ?? "שגיאה בביטול ההזמנה");
           return;
         }
         const d = r.data;
@@ -76,14 +76,14 @@ export default function MyAppointmentsPage() {
           );
         if (d.outcome === "CANCELLED_REFUND_PENDING")
           parts.push("ההחזר הכספי בטיפול.");
-        setNotice(["התור בוטל.", ...parts].join(" "));
+        setNotice(["ההזמנה בוטלה.", ...parts].join(" "));
         load();
         return;
       }
       const res = await fetch(`/api/appointments/${id}`, { method: "DELETE" });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "שגיאה בביטול התור");
+        setError(data.error ?? "שגיאה בביטול ההזמנה");
         return;
       }
       load();
@@ -110,8 +110,8 @@ export default function MyAppointmentsPage() {
     <div className="max-w-3xl mx-auto">
       <PageHeader
         eyebrow="האזור האישי"
-        title="התורים שלי"
-        subtitle="רשימת התורים הקרובים והעבר שלך"
+        title="לוחות הזמנים שלי"
+        subtitle="רשימת ההזמנות הקרובות והעבר שלך"
         actions={
           <Link href="/booking" className="btn btn-primary">
             <Icon name="plus" className="w-4 h-4" />
@@ -136,7 +136,7 @@ export default function MyAppointmentsPage() {
       ) : (
         <>
           <section className="mb-10">
-            <SectionTitle>תורים קרובים</SectionTitle>
+            <SectionTitle>הזמנות קרובות</SectionTitle>
             {upcoming && upcoming.length > 0 ? (
               <ul className="space-y-3">
                 {upcoming.map((a) => (
@@ -175,7 +175,7 @@ export default function MyAppointmentsPage() {
                 ))}
               </ul>
             ) : (
-              <EmptyState>אין תורים קרובים</EmptyState>
+              <EmptyState>אין הזמנות קרובות</EmptyState>
             )}
           </section>
 

@@ -154,7 +154,7 @@ const USER_SORT_FIELDS: Record<string, SortField> = {
 
 const USER_SEARCH_PATHS = [["name"], ["email"], ["phone"]];
 
-// ספירת תורים אינה ניתנת לסינון ישיר ב-where, ולכן מחשבים את מזהי המשתמשים המתאימים לפי groupBy
+// ספירת ההזמנות אינה ניתנת לסינון ישיר ב-where, ולכן מחשבים את מזהי המשתמשים המתאימים לפי groupBy
 async function appointmentCountCondition(f: Filter) {
   const a = f.value?.trim() ? Number(f.value) : NaN;
   const b = f.value2?.trim() ? Number(f.value2) : NaN;
@@ -170,7 +170,7 @@ async function appointmentCountCondition(f: Filter) {
     by: ["userId"],
     _count: { _all: true },
   });
-  // משתמש ללא תורים לא מופיע ב-groupBy (ספירה 0)
+  // משתמש ללא הזמנות לא מופיע ב-groupBy (ספירה 0)
   if (matches(0)) {
     return {
       id: {

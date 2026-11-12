@@ -6,7 +6,10 @@ import { settleDebtExternal } from "@/lib/finance/debts";
  * הסדרת חוב (מלאה או חלקית) בתשלום שהתקבל מחוץ למערכת. נדרשים: סכום, אסמכתה, ואישור מפורש שהתשלום התקבל.
  * לחיצה על כפתור אינה מספיקה: ללא אסמכתה ואישור הבקשה נדחית. הכרטיס השמור של הלקוח אינו מחויב כאן
  */
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
   return adminRoute(request, { write: true }, async ({ admin }) => {
     const body = await readJson(request);
     const res = await settleDebtExternal({
@@ -18,6 +21,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       note: body.note,
       clientKey: body.clientKey,
     });
-    return NextResponse.json({ debtId: res.debt.id, status: res.debt.status, paidAgorot: res.debt.paidAgorot, waivedAgorot: res.debt.waivedAgorot, replayed: res.replayed });
+    return NextResponse.json({
+      debtId: res.debt.id,
+      status: res.debt.status,
+      paidAgorot: res.debt.paidAgorot,
+      waivedAgorot: res.debt.waivedAgorot,
+      replayed: res.replayed,
+    });
   });
 }

@@ -38,10 +38,15 @@ function LoginForm() {
   }
 
   return (
-    <AuthShell title="התחברות" subtitle="ברוכים השבים! התחברו כדי לקבוע ולנהל תורים.">
+    <AuthShell
+      title="התחברות"
+      subtitle="ברוכים השבים! התחברו כדי לקבוע ולנהל הזמנות."
+    >
       <form onSubmit={handleSubmit} className="space-y-5">
         <div>
-          <label htmlFor="login-email" className="field-label">אימייל</label>
+          <label htmlFor="login-email" className="field-label">
+            אימייל
+          </label>
           <input
             id="login-email"
             required
@@ -53,7 +58,9 @@ function LoginForm() {
           />
         </div>
         <div>
-          <label htmlFor="login-password" className="field-label">סיסמה</label>
+          <label htmlFor="login-password" className="field-label">
+            סיסמה
+          </label>
           <input
             id="login-password"
             required
@@ -66,14 +73,22 @@ function LoginForm() {
 
         {error && <Alert tone="error">{error}</Alert>}
 
-        <button type="submit" disabled={loading} className="btn btn-primary w-full py-3!">
+        <button
+          type="submit"
+          disabled={loading}
+          className="btn btn-primary w-full py-3!"
+        >
           {loading ? "מתחבר..." : "התחברות"}
         </button>
 
         <p className="text-sm text-stone-500 text-center">
           אין לך חשבון?{" "}
           <Link
-            href={searchParams.has("callbackUrl") ? `/register?callbackUrl=${encodeURIComponent(callbackUrl)}` : "/register"}
+            href={
+              searchParams.has("callbackUrl")
+                ? `/register?callbackUrl=${encodeURIComponent(callbackUrl)}`
+                : "/register"
+            }
             className="text-brand-700 font-semibold hover:underline"
           >
             הרשמה

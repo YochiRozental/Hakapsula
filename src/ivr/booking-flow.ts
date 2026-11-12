@@ -258,7 +258,7 @@ async function runBookingDialog(
   const confirmDigit = await call.read(
     [
       text(
-        `נקבע תור ל${roomLabel}, בתאריך ${startTime.getDate()} ל${startTime.getMonth() + 1}, בשעה ${hour} ${minute}, למשך ${durationLabel}`,
+        `נקבעה הזמנה ל${roomLabel}, בתאריך ${startTime.getDate()} ל${startTime.getMonth() + 1}, בשעה ${hour} ${minute}, למשך ${durationLabel}`,
       ),
       bookingFile(BOOKING_FILES.CONFIRM_SUFFIX),
     ],
@@ -285,7 +285,7 @@ async function runBookingDialog(
     const message =
       err instanceof BookingError
         ? err.message
-        : "אירעה שגיאה בקביעת התור, נסו שוב מאוחר יותר";
+        : "אירעה שגיאה בהזמנת הקליניקה, נסו שוב מאוחר יותר";
     return call.id_list_message([text(message)]);
   }
   return call.id_list_message([bookingFile(BOOKING_FILES.SUCCESS)]);
@@ -349,7 +349,7 @@ export async function handleCheckCall(call: Call) {
 
 /**
  * שלוחה 9/1 — "מחוברים". מזהה את המתקשר מחדש בכל כניסה (גם כניסה ישירה, בלי לסמוך על שלוחת הבדיקה),
- * ומריצה את שיחת קביעת התור רק למשתמש APPROVED. כל מצב אחר מקבל הודעה/ניתוב מתאים.
+ * ומריצה את שיחת הזמנת הקליניקה רק למשתמש APPROVED. כל מצב אחר מקבל הודעה/ניתוב מתאים.
  */
 export async function handleMembersCall(call: Call) {
   const identity = await identifyCurrentCaller(call);

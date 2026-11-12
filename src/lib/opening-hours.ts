@@ -22,7 +22,9 @@ export const DEFAULT_WEEKDAY_ACTIVITY: Record<number, ActivityType> = {
 /** מסלול ההזמנה של משתמש נקבע לפי המגדר שלו (גבר — בנים, אישה — בנות); אורח שאינו מחובר יכול רק לעיין בכל מסלול */
 export type BookingTrack = ActivityType;
 
-export function trackForGender(gender: "MALE" | "FEMALE" | null | undefined): BookingTrack | undefined {
+export function trackForGender(
+  gender: "MALE" | "FEMALE" | null | undefined,
+): BookingTrack | undefined {
   return gender === "MALE" ? "BOYS" : gender === "FEMALE" ? "GIRLS" : undefined;
 }
 
@@ -31,7 +33,10 @@ export function isActivityType(v: unknown): v is ActivityType {
 }
 
 /** בלי מסלול (undefined) כל חלון מתאים — לתצוגה בלבד (אורח שמעיין בלוח), לא לאכיפת הזמנה */
-export function activityMatches(activity: ActivityType, track?: BookingTrack): boolean {
+export function activityMatches(
+  activity: ActivityType,
+  track?: BookingTrack,
+): boolean {
   return !track || activity === track;
 }
 
@@ -39,8 +44,13 @@ export function activityMatches(activity: ActivityType, track?: BookingTrack): b
  * שעות היום המלא כשלא הוגדרו חלונות מפורשים, לפי היום בשבוע: ראשון עד חמישי 07:00–24:00, שישי 07:00–12:00 (שבת סגורה תמיד),
  * במסלול ברירת המחדל של היום. הגדרה מפורשת של מנהל גוברת עליהן.
  */
-export function defaultDayWindow(weekday: number): { startMinutes: number; endMinutes: number } {
-  return weekday === 5 ? { startMinutes: 7 * 60, endMinutes: 12 * 60 } : { startMinutes: 7 * 60, endMinutes: 24 * 60 };
+export function defaultDayWindow(weekday: number): {
+  startMinutes: number;
+  endMinutes: number;
+} {
+  return weekday === 5
+    ? { startMinutes: 7 * 60, endMinutes: 12 * 60 }
+    : { startMinutes: 7 * 60, endMinutes: 24 * 60 };
 }
 
 export type HoursWindow = {
@@ -58,7 +68,11 @@ export type HoursWindow = {
   dayDefault?: boolean;
 };
 
-export type DayInterval = { startMinutes: number; endMinutes: number; activity: ActivityType };
+export type DayInterval = {
+  startMinutes: number;
+  endMinutes: number;
+  activity: ActivityType;
+};
 
 export type ResolvedDay = {
   source: "exception" | "weekly";
@@ -68,7 +82,15 @@ export type ResolvedDay = {
   windows: DayInterval[];
 };
 
-export const WEEKDAY_LABELS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+export const WEEKDAY_LABELS = [
+  "ראשון",
+  "שני",
+  "שלישי",
+  "רביעי",
+  "חמישי",
+  "שישי",
+  "שבת",
+];
 /** ימי שבוע שבהם המכון פתוח (0 = ראשון ... 5 = שישי). שבת סגורה תמיד — גם חריג לתאריך לא יכול לפתוח אותה */
 export const OPEN_WEEKDAYS = [0, 1, 2, 3, 4, 5];
 export const STEP_MINUTES = 5;
@@ -88,7 +110,9 @@ export function parseDateKey(dateStr: string): Date | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
   if (!m) return null;
   const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  return d.getFullYear() === Number(m[1]) && d.getMonth() === Number(m[2]) - 1 && d.getDate() === Number(m[3])
+  return d.getFullYear() === Number(m[1]) &&
+    d.getMonth() === Number(m[2]) - 1 &&
+    d.getDate() === Number(m[3])
     ? d
     : null;
 }
@@ -113,8 +137,14 @@ const JERUSALEM_WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
  * תאריך (YYYY-MM-DD), דקות מתחילת היום ויום בשבוע (0 = ראשון) של רגע נתון לפי שעון ירושלים.
  * כל אכיפת הלוח בשרת עוברת כאן, כדי שלא תהיה תלות באזור הזמן של השרת.
  */
-export function jerusalemParts(d: Date): { date: string; minutes: number; weekday: number } {
-  const p = Object.fromEntries(jerusalemFormat.formatToParts(d).map((x) => [x.type, x.value]));
+export function jerusalemParts(d: Date): {
+  date: string;
+  minutes: number;
+  weekday: number;
+} {
+  const p = Object.fromEntries(
+    jerusalemFormat.formatToParts(d).map((x) => [x.type, x.value]),
+  );
   return {
     date: `${p.year}-${p.month}-${p.day}`,
     minutes: Number(p.hour) * 60 + Number(p.minute),
@@ -123,14 +153,25 @@ export function jerusalemParts(d: Date): { date: string; minutes: number; weekda
 }
 
 /** מאחד טווחים צמודים/חופפים (עם אותו סוג פעילות, או בלי התחשבות בסוג) כך שהזמנה יכולה להימשך על פני חלונות רצופים */
-function mergeIntervals(list: DayInterval[], sameActivityOnly = true): DayInterval[] {
+function mergeIntervals(
+  list: DayInterval[],
+  sameActivityOnly = true,
+): DayInterval[] {
   const sorted = list
-    .map((w) => ({ startMinutes: w.startMinutes, endMinutes: w.endMinutes, activity: w.activity }))
+    .map((w) => ({
+      startMinutes: w.startMinutes,
+      endMinutes: w.endMinutes,
+      activity: w.activity,
+    }))
     .sort((a, b) => a.startMinutes - b.startMinutes);
   const out: DayInterval[] = [];
   for (const w of sorted) {
     const last = out[out.length - 1];
-    if (last && (!sameActivityOnly || last.activity === w.activity) && w.startMinutes <= last.endMinutes) {
+    if (
+      last &&
+      (!sameActivityOnly || last.activity === w.activity) &&
+      w.startMinutes <= last.endMinutes
+    ) {
       last.endMinutes = Math.max(last.endMinutes, w.endMinutes);
     } else out.push(w);
   }
@@ -138,18 +179,31 @@ function mergeIntervals(list: DayInterval[], sameActivityOnly = true): DayInterv
 }
 
 /** החלונות המפורשים של יום בשבוע (ללא חריגים וללא שורת "מסלול היום") */
-export function weeklyWindows(all: HoursWindow[], weekday: number): HoursWindow[] {
-  return all.filter((w) => w.date === null && w.weekday === weekday && !w.closed && !w.dayDefault);
+export function weeklyWindows(
+  all: HoursWindow[],
+  weekday: number,
+): HoursWindow[] {
+  return all.filter(
+    (w) =>
+      w.date === null && w.weekday === weekday && !w.closed && !w.dayDefault,
+  );
 }
 
 /** האם יום בשבוע הוגדר כסגור קבוע (שורת "מסלול היום" עם closed). חלונות מפורשים אינם פותחים יום כזה */
 export function weeklyDayClosed(all: HoursWindow[], weekday: number): boolean {
-  return all.some((w) => w.date === null && w.weekday === weekday && w.dayDefault && w.closed);
+  return all.some(
+    (w) => w.date === null && w.weekday === weekday && w.dayDefault && w.closed,
+  );
 }
 
 /** מסלול היום השבועי: מה שנשמר בניהול, ואם לא נשמר — ברירת המחדל לפי היום בשבוע */
-export function weeklyDefaultActivity(all: HoursWindow[], weekday: number): ActivityType {
-  const saved = all.find((w) => w.date === null && w.weekday === weekday && w.dayDefault);
+export function weeklyDefaultActivity(
+  all: HoursWindow[],
+  weekday: number,
+): ActivityType {
+  const saved = all.find(
+    (w) => w.date === null && w.weekday === weekday && w.dayDefault,
+  );
   return saved?.activity ?? DEFAULT_WEEKDAY_ACTIVITY[weekday] ?? "BOYS";
 }
 
@@ -164,13 +218,19 @@ export function isClosedDate(dateStr: string): boolean {
 
 /** שעות ברירת המחדל השבועית של יום בשבוע, בפורמט של יום מפוענח */
 export function weeklyDay(all: HoursWindow[], weekday: number): ResolvedDay {
-  if (weeklyDayClosed(all, weekday)) return { source: "weekly", closed: true, note: null, windows: [] };
+  if (weeklyDayClosed(all, weekday))
+    return { source: "weekly", closed: true, note: null, windows: [] };
   const explicit = weeklyWindows(all, weekday);
   // חלונות מפורשים גוברים על ברירת המחדל (אין פעילות כפולה); בלעדיהם — היום המלא במסלול היום
   const windows =
     explicit.length > 0
       ? mergeIntervals(explicit)
-      : [{ ...defaultDayWindow(weekday), activity: weeklyDefaultActivity(all, weekday) }];
+      : [
+          {
+            ...defaultDayWindow(weekday),
+            activity: weeklyDefaultActivity(all, weekday),
+          },
+        ];
   return { source: "weekly", closed: false, note: null, windows };
 }
 
@@ -196,26 +256,49 @@ export function resolveDay(all: HoursWindow[], dateStr: string): ResolvedDay {
  * תצוגת יום ללקוח (API ציבורי): רק חלונות המסלול הידוע שלו, בלי לחשוף את חלונות המסלול האחר כלל.
  * בלי מסלול ידוע (אורח, או לקוח שלא השלים מגדר) אין חלונות להצגה.
  */
-export function dayForTrack(day: ResolvedDay, track?: BookingTrack): ResolvedDay {
-  return { ...day, windows: track ? day.windows.filter((w) => w.activity === track) : [] };
+export function dayForTrack(
+  day: ResolvedDay,
+  track?: BookingTrack,
+): ResolvedDay {
+  return {
+    ...day,
+    windows: track ? day.windows.filter((w) => w.activity === track) : [],
+  };
 }
 
 /**
- * מה מחזיר ה-API הציבורי של שעות היום, לפי תפקיד המשתמש המחובר: מנהל מקבל את היום המלא (שני המסלולים, לצורך ניהול/יומן/תור
+ * מה מחזיר ה-API הציבורי של שעות היום, לפי תפקיד המשתמש המחובר: מנהל מקבל את היום המלא (שני המסלולים, לצורך ניהול/יומן/הזמנות
  * ידני); לקוח מקבל רק את המסלול שלו (dayForTrack); אורח (role=null) לא מקבל שום חלון, גם אם משום מה הועבר לו track.
  */
-export function openingHoursResponseFor(day: ResolvedDay, role: "ADMIN" | "CLIENT" | null, track?: BookingTrack): ResolvedDay {
+export function openingHoursResponseFor(
+  day: ResolvedDay,
+  role: "ADMIN" | "CLIENT" | null,
+  track?: BookingTrack,
+): ResolvedDay {
   if (role === "ADMIN") return day;
   return dayForTrack(day, role === "CLIENT" ? track : undefined);
 }
 
 /** חלונות היום שמתאימים למסלול (ללא מסלול — כולם), עם איחוד חלונות רצופים: ההזמנה יכולה להימשך על פניהם */
-function matchingWindows(day: ResolvedDay, track?: BookingTrack): DayInterval[] {
-  return mergeIntervals(day.windows.filter((w) => activityMatches(w.activity, track)), false);
+function matchingWindows(
+  day: ResolvedDay,
+  track?: BookingTrack,
+): DayInterval[] {
+  return mergeIntervals(
+    day.windows.filter((w) => activityMatches(w.activity, track)),
+    false,
+  );
 }
 
-export function fitsOpening(day: ResolvedDay, startMinutes: number, endMinutes: number, track?: BookingTrack): boolean {
-  return matchingWindows(day, track).some((w) => startMinutes >= w.startMinutes && endMinutes <= w.endMinutes);
+export function fitsOpening(
+  day: ResolvedDay,
+  startMinutes: number,
+  endMinutes: number,
+  track?: BookingTrack,
+): boolean {
+  return matchingWindows(day, track).some(
+    (w) => startMinutes >= w.startMinutes && endMinutes <= w.endMinutes,
+  );
 }
 
 export function formatWindow(w: DayInterval): string {
@@ -231,20 +314,24 @@ export function explainUnavailable(
   day: ResolvedDay,
   startMinutes: number,
   endMinutes: number,
-  track?: BookingTrack
+  track?: BookingTrack,
 ): string | null {
   if (fitsOpening(day, startMinutes, endMinutes, track)) return null;
   if (day.closed) return `סגור בתאריך זה${day.note ? ` (${day.note})` : ""}`;
   if (day.windows.length === 0) return "אין פעילות ביום זה";
   const trackLabel = track ? ACTIVITY_LABELS[track] : "";
   const mismatch = day.windows.find(
-    (w) => !activityMatches(w.activity, track) && w.startMinutes < endMinutes && w.endMinutes > startMinutes
+    (w) =>
+      !activityMatches(w.activity, track) &&
+      w.startMinutes < endMinutes &&
+      w.endMinutes > startMinutes,
   );
   if (mismatch) {
     return `בשעות אלה מתקיימת פעילות ${ACTIVITY_LABELS[mismatch.activity]}, שאינה מתאימה למסלול ${trackLabel}`;
   }
   const own = matchingWindows(day, track);
-  if (own.length === 0) return `אין חלונות המתאימים למסלול ${trackLabel} ביום זה`;
+  if (own.length === 0)
+    return `אין חלונות המתאימים למסלול ${trackLabel} ביום זה`;
   return `מחוץ לשעות הפעילות${track ? ` של מסלול ${trackLabel}` : ""} (${formatWindows(own)})`;
 }
 
@@ -253,11 +340,21 @@ export function explainUnavailable(
  * הסיום נבדק לפי הרגע האחרון שהוא כולל בפועל (כמו closedDayViolation), כך שהזמנה המסתיימת בדיוק בחצות (24:00) נחשבת
  * בתוך היום שבו התחילה ולא "חוצה חצות" ליום הבא.
  */
-export function bookingViolation(all: HoursWindow[], start: Date, end: Date, track?: BookingTrack): string | null {
+export function bookingViolation(
+  all: HoursWindow[],
+  start: Date,
+  end: Date,
+  track?: BookingTrack,
+): string | null {
   const from = jerusalemParts(start);
   const last = jerusalemParts(new Date(end.getTime() - 1));
   if (from.date !== last.date) return "ההזמנה חייבת להיות בתוך יום אחד";
-  return explainUnavailable(resolveDay(all, from.date), from.minutes, last.minutes + 1, track);
+  return explainUnavailable(
+    resolveDay(all, from.date),
+    from.minutes,
+    last.minutes + 1,
+    track,
+  );
 }
 
 /**
@@ -266,15 +363,25 @@ export function bookingViolation(all: HoursWindow[], start: Date, end: Date, tra
  */
 export function closedDayViolation(start: Date, end: Date): string | null {
   const last = new Date(Math.max(start.getTime(), end.getTime() - 1));
-  if (isClosedWeekday(jerusalemParts(start).weekday) || isClosedWeekday(jerusalemParts(last).weekday)) {
-    return "המכון סגור בשבת — לא ניתן לקבוע תור ביום שבת";
+  if (
+    isClosedWeekday(jerusalemParts(start).weekday) ||
+    isClosedWeekday(jerusalemParts(last).weekday)
+  ) {
+    return "המכון סגור בשבת — לא ניתן לקבוע קליניקה ביום שבת";
   }
   return null;
 }
 
 /** יום שהוגדר כסגור (קבוע בשבוע או חריג לתאריך) חוסם הזמנה לכולם, כולל מנהל */
-function closedDayRejection(all: HoursWindow[], start: Date, end: Date): string | null {
-  for (const date of new Set([jerusalemParts(start).date, jerusalemParts(end).date])) {
+function closedDayRejection(
+  all: HoursWindow[],
+  start: Date,
+  end: Date,
+): string | null {
+  for (const date of new Set([
+    jerusalemParts(start).date,
+    jerusalemParts(end).date,
+  ])) {
     const day = resolveDay(all, date);
     if (day.closed) return `סגור בתאריך זה${day.note ? ` (${day.note})` : ""}`;
   }
@@ -294,29 +401,34 @@ export function hoursRejection(
   start: Date,
   end: Date,
   source: string,
-  track?: BookingTrack
+  track?: BookingTrack,
 ): string | null {
   const closed = closedDayRejection(all, start, end);
   if (closed) return closed;
   if (source === "ADMIN") return null;
-  return bookingViolation(all, start, end, track) ? PUBLIC_UNAVAILABLE_MESSAGE : null;
+  return bookingViolation(all, start, end, track)
+    ? PUBLIC_UNAVAILABLE_MESSAGE
+    : null;
 }
 
-/** טווח ברירת המחדל של יומן ביום ללא חלונות פתוחים ובלי תורים (8:00–20:00). אינו שעות פעילות — רק תצוגה */
+/** טווח ברירת המחדל של יומן ביום ללא חלונות פתוחים ובלי הזמנות (8:00–20:00). אינו שעות פעילות — רק תצוגה */
 const EMPTY_DAY_VIEW = { startMinutes: 8 * 60, endMinutes: 20 * 60 };
 
 /**
  * טווח השעות (מיושר לשעות שלמות) שיוצג ביומן המנהל: חלונות הפעילות ושעה נוספת משני צדיהם,
- * מורחב כך שיכלול גם תורים שנמצאים מחוץ לפעילות. showAll = כל היממה.
+ * מורחב כך שיכלול גם הזמנות שנמצאים מחוץ לפעילות. showAll = כל היממה.
  */
 export function calendarRange(
   day: ResolvedDay,
   busy: { startMinutes: number; endMinutes: number }[],
-  showAll = false
+  showAll = false,
 ): { startMinutes: number; endMinutes: number } {
   if (showAll) return { startMinutes: 0, endMinutes: 24 * 60 };
   const spans = [
-    ...day.windows.map((w) => ({ startMinutes: w.startMinutes - 60, endMinutes: w.endMinutes + 60 })),
+    ...day.windows.map((w) => ({
+      startMinutes: w.startMinutes - 60,
+      endMinutes: w.endMinutes + 60,
+    })),
     ...busy,
   ];
   if (spans.length === 0) return EMPTY_DAY_VIEW;
@@ -332,12 +444,18 @@ export function calendarRange(
 export function validateWindows(list: DayInterval[]): string | null {
   if (list.length > MAX_WINDOWS_PER_SCOPE) return "יותר מדי חלונות ליום אחד";
   for (const w of list) {
-    if (!Number.isInteger(w.startMinutes) || !Number.isInteger(w.endMinutes)) return "שעות לא תקינות";
-    if (w.startMinutes < 0 || w.endMinutes > 24 * 60) return "השעות חייבות להיות בתוך היממה";
-    if (w.startMinutes % STEP_MINUTES !== 0 || w.endMinutes % STEP_MINUTES !== 0) {
+    if (!Number.isInteger(w.startMinutes) || !Number.isInteger(w.endMinutes))
+      return "שעות לא תקינות";
+    if (w.startMinutes < 0 || w.endMinutes > 24 * 60)
+      return "השעות חייבות להיות בתוך היממה";
+    if (
+      w.startMinutes % STEP_MINUTES !== 0 ||
+      w.endMinutes % STEP_MINUTES !== 0
+    ) {
       return `השעות חייבות להיות בקפיצות של ${STEP_MINUTES} דקות`;
     }
-    if (w.endMinutes <= w.startMinutes) return "שעת הסיום חייבת להיות אחרי שעת ההתחלה";
+    if (w.endMinutes <= w.startMinutes)
+      return "שעת הסיום חייבת להיות אחרי שעת ההתחלה";
     if (!isActivityType(w.activity)) return "מסלול פעילות לא תקין";
   }
   const sorted = [...list].sort((a, b) => a.startMinutes - b.startMinutes);
