@@ -1,11 +1,17 @@
-name: Trial discount integration tests
+name: CI
 
-# מופעל רק מתוך ענפי test/* וידנית (workflow_dispatch) — לעולם לא מ-main, ולעולם לא נוגע ב-Neon/Production:
-# המסד היחיד שבו העבודה הזו משתמשת הוא קונטיינר Postgres חד-פעמי שנוצר ונמחק באותה הרצה בלבד.
+# רץ על כל push ל-main, על כל Pull Request שמיועד ל-main, על ענפי test/* (לדיבוג ידני), וידנית (workflow_dispatch).
+# לעולם לא נוגע ב-Neon/Production: המסד היחיד שבו העבודה הזו משתמשת הוא קונטיינר Postgres חד-פעמי שנוצר ונמחק
+# באותה הרצה בלבד. זו תשתית הבדיקות הקבועה של הפרויקט — ראו bookings-payment.test.ts ועוד לדוגמאות לבדיקות
+# אינטגרציה חדשות שמצטרפות אוטומטית (כל קובץ *_TEST_DATABASE_URL חדש צריך גם שורה כאן ובשלבי יצירת/מיגרציית המסד).
 on:
   push:
     branches:
+      - main
       - "test/**"
+  pull_request:
+    branches:
+      - main
   workflow_dispatch: {}
 
 permissions:
@@ -78,7 +84,7 @@ jobs:
       - name: TypeScript
         run: npx tsc --noEmit
 
-      - name: Run full test suite (discount double-use, parallel bookings, cancellations, failed payments, balance usage, and all existing regressions)
+      - name: Run full test suite
         env:
           PAYMENTS_TEST_DATABASE_URL: postgresql://ci:ci_ephemeral_pw@localhost:5432/clinics_payments_test
           SAVEDCARD_TEST_DATABASE_URL: postgresql://ci:ci_ephemeral_pw@localhost:5432/clinics_savedcard_test
