@@ -7,7 +7,7 @@ import {
   PaymentStatusBadge,
   SandboxNotice,
   SandboxPanel,
-  TrialDiscountRow,
+  TrialDiscountBreakdown,
 } from "@/components/payments/bits";
 import {
   api,
@@ -262,25 +262,18 @@ export function AdminCheckout({
               {durationText(details.paidFromBalanceMinutes)}
             </InfoRow>
           )}
-          {details.paidCashAgorot > 0 && details.payment && details.payment.discountAgorot > 0 && (
-            <InfoRow label="מחיר רגיל">
-              <span className="line-through text-stone-400 font-normal">
-                {shekel(details.paidCashAgorot + details.payment.discountAgorot)}
-              </span>
-            </InfoRow>
-          )}
-          {details.payment && details.payment.discountAgorot > 0 && (
-            <TrialDiscountRow discountAgorot={details.payment.discountAgorot} shekel={shekel} />
-          )}
-          {details.paidCashAgorot > 0 && (
-            <InfoRow label="שולם בכסף">
-              {details.payment && details.payment.discountAgorot > 0 ? (
-                <span className="text-brand-700 font-bold text-base">{shekel(details.paidCashAgorot)}</span>
-              ) : (
-                shekel(details.paidCashAgorot)
-              )}
-            </InfoRow>
-          )}
+          {details.paidCashAgorot > 0 &&
+            (details.payment && details.payment.discountAgorot > 0 ? (
+              <TrialDiscountBreakdown
+                regularAgorot={details.paidCashAgorot + details.payment.discountAgorot}
+                discountAgorot={details.payment.discountAgorot}
+                finalAgorot={details.paidCashAgorot}
+                finalLabel="שולם בכסף"
+                shekel={shekel}
+              />
+            ) : (
+              <InfoRow label="שולם בכסף">{shekel(details.paidCashAgorot)}</InfoRow>
+            ))}
         </section>
       </div>
     );
@@ -378,18 +371,16 @@ export function AdminCheckout({
           </div>
         </div>
         <InfoRow label="משך">{durationText(details.durationMinutes)}</InfoRow>
-        <InfoRow label="מחיר רגיל">
-          {plan && plan.discountAgorot > 0 ? (
-            <span className="line-through text-stone-400 font-normal">{shekel(details.fullPriceAgorot)}</span>
-          ) : (
-            shekel(details.fullPriceAgorot)
-          )}
-        </InfoRow>
-        {plan && <TrialDiscountRow discountAgorot={plan.discountAgorot} shekel={shekel} />}
-        {plan && plan.discountAgorot > 0 && (
-          <InfoRow label="לתשלום">
-            <span className="text-brand-700 font-bold text-base">{shekel(plan.cashAgorot)}</span>
-          </InfoRow>
+        {plan && plan.discountAgorot > 0 ? (
+          <TrialDiscountBreakdown
+            regularAgorot={details.fullPriceAgorot}
+            discountAgorot={plan.discountAgorot}
+            finalAgorot={plan.cashAgorot}
+            finalLabel="לתשלום"
+            shekel={shekel}
+          />
+        ) : (
+          <InfoRow label="מחיר רגיל">{shekel(details.fullPriceAgorot)}</InfoRow>
         )}
         <InfoRow label="יתרת שעות זמינה ללקוח">
           {details.availableBalanceMinutes > 0
@@ -408,21 +399,17 @@ export function AdminCheckout({
               {durationText(pending.packageMinutes)}
             </InfoRow>
           )}
-          {pending.discountAgorot > 0 && (
-            <InfoRow label="מחיר רגיל">
-              <span className="line-through text-stone-400 font-normal">
-                {shekel(pending.amountAgorot + pending.discountAgorot)}
-              </span>
-            </InfoRow>
+          {pending.discountAgorot > 0 ? (
+            <TrialDiscountBreakdown
+              regularAgorot={pending.amountAgorot + pending.discountAgorot}
+              discountAgorot={pending.discountAgorot}
+              finalAgorot={pending.amountAgorot}
+              finalLabel="סכום לתשלום"
+              shekel={shekel}
+            />
+          ) : (
+            <InfoRow label="סכום לתשלום">{shekel(pending.amountAgorot)}</InfoRow>
           )}
-          <TrialDiscountRow discountAgorot={pending.discountAgorot} shekel={shekel} />
-          <InfoRow label="סכום לתשלום">
-            {pending.discountAgorot > 0 ? (
-              <span className="text-brand-700 font-bold text-base">{shekel(pending.amountAgorot)}</span>
-            ) : (
-              shekel(pending.amountAgorot)
-            )}
-          </InfoRow>
           {gate.sandbox && pending.providerPaymentId && (
             <SandboxPanel
               providerPaymentId={pending.providerPaymentId}
@@ -459,6 +446,18 @@ export function AdminCheckout({
                   ? "מאשר..."
                   : `אישור מהיתרה · ${durationText(plan.packageMinutes)}`}
               </button>
+              {details.cashOnlyPlan && details.cashOnlyPlan.discountAgorot > 0 && (
+                <div className="rounded-xl bg-cream-50 ring-1 ring-cream-200 px-4 py-1">
+                  <p className="text-xs text-stone-500 pt-2 -mb-1">אם הלקוח ישלם בכסף במקום מהיתרה:</p>
+                  <TrialDiscountBreakdown
+                    regularAgorot={details.fullPriceAgorot}
+                    discountAgorot={details.cashOnlyPlan.discountAgorot}
+                    finalAgorot={details.cashOnlyPlan.cashAgorot}
+                    finalLabel="לתשלום בכסף"
+                    shekel={shekel}
+                  />
+                </div>
+              )}
               <button
                 type="button"
                 className="btn btn-secondary w-full"
@@ -484,6 +483,18 @@ export function AdminCheckout({
                   ? "פותח תשלום..."
                   : `תשלום משולב: ${shekel(plan.cashAgorot)} + ${durationText(plan.packageMinutes)} מהיתרה`}
               </button>
+              {details.cashOnlyPlan && details.cashOnlyPlan.discountAgorot > 0 && (
+                <div className="rounded-xl bg-cream-50 ring-1 ring-cream-200 px-4 py-1">
+                  <p className="text-xs text-stone-500 pt-2 -mb-1">אם הלקוח ישלם הכול בכסף, בלי לנצל יתרה:</p>
+                  <TrialDiscountBreakdown
+                    regularAgorot={details.fullPriceAgorot}
+                    discountAgorot={details.cashOnlyPlan.discountAgorot}
+                    finalAgorot={details.cashOnlyPlan.cashAgorot}
+                    finalLabel="לתשלום בכסף"
+                    shekel={shekel}
+                  />
+                </div>
+              )}
               <button
                 type="button"
                 className="btn btn-secondary w-full"

@@ -80,4 +80,35 @@ export function TrialDiscountRow({ discountAgorot, shekel }: { discountAgorot: n
   );
 }
 
+/**
+ * פירוט מחיר מלא כשהנחת ההזמנה הראשונה חלה: מחיר רגיל (קו חוצה) + שורת ההנחה + הסכום הסופי המודגש.
+ * לא מוצג כלל אם discountAgorot אינו חיובי. משתמש אך ורק בערכים שכבר חושבו בשרת — לא מחשב הנחה בעצמו.
+ */
+export function TrialDiscountBreakdown({
+  regularAgorot,
+  discountAgorot,
+  finalAgorot,
+  finalLabel,
+  shekel,
+}: {
+  regularAgorot: number;
+  discountAgorot: number;
+  finalAgorot: number;
+  finalLabel: string;
+  shekel: (agorot: number) => string;
+}) {
+  if (discountAgorot <= 0) return null;
+  return (
+    <>
+      <InfoRow label="מחיר רגיל">
+        <span className="line-through text-stone-400 font-normal">{shekel(regularAgorot)}</span>
+      </InfoRow>
+      <TrialDiscountRow discountAgorot={discountAgorot} shekel={shekel} />
+      <InfoRow label={finalLabel}>
+        <span className="text-brand-700 font-bold text-base">{shekel(finalAgorot)}</span>
+      </InfoRow>
+    </>
+  );
+}
+
 export { Alert };
