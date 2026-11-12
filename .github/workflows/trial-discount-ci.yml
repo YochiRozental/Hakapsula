@@ -1,0 +1,91 @@
+name: Trial discount integration tests
+
+# מופעל רק מתוך ענפי test/* וידנית (workflow_dispatch) — לעולם לא מ-main, ולעולם לא נוגע ב-Neon/Production:
+# המסד היחיד שבו העבודה הזו משתמשת הוא קונטיינר Postgres חד-פעמי שנוצר ונמחק באותה הרצה בלבד.
+on:
+  push:
+    branches:
+      - "test/**"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          # סיסמה חד-פעמית לקונטיינר הבדיקות של ההרצה הזו בלבד — לא סוד אמיתי, לא קשורה לשום סביבה אחרת
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci_ephemeral_pw
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: ci
+      PGPASSWORD: ci_ephemeral_pw
+      # ברירת מחדל ל-DATABASE_URL לשלבים שלא קשורים ל-DB בכלל (tsc/lint/build): מצביעה על אותו קונטיינר חד-פעמי,
+      # לעולם לא על Neon. שמות המסד לבדיקות האינטגרציה עצמן מוגדרים בנפרד בשלב ההרצה, וכולם מסתיימים ב-_test
+      # (הגנה קיימת בקוד: assertLocalTestDatabase מסרבת לרוץ על כל מסד שאינו localhost ומסתיים ב-_test).
+      DATABASE_URL: postgresql://ci:ci_ephemeral_pw@localhost:5432/postgres
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Create isolated per-suite test databases (ephemeral container only)
+        run: |
+          set -e
+          for db in clinics_payments_test clinics_savedcard_test clinics_packages_test \
+                    clinics_finance_test clinics_ivrpay_test clinics_concurrency_test \
+                    clinics_pin_test clinics_shifts_test clinics_ivr_test; do
+            psql -h localhost -U ci -d postgres -c "CREATE DATABASE $db;"
+          done
+
+      - name: Apply the new migration (and full history) to each test database
+        run: |
+          set -e
+          for db in clinics_payments_test clinics_savedcard_test clinics_packages_test \
+                    clinics_finance_test clinics_ivrpay_test clinics_concurrency_test \
+                    clinics_pin_test clinics_shifts_test clinics_ivr_test; do
+            DATABASE_URL="postgresql://ci:ci_ephemeral_pw@localhost:5432/$db" npx prisma migrate deploy
+          done
+
+      - name: Run full test suite (discount double-use, parallel bookings, cancellations, failed payments, balance usage, and all existing regressions)
+        env:
+          PAYMENTS_TEST_DATABASE_URL: postgresql://ci:ci_ephemeral_pw@localhost:5432/clinics_payments_test
+          SAVEDCARD_TEST_DATABASE_URL: postgresql://ci:ci_ephemeral_pw@localhost:5432/clinics_savedcard_test
+          PACKAGES_TEST_DATABASE_URL: postgresql://ci:ci_ephemeral_pw@localhost:5432/clinics_packages_test
+          FINANCE_TEST_DATABASE_URL: postgresql://ci:ci_ephemeral_pw@localhost:5432/clinics_finance_test
+          IVRPAY_TEST_DATABASE_URL: postgresql://ci:ci_ephemeral_pw@localhost:5432/clinics_ivrpay_test
+          TEST_DATABASE_URL: postgresql://ci:ci_ephemeral_pw@localhost:5432/clinics_concurrency_test
+          PIN_TEST_DATABASE_URL: postgresql://ci:ci_ephemeral_pw@localhost:5432/clinics_pin_test
+          SHIFTS_TEST_DATABASE_URL: postgresql://ci:ci_ephemeral_pw@localhost:5432/clinics_shifts_test
+          IVR_TEST_DATABASE_URL: postgresql://ci:ci_ephemeral_pw@localhost:5432/clinics_ivr_test
+        run: npm test
