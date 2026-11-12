@@ -177,10 +177,20 @@ describe("הזמנה ותשלום בטלפון: IVR אמיתי מקצה לקצה
     await mk("u1", { ivrPinHash });
     await mk("u2", { ivrPinHash });
     await mk("noPin", {});
+    // "כבר ניצלו" את הנחת ההזמנה הראשונה (לא קשורה לקובץ הזה), כדי שבדיקות המחיר כאן ימשיכו לבדוק מחיר מלא
+    await markTrialDiscountUsed(Object.values(ids));
   });
+
+  function markTrialDiscountUsed(userIds: string[]) {
+    return prisma.user.updateMany({
+      where: { id: { in: userIds } },
+      data: { trialDiscountUsedAt: new Date("2020-01-01T00:00:00Z"), trialDiscountReservedAppointmentId: null },
+    });
+  }
 
   beforeEach(async () => {
     await wipe();
+    await markTrialDiscountUsed(Object.values(ids));
     process.env.IVR_PAYMENTS_ENABLED = "true";
     delete process.env.IVR_PAYMENT_STEP_TIMEOUT_MS;
   });

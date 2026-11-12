@@ -144,11 +144,13 @@ export async function runPaidBooking(
     const price = regularPriceAgorot(quote.durationMinutes, (await getRegularPricing()).hourlyAgorot);
     const sandbox = provider.environment === "sandbox" ? "סביבת בדיקות, " : "";
     const last4 = card?.last4 ? card.last4.split("").join(" ") : "";
+    // הנחת 25% להזמנה ראשונה כבר נכללת ב-quote.cashAgorot (ראו quoteHold); כאן רק מודיעים עליה בקול
+    const discountNote = quote.discountAgorot > 0 ? `, כולל הנחת 25 אחוז להזמנה ראשונה` : "";
     const plan = quote.fullyCoveredByBalance
       ? `יתרת השעות מכסה את כל ההזמנה וינוצלו ${spokenMinutes(quote.packageMinutes)}`
       : quote.packageMinutes > 0
         ? `ינוצלו ${spokenMinutes(quote.packageMinutes)} מהיתרה ויחויבו ${spokenShekel(quote.cashAgorot)} בכרטיס השמור המסתיים ב ${last4}`
-        : `יחויבו ${spokenShekel(quote.cashAgorot)} בכרטיס השמור המסתיים ב ${last4}`;
+        : `יחויבו ${spokenShekel(quote.cashAgorot)} בכרטיס השמור המסתיים ב ${last4}${discountNote}`;
 
     // 3. הצגת מחיר ויתרה ובחירה
     const choice = await call.read(

@@ -66,3 +66,8 @@ export async function lockUserBalances(tx: Tx, userId: string) {
   await tx.$queryRaw`SELECT id FROM "HoursPackage" WHERE "userId" = ${userId} ORDER BY "expiresAt", id FOR UPDATE`;
   await tx.$queryRaw`SELECT id FROM "Credit" WHERE "userId" = ${userId} ORDER BY "expiresAt", id FOR UPDATE`;
 }
+
+/** נועל את שורת המשתמש עצמה. משמש להכרעה אטומית על הטבת ההזמנה הראשונה (מניעת ניצול כפול בהזמנות מקבילות) */
+export async function lockUserRow(tx: Tx, userId: string) {
+  await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
+}

@@ -79,10 +79,22 @@ describe("תשלום על הזמנה והחזקת חדרים: מול PostgreSQL 
     userA = (await mk("a")).id;
     userB = (await mk("b")).id;
     adminId = (await mk("admin", "ADMIN")).id;
+    // משתמשי הבדיקה הכלליים "כבר ניצלו" את הנחת ההזמנה הראשונה, כדי שכל הבדיקות הקיימות (לא קשורות להנחה)
+    // ימשיכו לבדוק מחיר מלא כרגיל. בדיקות ההנחה עצמה (בהמשך הקובץ) יוצרות משתמשים חדשים וזכאים ייעודית
+    await markTrialDiscountUsed([userA, userB, adminId]);
   });
+
+  /** מסמן משתמשים כמי שכבר ניצלו את ההטבה (לא זכאים) ומנקה "מקום" שמור, לבסיס נקי בין בדיקות */
+  function markTrialDiscountUsed(userIds: string[]) {
+    return prisma.user.updateMany({
+      where: { id: { in: userIds } },
+      data: { trialDiscountUsedAt: new Date("2020-01-01T00:00:00Z"), trialDiscountReservedAppointmentId: null },
+    });
+  }
 
   beforeEach(async () => {
     await wipe();
+    await markTrialDiscountUsed([userA, userB, adminId]);
     provider = newProvider();
   });
 
@@ -105,6 +117,17 @@ describe("תשלום על הזמנה והחזקת חדרים: מול PostgreSQL 
 
   const apptOf = (id: string) => prisma.appointment.findUniqueOrThrow({ where: { id } });
   const payOf = (id: string) => prisma.payment.findUniqueOrThrow({ where: { id } });
+  const userOf = (id: string) => prisma.user.findUniqueOrThrow({ where: { id } });
+
+  /** משתמש חדש וזכאי (trialDiscountUsedAt=null), ייעודי לבדיקות ההנחה בלבד — לא נוגע ב-userA/userB/adminId */
+  let discountUserCounter = 0;
+  async function mkEligibleUser() {
+    discountUserCounter++;
+    const u = await prisma.user.create({
+      data: { name: `pay disc ${discountUserCounter}`, email: `pay-disc-${discountUserCounter}@test.local`, passwordHash: "x", gender: "MALE", status: "APPROVED" },
+    });
+    return u.id;
+  }
 
   // ───────────── החזקות ─────────────
 
@@ -572,5 +595,155 @@ describe("תשלום על הזמנה והחזקת חדרים: מול PostgreSQL 
     const cancelled = await booking.cancelAppointment(appt.id, { id: userA, role: "CLIENT" });
     assert.equal(cancelled.status, "CANCELLED");
     await hold(userB, "ROOM3", 10);
+  });
+
+  // ───────────── הנחת 25% להזמנה ראשונה בכסף ─────────────
+
+  test("משתמש זכאי בהזמנה ראשונה: 25% הנחה (75 ₪ -> 56.25 ₪), והמחיר שמוצג זהה למחיר שמחויב ושנשמר במסד", async () => {
+    const u = await mkEligibleUser();
+    const { hold: h, started } = await holdAndStart(u, "ROOM3", 10);
+    assert.equal(started.amountAgorot, 5625, "56.25 ₪ אחרי 25% הנחה מ-75 ₪");
+    assert.equal((await payOf(started.paymentId)).discountAgorot, 1875);
+
+    await provider.completeCheckout(started.providerPaymentId, "success");
+    assert.equal((await svc.finalizeBookingPayment({ paymentId: started.paymentId, provider })).outcome, "CONFIRMED");
+
+    const appt = await apptOf(h.id);
+    assert.equal(appt.paidCashAgorot, 5625, "הסכום שנשמר בהזמנה תואם למה שחויב בפועל");
+    assert.equal((await userOf(u)).trialDiscountUsedAt !== null, true, "ההטבה נרשמה כמנוצלת רק לאחר אישור בפועל");
+  });
+
+  test("משתמש שכבר ניצל את ההטבה לא מקבל אותה שוב", async () => {
+    const u = await mkEligibleUser();
+    const first = await holdAndStart(u, "ROOM3", 10);
+    assert.equal(first.started.amountAgorot, 5625);
+    await provider.completeCheckout(first.started.providerPaymentId, "success");
+    await svc.finalizeBookingPayment({ paymentId: first.started.paymentId, provider });
+
+    const second = await holdAndStart(u, "ROOM4", 11);
+    assert.equal(second.started.amountAgorot, 7500, "ההזמנה השנייה במחיר מלא");
+    assert.equal((await payOf(second.started.paymentId)).discountAgorot, 0);
+  });
+
+  test("הזמנה קודמת שבוטלה (לפני תשלום) לא צורכת את ההטבה: הניסיון הבא עדיין זכאי", async () => {
+    const u = await mkEligibleUser();
+    const h1 = await hold(u, "ROOM3", 10);
+    await svc.cancelBooking({ appointmentId: h1.id, requester: { id: u, role: "CLIENT" }, provider });
+
+    const { started } = await holdAndStart(u, "ROOM4", 10);
+    assert.equal(started.amountAgorot, 5625, "ביטול לפני תשלום לא איבד את ההטבה");
+  });
+
+  test("תשלום שנכשל לא צורך את ההטבה: ניסיון חוזר עדיין מקבל 25% הנחה", async () => {
+    const u = await mkEligibleUser();
+    const { hold: h, started } = await holdAndStart(u, "ROOM3", 10);
+    assert.equal(started.amountAgorot, 5625);
+    await provider.completeCheckout(started.providerPaymentId, "failure");
+    assert.equal((await svc.finalizeBookingPayment({ paymentId: started.paymentId, provider })).outcome, "PAYMENT_FAILED");
+    assert.equal((await userOf(u)).trialDiscountUsedAt, null, "כישלון תשלום לא מסמן ניצול");
+
+    const retry = await svc.startBookingPayment({ appointmentId: h.id, userId: u, provider });
+    assert.equal(retry.amountAgorot, 5625, "הניסיון החוזר עדיין זכאי להנחה");
+    await provider.completeCheckout(retry.providerPaymentId, "success");
+    assert.equal((await svc.finalizeBookingPayment({ paymentId: retry.paymentId, provider })).outcome, "CONFIRMED");
+    assert.equal((await userOf(u)).trialDiscountUsedAt !== null, true);
+  });
+
+  test("Checkout נפתח ולא הושלם (ההחזקה פגה): ההטבה משתחררת ונשארת זמינה", async () => {
+    const u = await mkEligibleUser();
+    const { hold: h, started } = await holdAndStart(u, "ROOM3", 10);
+    assert.equal(started.amountAgorot, 5625);
+    // פקיעת ההחזקה והרצת הניקוי (כמו expireStaleHolds בפועל), בלי שהתשלום אושר
+    await prisma.appointment.update({ where: { id: h.id }, data: { holdExpiresAt: new Date(Date.now() - 1000) } });
+    await svc.expireStaleHolds({ provider });
+    assert.equal((await payOf(started.paymentId)).status, "CANCELLED");
+    assert.equal((await userOf(u)).trialDiscountUsedAt, null, "נטישת Checkout לא צורכת את ההטבה");
+
+    const { started: again } = await holdAndStart(u, "ROOM4", 10);
+    assert.equal(again.amountAgorot, 5625, "ההטבה עדיין זמינה בהזמנה הבאה");
+  });
+
+  test("תשלום שהצליח אך הגיע אחרי פקיעת ההחזקה (LATE_REFUNDED): ההטבה לא נצרכת, הכסף חוזר במלואו", async () => {
+    const u = await mkEligibleUser();
+    const { started } = await holdAndStart(u, "ROOM3", 10);
+    await provider.completeCheckout(started.providerPaymentId, "success");
+    const afterExpiry = new Date(Date.now() + 11 * MIN);
+    const res = await svc.finalizeBookingPayment({ paymentId: started.paymentId, provider, now: afterExpiry });
+    assert.equal(res.outcome, "LATE_REFUNDED");
+    assert.equal((await provider.getPaymentStatus(started.providerPaymentId)).refundedAgorot, 5625, "ההחזר המלא הוא הסכום המוזל שחויב בפועל");
+    assert.equal((await userOf(u)).trialDiscountUsedAt, null, "הזמנה שלא אושרה בפועל לא צורכת את ההטבה");
+
+    const { started: again } = await holdAndStart(u, "ROOM4", 10);
+    assert.equal(again.amountAgorot, 5625, "ההטבה עדיין זמינה");
+  });
+
+  test("שתי הזמנות מקבילות של אותו משתמש: רק אחת מקבלת את ההנחה, לעולם לא שתיהן", async () => {
+    for (let round = 0; round < 8; round++) {
+      await wipe();
+      const u = await mkEligibleUser();
+      const h1 = await hold(u, "ROOM3", 10);
+      const h2 = await hold(u, "ROOM4", 10);
+      const [s1, s2] = await Promise.all([
+        svc.startBookingPayment({ appointmentId: h1.id, userId: u, provider }),
+        svc.startBookingPayment({ appointmentId: h2.id, userId: u, provider }),
+      ]);
+      const amounts = [s1.amountAgorot, s2.amountAgorot].sort((a, b) => a - b);
+      assert.deepEqual(amounts, [5625, 7500], `סבב ${round}: בדיוק הזמנה אחת מוזלת`);
+    }
+  });
+
+  test("תשלום מיתרת שעות (ללא כסף כלל): אין הנחה, ואינה צורכת את ההטבה", async () => {
+    const u = await mkEligibleUser();
+    const pkg = await prisma.hoursPackage.create({
+      data: { userId: u, hours: 5, minutesTotal: 300, minutesRemaining: 300, pricePaidAgorot: 30000, purchasedAt: new Date(), expiresAt: new Date(Date.now() + 365 * 86_400_000) },
+    });
+    const h = await hold(u, "ROOM3", 10);
+    const res = await svc.confirmBookingFromBalance({ appointmentId: h.id, userId: u, provider });
+    assert.equal(res.outcome, "CONFIRMED");
+    assert.equal((await apptOf(h.id)).paidCashAgorot, 0);
+    assert.equal((await userOf(u)).trialDiscountUsedAt, null, "תשלום מיתרה בלבד לא צורך את ההטבה (אין בו כסף להוזיל)");
+    assert.equal((await prisma.hoursPackage.findUniqueOrThrow({ where: { id: pkg.id } })).minutesRemaining, 240);
+
+    // ובהזמנה הבאה בכסף, ההטבה עדיין זמינה
+    const { started } = await holdAndStart(u, "ROOM4", 11);
+    assert.equal(started.amountAgorot, 5625);
+  });
+
+  test("הזמנה משולבת (יתרה חלקית + כסף): אין הנחה על חלק הכסף", async () => {
+    const u = await mkEligibleUser();
+    await prisma.hoursPackage.create({
+      data: { userId: u, hours: 5, minutesTotal: 300, minutesRemaining: 45, pricePaidAgorot: 30000, purchasedAt: new Date(), expiresAt: new Date(Date.now() + 365 * 86_400_000) },
+    });
+    const { started } = await holdAndStart(u, "ROOM3", 10); // שעה אחת: 45 דק' מהיתרה + 15 דק' בכסף
+    assert.equal(started.packageMinutes, 45);
+    assert.equal(started.amountAgorot, 1875, "15 דק' במחיר מלא, בלי הנחה, כי ההזמנה משולבת עם יתרה");
+    assert.equal((await userOf(u)).trialDiscountUsedAt, null);
+  });
+
+  test("הזמנה דרך ממשק מנהל (חוב, בלי תשלום מיידי): לא מקבלת הנחה, וההטבה נשארת זמינה ללקוח", async () => {
+    const u = await mkEligibleUser();
+    const res = await svc.createAdminBookingWithDebt({ adminId, userId: u, roomKey: "ROOM3", ...slot(10) });
+    assert.equal(res.debt?.amountAgorot, 7500, "חוב במחיר מלא — הזמנת מנהל אינה מסלול ההטבה");
+    assert.equal((await userOf(u)).trialDiscountUsedAt, null, "לא נצרכה ההטבה");
+
+    // ובהזמנה הבאה שהלקוח עצמו משלם עליה בכסף, ההטבה עדיין זמינה
+    const { started } = await holdAndStart(u, "ROOM4", 10);
+    assert.equal(started.amountAgorot, 5625);
+  });
+
+  test("ביטול הזמנה מאושרת שכבר ניצלה את ההטבה לא מחזיר אותה (הניצול סופי)", async () => {
+    const u = await mkEligibleUser();
+    const { hold: h, started } = await holdAndStart(u, "ROOM3", 10);
+    await provider.completeCheckout(started.providerPaymentId, "success");
+    await svc.finalizeBookingPayment({ paymentId: started.paymentId, provider });
+    assert.ok((await userOf(u)).trialDiscountUsedAt);
+
+    const exactly24h = new Date(h.startTime.getTime() - 24 * 3600_000);
+    const res = await svc.cancelBooking({ appointmentId: h.id, requester: { id: u, role: "CLIENT" }, provider, now: exactly24h });
+    assert.equal(res.outcome, "REFUNDED");
+    assert.ok((await userOf(u)).trialDiscountUsedAt, "ביטול מאוחר יותר לא מחזיר הטבה שכבר נוצלה בהזמנה שאושרה");
+
+    const { started: again } = await holdAndStart(u, "ROOM4", 11);
+    assert.equal(again.amountAgorot, 7500, "אין הנחה שנייה");
   });
 });

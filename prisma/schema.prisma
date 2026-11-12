@@ -101,6 +101,11 @@ model User {
   shiftEligibilityUpdatedById String?
   shifts       Shift[]
   shiftChangeRequests ShiftChangeRequest[]
+  /// הטבת 25% להזמנה ראשונה בכסף: מועד הניצול בפועל (הזמנה אושרה עם ההנחה). null = עדיין זכאי. לעולם לא מתאפס לאחור
+  trialDiscountUsedAt DateTime?
+  /// שמורה בלבד: מזהה ההזמנה (PENDING_PAYMENT) שעבורה ה"מקום" בהטבה שמור כרגע, כדי למנוע ניצול כפול ע"י הזמנות מקבילות.
+  /// מתאפסת כשההזמנה המחזיקה אותה מתבטלת/נכשלת, ומתקבעת ל-trialDiscountUsedAt כשהיא מאושרת בפועל
+  trialDiscountReservedAppointmentId String?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 }
@@ -219,6 +224,8 @@ model Payment {
   packageHours      Int?
   /// תשלום הזמנה (purpose = BOOKING): כמה דקות מתוכננות לניכוי מיתרה בעת האישור. הסכום בכסף הוא ההפרש בלבד
   packageMinutes    Int                @default(0)
+  /// תשלום הזמנה (purpose = BOOKING): כמה מתוך amountAgorot הוא הנחת 25% להזמנה ראשונה שכבר נכלל בסכום (0 = אין הנחה)
+  discountAgorot    Int                @default(0)
   hoursPackage      HoursPackage?
   shiftCharge       ShiftCharge?
   debtSettlement    DebtSettlement?

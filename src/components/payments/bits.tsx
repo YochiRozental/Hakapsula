@@ -66,4 +66,18 @@ export function InfoRow({ label, children }: { label: string; children: ReactNod
   );
 }
 
+/** שורת הנחת ההזמנה הראשונה: מוצגת רק כשההנחה בפועל חלה (discountAgorot > 0), כדי שהמחיר המקורי, ההנחה והסכום הסופי יהיו ברורים */
+export function TrialDiscountRow({ discountAgorot, shekel }: { discountAgorot: number; shekel: (agorot: number) => string }) {
+  if (discountAgorot <= 0) return null;
+  return (
+    <div className="flex items-baseline justify-between gap-4 py-2 text-sm border-b border-cream-100 last:border-0">
+      <span className="text-brand-700 flex items-center gap-1">
+        <Icon name="sparkle" className="w-3.5 h-3.5" />
+        הנחת 25% להזמנה ראשונה
+      </span>
+      <span className="font-semibold text-brand-700 tabular-nums text-left">-{shekel(discountAgorot)}</span>
+    </div>
+  );
+}
+
 export { Alert };

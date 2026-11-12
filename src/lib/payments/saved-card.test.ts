@@ -89,10 +89,20 @@ describe("כרטיס שמור, הרשאה חד-פעמית וביצוע מורש�
     provider = newProvider();
     const passwordHash = await pw.hashPassword(SITE_PASSWORD);
     const ivrPinHash = await pw.hashPassword(PIN);
+    // "כבר ניצלו" את הנחת ההזמנה הראשונה (לא קשורה לקובץ הזה), כדי שבדיקות הסכום כאן ימשיכו לבדוק מחיר מלא
     const mk = async (key: string, extra: Record<string, unknown> = {}) => {
       ids[key] = (
         await prisma.user.create({
-          data: { name: `sc ${key}`, email: `sc-${key}@test.local`, passwordHash, gender: "MALE", status: "APPROVED", ivrPinHash, ...(extra as object) } as never,
+          data: {
+            name: `sc ${key}`,
+            email: `sc-${key}@test.local`,
+            passwordHash,
+            gender: "MALE",
+            status: "APPROVED",
+            ivrPinHash,
+            trialDiscountUsedAt: new Date("2020-01-01T00:00:00Z"),
+            ...(extra as object),
+          } as never,
         })
       ).id;
     };
@@ -402,6 +412,41 @@ describe("כרטיס שמור, הרשאה חד-פעמית וביצוע מורש�
     const id2 = await authorize(ids.a, h.id, "PAY_CARD", 7500, 0);
     assert.equal((await run(id2, ids.a, h.id)).status, "CONFIRMED");
     assert.equal(await prisma.payment.count({ where: { status: "SUCCEEDED" } }), 1);
+  });
+
+  test("הנחת הזמנה ראשונה: שגיאת ספק בחיוב כרטיס שמור לא צורכת את ההטבה; הניסיון הבא עדיין מוזל", async () => {
+    // משתמש חדש וזכאי, ייעודי לבדיקה הזו — לא ids.a (שכבר ניצל, לפי ברירת המחדל של שאר הבדיקות בקובץ)
+    const passwordHash = await pw.hashPassword(SITE_PASSWORD);
+    const ivrPinHash = await pw.hashPassword(PIN);
+    const fresh = await prisma.user.create({
+      data: { name: "sc fresh-disc", email: "sc-fresh-disc@test.local", passwordHash, gender: "MALE", status: "APPROVED", ivrPinHash } as never,
+    });
+    const userId = fresh.id;
+    await addCard(userId);
+    const h = await hold(userId, "ROOM3", 10);
+
+    const orig = MockPaymentProvider.prototype.chargeSavedMethod;
+    MockPaymentProvider.prototype.chargeSavedMethod = async () => {
+      throw new Error("network down");
+    };
+    try {
+      const id = await authorize(userId, h.id, "PAY_CARD", 5625, 0);
+      assert.deepEqual(await run(id, userId, h.id), { status: "PROVIDER_ERROR" });
+    } finally {
+      MockPaymentProvider.prototype.chargeSavedMethod = orig;
+    }
+    const firstPayment = await prisma.payment.findFirstOrThrow({});
+    assert.deepEqual([firstPayment.status, firstPayment.discountAgorot, firstPayment.amountAgorot], ["FAILED", 1875, 5625]);
+    assert.equal(
+      (await prisma.user.findUniqueOrThrow({ where: { id: userId } })).trialDiscountUsedAt,
+      null,
+      "שגיאת ספק בחיוב לא סימנה את ההטבה כמנוצלת"
+    );
+
+    // ניסיון חדש (הרשאה חדשה): עדיין מוזל, ומצליח
+    const id2 = await authorize(userId, h.id, "PAY_CARD", 5625, 0);
+    assert.deepEqual(await run(id2, userId, h.id), { status: "CONFIRMED", via: "CARD", paidFromBalanceMinutes: 0, paidCashAgorot: 5625 });
+    assert.ok((await prisma.user.findUniqueOrThrow({ where: { id: userId } })).trialDiscountUsedAt, "אושרה בפועל: ההטבה מסומנת כמנוצלת");
   });
 
   test("אין כרטיס שמור או שהחלוקה השתנתה: לא מחייבים", async () => {

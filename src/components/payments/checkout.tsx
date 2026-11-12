@@ -16,6 +16,7 @@ import {
   PaymentStatusBadge,
   SandboxNotice,
   SandboxPanel,
+  TrialDiscountRow,
 } from "@/components/payments/bits";
 import {
   api,
@@ -281,6 +282,9 @@ export function Checkout({ appointmentId }: { appointmentId: string }) {
               {shekel(details.paidCashAgorot)}
             </InfoRow>
           )}
+          {details.payment && details.payment.discountAgorot > 0 && (
+            <TrialDiscountRow discountAgorot={details.payment.discountAgorot} shekel={shekel} />
+          )}
           <InfoRow label="תאריך">{dateText(details.startTime)}</InfoRow>
         </section>
         <div className="flex flex-wrap gap-3">
@@ -413,6 +417,7 @@ export function Checkout({ appointmentId }: { appointmentId: string }) {
         </div>
         <InfoRow label="משך">{durationText(details.durationMinutes)}</InfoRow>
         <InfoRow label="מחיר רגיל">{shekel(details.fullPriceAgorot)}</InfoRow>
+        {plan && <TrialDiscountRow discountAgorot={plan.discountAgorot} shekel={shekel} />}
         <InfoRow label="יתרת שעות זמינה">
           {details.availableBalanceMinutes > 0
             ? durationText(details.availableBalanceMinutes)
@@ -433,6 +438,7 @@ export function Checkout({ appointmentId }: { appointmentId: string }) {
               {durationText(pending.packageMinutes)}
             </InfoRow>
           )}
+          <TrialDiscountRow discountAgorot={pending.discountAgorot} shekel={shekel} />
           <InfoRow label="סכום לתשלום">{shekel(pending.amountAgorot)}</InfoRow>
           <p className="text-sm text-stone-500">
             ההזמנה תאושר רק לאחר שהשרת יאמת את התשלום מול הספק. ניתן לרענן את
@@ -480,7 +486,7 @@ export function Checkout({ appointmentId }: { appointmentId: string }) {
                 disabled={action.busy}
                 onClick={() => pay(false)}
               >
-                לשלם בכסף במקום: {shekel(details.fullPriceAgorot)}
+                לשלם בכסף במקום: {shekel(details.cashOnlyPlan?.cashAgorot ?? details.fullPriceAgorot)}
               </button>
             </>
           ) : plan && plan.packageMinutes > 0 ? (
@@ -507,13 +513,13 @@ export function Checkout({ appointmentId }: { appointmentId: string }) {
                 disabled={action.busy}
                 onClick={() => pay(false)}
               >
-                לשלם הכול בכסף: {shekel(details.fullPriceAgorot)}
+                לשלם הכול בכסף: {shekel(details.cashOnlyPlan?.cashAgorot ?? details.fullPriceAgorot)}
               </button>
             </>
           ) : (
             <>
               <p className="text-sm text-stone-600">
-                אין לכם יתרת שעות זמינה, ולכן ההזמנה משולמת במחיר הרגיל.
+                אין לכם יתרת שעות זמינה, ולכן ההזמנה משולמת במחיר הרגיל{plan && plan.discountAgorot > 0 ? " (בניכוי הנחת הזמנה ראשונה)" : ""}.
               </p>
               <button
                 type="button"
@@ -523,7 +529,7 @@ export function Checkout({ appointmentId }: { appointmentId: string }) {
               >
                 {action.busy
                   ? "פותח תשלום..."
-                  : `תשלום ${shekel(details.fullPriceAgorot)}`}
+                  : `תשלום ${shekel(plan?.cashAgorot ?? details.fullPriceAgorot)}`}
               </button>
               <Link
                 href="/profile/hours"

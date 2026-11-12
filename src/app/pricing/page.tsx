@@ -1,14 +1,12 @@
 import Link from "next/link";
 import { BrandHeader, Icon, SectionTitle } from "@/components/ui";
-import { formatAgorot, regularPriceAgorot } from "@/lib/payments/pricing";
+import { TRIAL_DISCOUNT_PERCENT, formatAgorot, regularPriceAgorot } from "@/lib/payments/pricing";
 import { getRegularPricing, hoursPackageOptions } from "@/lib/payments/pricing-db";
 import { listShiftWindows } from "@/lib/shifts/windows-db";
 import { hhmm } from "@/lib/shifts/windows";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "מחירון | הקפסולה" };
-
-const TRIAL_DISCOUNT_PERCENT = 25;
 
 export default async function PricingPage() {
   const [shiftWindowsAll, pricing] = await Promise.all([listShiftWindows({ activeOnly: true }), getRegularPricing()]);

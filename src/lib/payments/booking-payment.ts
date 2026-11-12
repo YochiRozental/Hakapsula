@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { BookingError, blockingAppointmentWhere, createBookingHold, lockRoomZone } from "@/lib/booking";
 import { CONFLICTING_ROOM_KEYS } from "@/lib/rooms";
-import { regularPriceAgorot, splitBookingPrice } from "@/lib/payments/pricing";
+import { regularPriceAgorot, splitBookingPrice, trialDiscountAgorot } from "@/lib/payments/pricing";
 import { getRegularPricing } from "@/lib/payments/pricing-db";
 import { isAutoRefundEligible } from "@/lib/payments/policy";
 import type { PaymentProvider } from "@/lib/payments/provider";
@@ -14,6 +14,7 @@ import {
   lockAppointmentRow,
   lockPaymentRow,
   lockUserBalances,
+  lockUserRow,
   type Tx,
 } from "@/lib/payments/shared";
 import { consumeBalance, loadUsableBalances, restoreAppointmentBalance, toPackageBalance } from "@/lib/payments/balances";
@@ -95,13 +96,38 @@ export interface BookingPlan {
   durationMinutes: number;
   /** דקות שיינוכו מיתרות (חבילות וזיכויים) באישור */
   packageMinutes: number;
-  /** מה שנשאר לתשלום בכסף, באגורות */
+  /** מה שנשאר לתשלום בכסף בפועל (אחרי הנחה, אם חלה), באגורות */
   cashAgorot: number;
+  /** אותו חלק בכסף לפני הנחה, באגורות (= cashAgorot + discountAgorot) */
+  baseCashAgorot: number;
+  /** הנחת 25% להזמנה ראשונה שכבר נכללת ב-cashAgorot (0 = לא חלה) */
+  discountAgorot: number;
   fullyCoveredByBalance: boolean;
 }
 
+/**
+ * הטבת 25% להזמנה ראשונה בכסף: תנאי זכאות (ראו TRIAL_DISCOUNT_PERCENT ב-pricing.ts).
+ * זכאי = לא ניצל בעבר (trialDiscountUsedAt), ואין "מקום" בהטבה שמור כרגע להזמנה אחרת של אותו משתמש.
+ */
+function trialDiscountEligible(user: { trialDiscountUsedAt: Date | null; trialDiscountReservedAppointmentId: string | null }, appointmentId: string): boolean {
+  if (user.trialDiscountUsedAt) return false;
+  if (user.trialDiscountReservedAppointmentId && user.trialDiscountReservedAppointmentId !== appointmentId) return false;
+  return true;
+}
+
+/** תצוגה בלבד (הצעת מחיר): לא נועל ולא שומר כלום. ההכרעה הסופית, הנעולה, היא ב-ensurePendingPayment */
+async function previewTrialDiscount(userId: string, appointmentId: string, baseCashAgorot: number, packageMinutesUsed: number): Promise<number> {
+  if (packageMinutesUsed > 0 || baseCashAgorot <= 0) return 0;
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { trialDiscountUsedAt: true, trialDiscountReservedAppointmentId: true },
+  });
+  if (!user || !trialDiscountEligible(user, appointmentId)) return 0;
+  return trialDiscountAgorot(baseCashAgorot);
+}
+
 async function planFor(
-  appt: { startTime: Date; endTime: Date },
+  appt: { id: string; startTime: Date; endTime: Date },
   userId: string,
   now: Date,
   useBalance: boolean
@@ -109,13 +135,19 @@ async function planFor(
   const durationMinutes = durationOf(appt);
   const pricing = await getRegularPricing();
   const fullPrice = priceFor(appt, pricing.hourlyAgorot); // מוודא שהמשך ניתן לתמחור
-  if (!useBalance) return { durationMinutes, packageMinutes: 0, cashAgorot: fullPrice, fullyCoveredByBalance: false };
+  if (!useBalance) {
+    const discount = await previewTrialDiscount(userId, appt.id, fullPrice, 0);
+    return { durationMinutes, packageMinutes: 0, baseCashAgorot: fullPrice, discountAgorot: discount, cashAgorot: fullPrice - discount, fullyCoveredByBalance: false };
+  }
   const sources = await loadUsableBalances(prisma, userId, now);
   const split = splitBookingPrice(durationMinutes, sources.map(toPackageBalance), now, pricing.hourlyAgorot);
+  const discount = await previewTrialDiscount(userId, appt.id, split.regularPriceAgorot, split.packageMinutes);
   return {
     durationMinutes,
     packageMinutes: split.packageMinutes,
-    cashAgorot: split.regularPriceAgorot,
+    baseCashAgorot: split.regularPriceAgorot,
+    discountAgorot: discount,
+    cashAgorot: split.regularPriceAgorot - discount,
     fullyCoveredByBalance: split.regularMinutes === 0,
   };
 }
@@ -205,6 +237,48 @@ export async function startBookingPayment(params: {
   };
 }
 
+/**
+ * הכרעה סופית ונעולה על הטבת ההזמנה הראשונה, בתוך הטרנזקציה שיוצרת את התשלום (לפני חיוב הספק). זו הנקודה היחידה
+ * שבה ההטבה בפועל "נשמרת" (reserved) למשתמש, כדי למנוע ניצול כפול דרך שתי הזמנות מקבילות (עדיפות נעילות: שורת
+ * ההזמנה כבר ננעלה ע"י הקורא; כאן ננעלת שורת המשתמש, תמיד לפני יצירת שורת התשלום, כדי לשמור על סדר נעילות עקבי).
+ * לא משנה דבר אם כבר שמור מקום לאותה הזמנה בדיוק (אידמפוטנטי: ניסיון חוזר/רענון לא "מאבד" את ההנחה).
+ */
+async function reserveTrialDiscount(tx: Tx, userId: string, appointmentId: string, baseCashAgorot: number, packageMinutesUsed: number): Promise<number> {
+  if (packageMinutesUsed > 0 || baseCashAgorot <= 0) return 0;
+  await lockUserRow(tx, userId);
+  const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+  if (!trialDiscountEligible(user, appointmentId)) return 0;
+  if (!user.trialDiscountReservedAppointmentId) {
+    await tx.user.update({ where: { id: userId }, data: { trialDiscountReservedAppointmentId: appointmentId } });
+  }
+  return trialDiscountAgorot(baseCashAgorot);
+}
+
+/** משחרר "מקום" שמור בהטבה כשההזמנה שהחזיקה אותו לא תסתיים באישור (תשלום נכשל/בוטל, איחור, שינוי יתרה) */
+async function releaseTrialDiscountReservation(userId: string, appointmentId: string) {
+  await prisma.user.updateMany({
+    where: { id: userId, trialDiscountReservedAppointmentId: appointmentId },
+    data: { trialDiscountReservedAppointmentId: null },
+  });
+}
+
+async function releaseTrialDiscountReservationTx(tx: Tx, userId: string, appointmentId: string) {
+  await lockUserRow(tx, userId);
+  await tx.user.updateMany({
+    where: { id: userId, trialDiscountReservedAppointmentId: appointmentId },
+    data: { trialDiscountReservedAppointmentId: null },
+  });
+}
+
+/** מקבעת את ההטבה כמנוצלת לצמיתות. קוראת רק מתוך אישור הזמנה בפועל (CONFIRMED) עם הנחה שבאמת נכללה בתשלום */
+async function markTrialDiscountUsedTx(tx: Tx, userId: string) {
+  await lockUserRow(tx, userId);
+  await tx.user.updateMany({
+    where: { id: userId, trialDiscountUsedAt: null },
+    data: { trialDiscountUsedAt: new Date(), trialDiscountReservedAppointmentId: null },
+  });
+}
+
 async function ensurePendingPayment(params: {
   appointmentId: string;
   userId: string;
@@ -229,13 +303,19 @@ async function ensurePendingPayment(params: {
       const pending = await tx.payment.findFirst({ where: { appointmentId, purpose: "BOOKING", status: "PENDING" } });
       if (pending) return classify(pending);
 
+      // ההכרעה הסופית על ההנחה נעשית כאן, תחת נעילה, ולא לפי plan.cashAgorot שהוצע מראש (מונע מרוץ בין שתי
+      // הזמנות מקבילות של אותו משתמש: רק הראשונה שמגיעה לכאן תקבל את ההטבה)
+      const discountAgorot = await reserveTrialDiscount(tx, userId, appointmentId, plan.baseCashAgorot, plan.packageMinutes);
+      const amountAgorot = plan.baseCashAgorot - discountAgorot;
+
       const previousAttempts = await tx.payment.count({ where: { appointmentId, purpose: "BOOKING" } });
       const created = await tx.payment.create({
         data: {
           userId,
           appointmentId,
           purpose: "BOOKING",
-          amountAgorot: plan.cashAgorot,
+          amountAgorot,
+          discountAgorot,
           packageMinutes: plan.packageMinutes,
           paymentMethodId: paymentMethodId ?? null,
           status: "PENDING",
@@ -261,6 +341,9 @@ async function retireStalePayment(stale: Payment, provider: PaymentProvider, now
   try {
     if (stale.providerPaymentId) await provider.cancelPayment(stale.providerPaymentId);
     await prisma.payment.updateMany({ where: { id: stale.id, status: "PENDING" }, data: { status: "CANCELLED" } });
+    if (stale.discountAgorot > 0 && stale.appointmentId) {
+      await releaseTrialDiscountReservation(stale.userId, stale.appointmentId);
+    }
     await audit(stale.id, "cancel", "ok", "stale_plan");
   } catch {
     await audit(stale.id, "cancel", "error", "cancel_rejected");
@@ -417,6 +500,10 @@ export async function finalizeBookingPayment(params: {
       where: { id: payment.id, status: "PENDING" },
       data: { status: verified.status, failureCode: verified.failureCode ?? null },
     });
+    if (payment.discountAgorot > 0) {
+      // תשלום שנכשל/בוטל לא צורך את ההטבה: המקום השמור משתחרר ואפשר לנסות שוב
+      await releaseTrialDiscountReservation(payment.userId, payment.appointmentId!);
+    }
     await audit(payment.id, "status", "ok", verified.status.toLowerCase());
     return result(verified.status === "FAILED" ? "PAYMENT_FAILED" : "PAYMENT_CANCELLED");
   }
@@ -448,6 +535,7 @@ export async function finalizeBookingPayment(params: {
         if (!consumed.ok) {
           // היתרה השתנתה בזמן התשלום (נוצלה/פגה). לא מנכים כלום ולא מאשרים; הכסף יוחזר
           await tx.appointment.update({ where: { id: appt.id }, data: { status: "CANCELLED", holdExpiresAt: null } });
+          if (pay.discountAgorot > 0) await releaseTrialDiscountReservationTx(tx, appt.userId, appt.id);
           return "BALANCE";
         }
       }
@@ -461,10 +549,12 @@ export async function finalizeBookingPayment(params: {
           paidCashAgorot: pay.amountAgorot,
         },
       });
+      if (pay.discountAgorot > 0) await markTrialDiscountUsedTx(tx, appt.userId);
       return "CONFIRMED";
     }
     if (appt.status === "PENDING_PAYMENT") {
       await tx.appointment.update({ where: { id: appt.id }, data: { status: "CANCELLED", holdExpiresAt: null } });
+      if (pay.discountAgorot > 0) await releaseTrialDiscountReservationTx(tx, appt.userId, appt.id);
     }
     return "LATE";
   });
@@ -696,6 +786,7 @@ async function cancelPendingPayments(appointmentId: string, provider: PaymentPro
     try {
       if (p.providerPaymentId) await provider.cancelPayment(p.providerPaymentId);
       await prisma.payment.updateMany({ where: { id: p.id, status: "PENDING" }, data: { status: "CANCELLED" } });
+      if (p.discountAgorot > 0) await releaseTrialDiscountReservation(p.userId, appointmentId);
       await audit(p.id, "cancel", "ok");
     } catch {
       await audit(p.id, "cancel", "error", "cancel_rejected");
@@ -771,6 +862,7 @@ export async function reconcilePendingPayments(params: { provider: PaymentProvid
         // חיוב באמצעי שמור שנקטע לפני שנשמרה תוצאת הספק. לא מחייבים מחדש בלי הרשאת לקוח חדשה ולא פותחים עמוד תשלום:
         // סוגרים כנכשל, והלקוח יתחיל מחדש. (התאמה מול הספק לפי מפתח אידמפוטנטיות תתאפשר רק אחרי אימות יכולות הספק האמיתי)
         await prisma.payment.updateMany({ where: { id: p.id, status: "PENDING" }, data: { status: "FAILED", failureCode: "interrupted" } });
+        if (p.discountAgorot > 0 && p.appointmentId) await releaseTrialDiscountReservation(p.userId, p.appointmentId);
         await audit(p.id, "charge", "error", "interrupted");
         continue;
       }
@@ -955,6 +1047,7 @@ export async function payBookingWithSavedCard(params: {
       });
     } catch (err) {
       await prisma.payment.updateMany({ where: { id: payment.id, status: "PENDING" }, data: { status: "FAILED", failureCode: "provider_error" } });
+      if (payment.discountAgorot > 0) await releaseTrialDiscountReservation(payment.userId, appointmentId);
       await audit(payment.id, "charge", "error", err instanceof Error ? err.name : "unknown");
       throw new PaymentFlowError("שגיאה בספק התשלום", "PROVIDER_ERROR");
     }

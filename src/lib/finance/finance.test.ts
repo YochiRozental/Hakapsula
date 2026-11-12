@@ -110,8 +110,21 @@ describe("ניהול כספי: מול PostgreSQL מקומי", { skip: !testUrl &
     await prisma.user.deleteMany({ where: { name: { startsWith: "fin " } } });
     provider = new MockPaymentProvider(SECRET, new PrismaMockStore(prisma));
     const passwordHash = await pw.hashPassword(SITE_PASSWORD);
+    // "כבר ניצלו" את הנחת ההזמנה הראשונה (לא קשורה לקובץ הזה), כדי שבדיקות הכספים כאן ימשיכו לבדוק מחיר מלא
     const mk = async (k: string, extra: Record<string, unknown> = {}) => {
-      ids[k] = (await prisma.user.create({ data: { name: `fin ${k}`, email: `fin-${k}@test.local`, passwordHash, gender: "MALE", status: "APPROVED", ...(extra as object) } as never })).id;
+      ids[k] = (
+        await prisma.user.create({
+          data: {
+            name: `fin ${k}`,
+            email: `fin-${k}@test.local`,
+            passwordHash,
+            gender: "MALE",
+            status: "APPROVED",
+            trialDiscountUsedAt: new Date("2020-01-01T00:00:00Z"),
+            ...(extra as object),
+          } as never,
+        })
+      ).id;
     };
     await mk("a");
     await mk("b");

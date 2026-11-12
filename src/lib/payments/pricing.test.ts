@@ -7,6 +7,8 @@ import {
   packageSavingsAgorot,
   regularPriceAgorot,
   splitBookingPrice,
+  trialDiscountAgorot,
+  TRIAL_DISCOUNT_PERCENT,
   type HoursPackageOption,
 } from "@/lib/payments/pricing";
 import { creditExpiry, isAutoRefundEligible } from "@/lib/payments/policy";
@@ -104,6 +106,17 @@ test("cancellation: no automatic refund within 24h of start, unless admin except
 
 test("credit is valid for 30 days", () => {
   assert.equal(creditExpiry(new Date("2026-06-01T00:00:00Z")).toISOString(), "2026-07-01T00:00:00.000Z");
+});
+
+test("trial discount: 25% of 75 ₪ is 56.25 ₪ off (18.75 ₪ discount)", () => {
+  assert.equal(TRIAL_DISCOUNT_PERCENT, 25);
+  assert.equal(trialDiscountAgorot(HOURLY_AGOROT), 1875); // 18.75 ₪ מתוך 75 ₪
+  assert.equal(HOURLY_AGOROT - trialDiscountAgorot(HOURLY_AGOROT), 5625); // 56.25 ₪
+});
+
+test("trial discount rounds to the nearest agora", () => {
+  assert.equal(trialDiscountAgorot(11250), 2813); // 90 דק' (112.50 ₪): 25% = 28.125, מתעגל ל-28.13
+  assert.equal(trialDiscountAgorot(0), 0);
 });
 
 test("formatAgorot", () => {

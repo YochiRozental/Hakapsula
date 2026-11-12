@@ -6,6 +6,17 @@
 
 export const SLOT_MINUTES = 15;
 
+/**
+ * הטבת 25% להזמנה ראשונה בכסף (ללא שימוש ביתרה), ללקוח שלא ניצל אותה בעבר. מקור יחיד לאחוז ההנחה, כדי שדף
+ * המחירון (תצוגה בלבד) ותמחור ההזמנה בפועל (src/lib/payments/booking-payment.ts) לא יסטו זה מזה.
+ */
+export const TRIAL_DISCOUNT_PERCENT = 25;
+
+/** סכום ההנחה (מעוגל לאגורה הקרובה) מתוך מחיר בכסף לפני הנחה */
+export function trialDiscountAgorot(baseCashAgorot: number): number {
+  return Math.round((baseCashAgorot * TRIAL_DISCOUNT_PERCENT) / 100);
+}
+
 export function assertQuarterHours(minutes: number) {
   if (!Number.isInteger(minutes) || minutes <= 0 || minutes % SLOT_MINUTES !== 0) {
     throw new RangeError(`משך חייב להיות מכפלה חיובית של ${SLOT_MINUTES} דקות`);

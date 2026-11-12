@@ -7,6 +7,7 @@ import {
   PaymentStatusBadge,
   SandboxNotice,
   SandboxPanel,
+  TrialDiscountRow,
 } from "@/components/payments/bits";
 import {
   api,
@@ -266,6 +267,9 @@ export function AdminCheckout({
               {shekel(details.paidCashAgorot)}
             </InfoRow>
           )}
+          {details.payment && details.payment.discountAgorot > 0 && (
+            <TrialDiscountRow discountAgorot={details.payment.discountAgorot} shekel={shekel} />
+          )}
         </section>
       </div>
     );
@@ -364,6 +368,7 @@ export function AdminCheckout({
         </div>
         <InfoRow label="משך">{durationText(details.durationMinutes)}</InfoRow>
         <InfoRow label="מחיר רגיל">{shekel(details.fullPriceAgorot)}</InfoRow>
+        {plan && <TrialDiscountRow discountAgorot={plan.discountAgorot} shekel={shekel} />}
         <InfoRow label="יתרת שעות זמינה ללקוח">
           {details.availableBalanceMinutes > 0
             ? durationText(details.availableBalanceMinutes)
@@ -381,6 +386,7 @@ export function AdminCheckout({
               {durationText(pending.packageMinutes)}
             </InfoRow>
           )}
+          <TrialDiscountRow discountAgorot={pending.discountAgorot} shekel={shekel} />
           <InfoRow label="סכום לתשלום">{shekel(pending.amountAgorot)}</InfoRow>
           {gate.sandbox && pending.providerPaymentId && (
             <SandboxPanel
@@ -424,7 +430,7 @@ export function AdminCheckout({
                 disabled={action.busy}
                 onClick={() => pay(false)}
               >
-                לשלם בכסף במקום: {shekel(details.fullPriceAgorot)}
+                לשלם בכסף במקום: {shekel(details.cashOnlyPlan?.cashAgorot ?? details.fullPriceAgorot)}
               </button>
             </>
           ) : plan && plan.packageMinutes > 0 ? (
@@ -449,13 +455,13 @@ export function AdminCheckout({
                 disabled={action.busy}
                 onClick={() => pay(false)}
               >
-                לשלם הכול בכסף: {shekel(details.fullPriceAgorot)}
+                לשלם הכול בכסף: {shekel(details.cashOnlyPlan?.cashAgorot ?? details.fullPriceAgorot)}
               </button>
             </>
           ) : (
             <>
               <p className="text-sm text-stone-600">
-                אין ללקוח יתרת שעות זמינה, ולכן התור משולם במחיר הרגיל.
+                אין ללקוח יתרת שעות זמינה, ולכן התור משולם במחיר הרגיל{plan && plan.discountAgorot > 0 ? " (בניכוי הנחת הזמנה ראשונה)" : ""}.
               </p>
               <button
                 type="button"
@@ -465,7 +471,7 @@ export function AdminCheckout({
               >
                 {action.busy
                   ? "פותח תשלום..."
-                  : `תשלום ${shekel(details.fullPriceAgorot)}`}
+                  : `תשלום ${shekel(plan?.cashAgorot ?? details.fullPriceAgorot)}`}
               </button>
             </>
           )}

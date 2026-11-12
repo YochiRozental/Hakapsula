@@ -105,10 +105,21 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
     pendingUser = (await mk("pending", { status: "PENDING" })).id;
     blockedUser = (await mk("blocked", { status: "BLOCKED" })).id;
     adminId = (await mk("admin", { role: "ADMIN" })).id;
+    // משתמשי הבדיקה "כבר ניצלו" את הנחת ההזמנה הראשונה (לא קשורה לקובץ הזה), כדי שבדיקות המחיר/היתרה כאן
+    // ימשיכו לבדוק מחיר מלא כרגיל. ראו src/lib/payments/booking-payment.test.ts לבדיקות ההנחה עצמה
+    await markTrialDiscountUsed([userA, userB, pendingUser, blockedUser, adminId]);
   });
+
+  function markTrialDiscountUsed(userIds: string[]) {
+    return prisma.user.updateMany({
+      where: { id: { in: userIds } },
+      data: { trialDiscountUsedAt: new Date("2020-01-01T00:00:00Z"), trialDiscountReservedAppointmentId: null },
+    });
+  }
 
   beforeEach(async () => {
     await wipe();
+    await markTrialDiscountUsed([userA, userB, pendingUser, blockedUser, adminId]);
     provider = newProvider();
   });
 
@@ -922,7 +933,7 @@ describe("חבילות שעות, יתרות ותשלום משולב: מול Post
     assert.equal(d.holdExpiresAt, h.holdExpiresAt!.toISOString());
     assert.ok(Math.abs(Date.parse(d.serverNow) - Date.now()) < 5000);
     assert.deepEqual([d.fullPriceAgorot, d.availableBalanceMinutes, d.durationMinutes], [7500, 30, 60]);
-    assert.deepEqual(d.plan, { packageMinutes: 30, cashAgorot: 3750, fullyCoveredByBalance: false });
+    assert.deepEqual(d.plan, { packageMinutes: 30, cashAgorot: 3750, discountAgorot: 0, fullyCoveredByBalance: false });
     assert.equal(d.payment, null);
 
     await assert.rejects(() => views.getHoldDetails(h.id, userB), { code: "NOT_FOUND" });

@@ -119,8 +119,10 @@ export interface HoldDetails {
   holdActive: boolean;
   fullPriceAgorot: number;
   availableBalanceMinutes: number;
-  /** חלוקת התשלום עם שימוש ביתרה (רק בהחזקה פעילה) */
-  plan: { packageMinutes: number; cashAgorot: number; fullyCoveredByBalance: boolean } | null;
+  /** חלוקת התשלום עם שימוש ביתרה (רק בהחזקה פעילה). discountAgorot: הנחת ההזמנה הראשונה שכבר נכללת ב-cashAgorot */
+  plan: { packageMinutes: number; cashAgorot: number; discountAgorot: number; fullyCoveredByBalance: boolean } | null;
+  /** הצעת מחיר לתשלום הכול בכסף בלי שימוש ביתרה (רק בהחזקה פעילה) — למקרה שהלקוח בוחר באפשרות הזו במפורש */
+  cashOnlyPlan: { cashAgorot: number; discountAgorot: number } | null;
   paidFromBalanceMinutes: number;
   paidCashAgorot: number;
   /** ניסיון התשלום האחרון בכסף, אם היה */
@@ -131,6 +133,7 @@ export interface HoldDetails {
     status: string;
     amountAgorot: number;
     packageMinutes: number;
+    discountAgorot: number;
     refundedAgorot: number;
   } | null;
 }
@@ -160,9 +163,14 @@ export async function getHoldDetails(appointmentId: string, userId: string, now:
   ]);
 
   let plan: HoldDetails["plan"] = null;
+  let cashOnlyPlan: HoldDetails["cashOnlyPlan"] = null;
   if (holdActive) {
     const q = await quoteHold({ appointmentId, userId, now });
-    plan = { packageMinutes: q.packageMinutes, cashAgorot: q.cashAgorot, fullyCoveredByBalance: q.fullyCoveredByBalance };
+    plan = { packageMinutes: q.packageMinutes, cashAgorot: q.cashAgorot, discountAgorot: q.discountAgorot, fullyCoveredByBalance: q.fullyCoveredByBalance };
+    if (q.packageMinutes > 0) {
+      const cashOnly = await quoteHold({ appointmentId, userId, now, useBalance: false });
+      cashOnlyPlan = { cashAgorot: cashOnly.cashAgorot, discountAgorot: cashOnly.discountAgorot };
+    }
   }
 
   return {
@@ -179,6 +187,7 @@ export async function getHoldDetails(appointmentId: string, userId: string, now:
     fullPriceAgorot,
     availableBalanceMinutes: sources.reduce((n, s) => n + s.minutesRemaining, 0),
     plan,
+    cashOnlyPlan,
     paidFromBalanceMinutes: appt.paidFromBalanceMinutes,
     paidCashAgorot: appt.paidCashAgorot,
     payment: payment
@@ -188,6 +197,7 @@ export async function getHoldDetails(appointmentId: string, userId: string, now:
           status: payment.status,
           amountAgorot: payment.amountAgorot,
           packageMinutes: payment.packageMinutes,
+          discountAgorot: payment.discountAgorot,
           refundedAgorot: payment.refunds.reduce((n, r) => n + r.amountAgorot, 0),
         }
       : null,
