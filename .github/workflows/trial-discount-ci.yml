@@ -35,10 +35,9 @@ jobs:
       PGPORT: 5432
       PGUSER: ci
       PGPASSWORD: ci_ephemeral_pw
-      # ברירת מחדל ל-DATABASE_URL לשלבים שלא קשורים ל-DB בכלל (tsc/lint/build): מצביעה על אותו קונטיינר חד-פעמי,
-      # לעולם לא על Neon. שמות המסד לבדיקות האינטגרציה עצמן מוגדרים בנפרד בשלב ההרצה, וכולם מסתיימים ב-_test
-      # (הגנה קיימת בקוד: assertLocalTestDatabase מסרבת לרוץ על כל מסד שאינו localhost ומסתיים ב-_test).
-      DATABASE_URL: postgresql://ci:ci_ephemeral_pw@localhost:5432/postgres
+      # DATABASE_URL למעטפת/build/tsc/lint: מצביע על מסד ייעודי שמ-migrate-ים אותו לפני השימוש (ל-/admin יש
+      # קריאת DB בזמן build, ensureRooms). לעולם לא Neon — תמיד הקונטיינר החד-פעמי הזה בלבד.
+      DATABASE_URL: postgresql://ci:ci_ephemeral_pw@localhost:5432/clinics_build_test
 
     steps:
       - uses: actions/checkout@v4
@@ -50,22 +49,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: ESLint
-        run: npm run lint
-
-      # מריצים build לפני tsc העצמאי: next build מייצר טיפוסי-עזר לנתיבים (למשל LayoutProps ב-.next/types),
-      # שאינם קיימים ב-checkout נקי (.next/ אינו ב-git) ובלעדיהם tsc --noEmit נכשל בטעות על src/app/layout.tsx.
-      # next build כבר מריץ בעצמו בדיקת טיפוסים מלאה; tsc --noEmit אחריו הוא בדיקה חוזרת/וידוא בלבד
-      - name: Build
-        run: npm run build
-
-      - name: TypeScript
-        run: npx tsc --noEmit
-
       - name: Create isolated per-suite test databases (ephemeral container only)
         run: |
           set -e
-          for db in clinics_payments_test clinics_savedcard_test clinics_packages_test \
+          for db in clinics_build_test clinics_payments_test clinics_savedcard_test clinics_packages_test \
                     clinics_finance_test clinics_ivrpay_test clinics_concurrency_test \
                     clinics_pin_test clinics_shifts_test clinics_ivr_test; do
             psql -h localhost -U ci -d postgres -c "CREATE DATABASE $db;"
@@ -74,11 +61,22 @@ jobs:
       - name: Apply the new migration (and full history) to each test database
         run: |
           set -e
-          for db in clinics_payments_test clinics_savedcard_test clinics_packages_test \
+          for db in clinics_build_test clinics_payments_test clinics_savedcard_test clinics_packages_test \
                     clinics_finance_test clinics_ivrpay_test clinics_concurrency_test \
                     clinics_pin_test clinics_shifts_test clinics_ivr_test; do
             DATABASE_URL="postgresql://ci:ci_ephemeral_pw@localhost:5432/$db" npx prisma migrate deploy
           done
+
+      - name: ESLint
+        run: npm run lint
+
+      # /admin עושה קריאת DB בזמן prerender (ensureRooms) — זקוק ל-DATABASE_URL תקין ומוגר כבר בשלב הזה.
+      # next build גם מייצר טיפוסי-עזר לנתיבים (LayoutProps וכו') תחת .next/types, חסרים ב-checkout נקי.
+      - name: Build
+        run: npm run build
+
+      - name: TypeScript
+        run: npx tsc --noEmit
 
       - name: Run full test suite (discount double-use, parallel bookings, cancellations, failed payments, balance usage, and all existing regressions)
         env:
